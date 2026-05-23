@@ -4303,7 +4303,52 @@ async function removeUserProfile(userId){
   state.users = state.users.filter(u=>u.id!==userId);
 }
 
-function openInviteUserModal(){
+/* Edita o nome de exibição (owner name) de um usuário */
+function openEditUsernameModal(user){
+  const m = el(`
+  <div class="fixed inset-0 bg-black/40 z-20 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl w-full max-w-sm p-6 shadow-xl">
+      <div class="text-lg font-semibold mb-1" style="font-family:'Roboto'">Editar nome de owner</div>
+      <p class="text-sm text-gray-500 mb-4">Este nome deve ser <strong>idêntico</strong> ao campo Owner nas planilhas para que o "Hoje" funcione corretamente.</p>
+      <form id="editNameForm" class="space-y-3">
+        <div>
+          <label class="text-xs font-semibold uppercase tracking-wider" style="color:var(--bhub-muted)">Nome de exibição</label>
+          <input name="username" type="text" value="${escapeHtml(user.username)}" placeholder="Ex: Thiago Lobato" required />
+        </div>
+        <div id="editNameErr" class="text-xs rounded-lg p-2 hidden" style="color:#991b1b;background:#fee2e2"></div>
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" id="cancelEdit" class="btn btn-secondary">Cancelar</button>
+          <button class="btn btn-primary" id="saveNameBtn">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>`);
+  document.body.appendChild(m);
+  m.querySelector('#cancelEdit').onclick = ()=>m.remove();
+  m.querySelector('#editNameForm').onsubmit = async (e)=>{
+    e.preventDefault();
+    const newName = new FormData(e.target).get('username').trim();
+    if(!newName) return;
+    const btn = m.querySelector('#saveNameBtn');
+    const errEl = m.querySelector('#editNameErr');
+    btn.disabled=true; btn.textContent='Salvando…';
+    errEl.classList.add('hidden');
+    try{
+      const {error} = await supa.from('profiles').update({username: newName}).eq('id', user.id);
+      if(error) throw error;
+      // Atualiza sessão local se for o próprio usuário
+      if(session && user.id===session.id) session.username = newName;
+      m.remove();
+      await reloadState(); render();
+    }catch(err){
+      errEl.textContent = err.message||'Erro ao salvar nome';
+      errEl.classList.remove('hidden');
+      btn.disabled=false; btn.textContent='Salvar';
+    }
+  };
+}
+
+function openInviteUserModal(prefillUsername=''){
   const m = el(`
   <div class="fixed inset-0 bg-black/40 z-20 flex items-center justify-center p-4">
     <div class="bg-white rounded-xl w-full max-w-md p-6 shadow-xl">
@@ -4312,7 +4357,7 @@ function openInviteUserModal(){
       <form id="inviteForm" class="space-y-3">
         <div>
           <label class="text-xs font-semibold uppercase tracking-wider" style="color:var(--bhub-muted)">Nome de exibição</label>
-          <input name="username" type="text" placeholder="Ex: João Silva" />
+          <input name="username" type="text" value="${escapeHtml(prefillUsername)}" placeholder="Ex: João Silva" />
         </div>
         <div>
           <label class="text-xs font-semibold uppercase tracking-wider" style="color:var(--bhub-muted)">E-mail *</label>
@@ -4639,7 +4684,7 @@ function renderUsuarios(){
 
       <div class="bhub-card overflow-hidden">
         <table class="w-full">
-          <thead><tr><th>Usuário</th><th>Perfil</th><th>Descrição</th>${isAdmin?'<th style="width:7rem">Ações</th>':''}</tr></thead>
+          <thead><tr><th>Usuário</th><th>Perfil</th><th>Descrição</th>${isAdmin?'<th style="width:10rem">Ações</th>':''}</tr></thead>
           <tbody>
             ${state.users.length ? state.users.map(u=>`<tr>
               <td>
@@ -4649,11 +4694,12 @@ function renderUsuarios(){
               <td><span class="role-pill role-${u.role}">${u.role}</span></td>
               <td class="text-xs text-gray-500">${ROLE_INFO[u.role]||''}</td>
               ${isAdmin ? `<td>
-                <div class="flex gap-1">
+                <div class="flex gap-1 flex-wrap">
+                  <button class="btn btn-secondary" data-edit-uid="${u.id}" style="padding:.25rem .55rem;font-size:.72rem" title="Editar nome de owner">Nome</button>
                   ${u.id!==session?.id ? `
                     <button class="btn btn-secondary" data-role-uid="${u.id}" style="padding:.25rem .55rem;font-size:.72rem" title="Alterar perfil">Perfil</button>
                     <button class="btn btn-danger" data-remove-uid="${u.id}" style="padding:.25rem .55rem;font-size:.72rem" title="Remover acesso">✕</button>
-                  ` : '<span class="text-xs text-gray-400 px-1">—</span>'}
+                  ` : ''}
                 </div>
               </td>` : ''}
             </tr>`).join('') : `<tr><td colspan="${isAdmin?4:3}" class="py-10">
@@ -4670,14 +4716,23 @@ function renderUsuarios(){
       </div>
 
       ${isAdmin ? `<p class="text-xs text-gray-400 text-center">Remover remove apenas o perfil do app. Para excluir a conta de autenticação definitivamente, acesse o painel Supabase.</p>` : ''}
+
+      ${isAdmin ? `<div id="ownersWithoutAccount" class="bhub-card p-0 overflow-hidden"></div>` : ''}
     </div>
   `);
 
   if(isAdmin){
     const invBtn = node.querySelector('#inviteBtn');
-    if(invBtn) invBtn.onclick = openInviteUserModal;
+    if(invBtn) invBtn.onclick = ()=>openInviteUserModal();
     const emptyInvBtn = node.querySelector('#emptyInviteBtn');
-    if(emptyInvBtn) emptyInvBtn.onclick = openInviteUserModal;
+    if(emptyInvBtn) emptyInvBtn.onclick = ()=>openInviteUserModal();
+
+    node.querySelectorAll('[data-edit-uid]').forEach(btn=>{
+      btn.onclick = ()=>{
+        const u = state.users.find(x=>x.id===btn.dataset.editUid);
+        if(u) openEditUsernameModal(u);
+      };
+    });
 
     node.querySelectorAll('[data-role-uid]').forEach(btn=>{
       btn.onclick = ()=>{
@@ -4701,6 +4756,46 @@ function renderUsuarios(){
         }
       };
     });
+
+    // Build "Owners sem conta" section
+    const ownerNames = new Set();
+    Object.values(state.deals||{}).forEach(deal=>{
+      (deal.tasks||[]).forEach(t=>{ if(t.owner&&t.owner.trim()) ownerNames.add(t.owner.trim()); });
+      (deal.raid||[]).forEach(r=>{ if(r.owner&&r.owner.trim()) ownerNames.add(r.owner.trim()); });
+    });
+    const profileNames = new Set((state.users||[]).map(u=>(u.username||'').trim().toLowerCase()));
+    const unlinked = [...ownerNames].filter(n=>!profileNames.has(n.toLowerCase())).sort();
+
+    const ownerSection = node.querySelector('#ownersWithoutAccount');
+    if(ownerSection){
+      if(unlinked.length){
+        ownerSection.innerHTML = `
+          <div class="p-4 border-b" style="background:#fffbeb">
+            <div class="flex items-center gap-2 mb-1">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#92400e" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/><line x1="19" y1="5" x2="19" y2="11"/><line x1="16" y1="8" x2="22" y2="8"/></svg>
+              <span class="text-sm font-semibold" style="color:#92400e">Owners sem conta (${unlinked.length})</span>
+            </div>
+            <p class="text-xs text-gray-500">Pessoas que aparecem como responsáveis em tarefas ou RAID mas ainda não possuem perfil no sistema. Clique em "Criar conta" para convidá-las.</p>
+          </div>
+          <div class="divide-y">
+            ${unlinked.map(name=>`
+              <div class="flex items-center justify-between px-4 py-2">
+                <span class="text-sm font-medium">${escapeHtml(name)}</span>
+                <button class="btn btn-secondary" data-invite-owner="${escapeHtml(name)}" style="padding:.25rem .7rem;font-size:.72rem">+ Criar conta</button>
+              </div>
+            `).join('')}
+          </div>`;
+        ownerSection.querySelectorAll('[data-invite-owner]').forEach(btn=>{
+          btn.onclick = ()=>openInviteUserModal(btn.dataset.inviteOwner);
+        });
+      } else {
+        ownerSection.innerHTML = `
+          <div class="p-4 flex items-center gap-2 text-sm text-gray-500">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
+            Todos os owners das tarefas já possuem conta no sistema.
+          </div>`;
+      }
+    }
   }
 
   return node;
