@@ -704,6 +704,28 @@ async function loadSession(){
 const canEdit  = () => session && (session.role==='admin' || session.role==='owner');
 const canAdmin = () => session && session.role==='admin';
 
+/* ---------- Helper: owner <select> ---------- */
+// Gera o HTML de um <select name="owner"> populado com os usuários cadastrados.
+// currentOwner: valor atual (para marcar como selected).
+// Se não houver usuários, mostra aviso e retorna um select desabilitado.
+function ownerSelectHtml(currentOwner=''){
+  const users = (state && state.users) ? state.users : [];
+  if(!users.length){
+    return `<select name="owner" disabled title="Cadastre usuários em Usuários antes de atribuir responsáveis">
+      <option value="">⚠ Nenhum usuário cadastrado</option>
+    </select>
+    <div class="text-xs mt-1" style="color:#b45309">Acesse <strong>Usuários</strong> e crie um perfil antes de atribuir esta tarefa.</div>`;
+  }
+  const opts = users.map(u=>{
+    const sel = (u.username||'').trim() === (currentOwner||'').trim() ? 'selected' : '';
+    return `<option value="${escapeHtml(u.username)}" ${sel}>${escapeHtml(u.username)}</option>`;
+  }).join('');
+  return `<select name="owner">
+    <option value="" ${!currentOwner?'selected':''}>— Responsável —</option>
+    ${opts}
+  </select>`;
+}
+
 /* ---------- Reload state from Supabase ---------- */
 // Helper: pagina automaticamente em chunks de 1000 (limite default do PostgREST).
 // Recebe uma funcao que cria um NOVO builder a cada chamada (o builder e' "consumido"
@@ -3084,7 +3106,7 @@ function openRaidModal(company, raidId){
             </select>
           </label>
           <label class="block">Owner
-            <input name="owner" value="${escapeHtml(existing?.owner||'')}" />
+            ${ownerSelectHtml(existing?.owner||'')}
           </label>
           <label class="block">Prazo (data)
             <input name="dueDate" type="date" value="${existing?.dueDate?toIso(parseDate(existing.dueDate)):''}" />
@@ -3291,7 +3313,7 @@ function openSynergyModal(company, synId){
             <input name="realizedValue" type="number" min="0" step="1000" value="${existing?.realizedValue||0}" />
           </label>
           <label class="block col-span-2">Owner
-            <input name="owner" value="${escapeHtml(existing?.owner||'')}" />
+            ${ownerSelectHtml(existing?.owner||'')}
           </label>
           <label class="block col-span-2">Notas
             <textarea name="notes" rows="2">${escapeHtml(existing?.notes||'')}</textarea>
@@ -3437,7 +3459,7 @@ function openHealthModal(company, area, week){
             <textarea name="comment" rows="3">${escapeHtml(existing?.comment||'')}</textarea>
           </label>
           <label class="block">Owner
-            <input name="owner" value="${escapeHtml(existing?.owner||session?.username||'')}" />
+            ${ownerSelectHtml(existing?.owner||session?.username||'')}
           </label>
           <div class="flex justify-end gap-2 pt-2">
             <button type="button" id="cancel" class="btn btn-secondary">Cancelar</button>
@@ -4040,7 +4062,7 @@ function openTaskModal(company, taskId){
           <datalist id="areaList">${allAreas.map(a=>`<option value="${a}">`).join('')}</datalist>
         </div>
         <div class="col-span-2"><label class="text-xs font-medium">Tarefa *</label><textarea name="task" rows="2" required>${t.task||''}</textarea></div>
-        <div><label class="text-xs font-medium">Owner</label><input name="owner" value="${t.owner||''}"/></div>
+        <div><label class="text-xs font-medium">Owner</label>${ownerSelectHtml(t.owner||'')}</div>
         <div><label class="text-xs font-medium">Ferramenta</label><input name="ferramenta" value="${t.ferramenta||''}"/></div>
         <div><label class="text-xs font-medium">Prazo (dias úteis)</label><input name="prazo" type="number" min="0" value="${t.prazo||0}"/></div>
         <div><label class="text-xs font-medium">Data real de conclusão</label><input name="dataRealConclusao" type="date" value="${t.dataRealConclusao||''}"/></div>
