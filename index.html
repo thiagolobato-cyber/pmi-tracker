@@ -1298,7 +1298,7 @@ function renderLogin(){
     }catch(err){
       const msg = (err.message||'').toLowerCase();
       if(msg.includes('rate limit') || msg.includes('too many')){
-        errEl.textContent = 'Muitas tentativas em pouco tempo. Aguarde alguns minutos e tente novamente.';
+        errEl.textContent = 'Muitas tentativas em pouco tempo. Aguarde uma hora e tente novamente.';
       } else {
         errEl.textContent = 'Não foi possível enviar o link. Tente novamente em instantes.';
       }
