@@ -4552,7 +4552,7 @@ function renderHoje(){
   // ---- Funções de row ----
   function taskRow(t){
     const dias = t._f.diasAtraso||0;
-    return `<div class="hoje-row" data-go="${t._deal.id}">
+    return `<div class="hoje-row" data-task-id="${t.id}" data-company-id="${t._deal.id}" title="Clique para editar">
       <div class="hoje-row-left">
         <div class="hoje-row-task" title="${escapeHtml(t.task)}">${escapeHtml(t.task)}</div>
         <div class="hoje-row-meta">
@@ -4580,7 +4580,7 @@ function renderHoje(){
   }
   function upcomingRow(t){
     const d = t._diff;
-    return `<div class="hoje-row" data-go="${t._deal.id}">
+    return `<div class="hoje-row" data-task-id="${t.id}" data-company-id="${t._deal.id}" title="Clique para editar">
       <div class="hoje-row-left">
         <div class="hoje-row-task" title="${escapeHtml(t.task)}">${escapeHtml(t.task)}</div>
         <div class="hoje-row-meta">
@@ -4610,6 +4610,14 @@ function renderHoje(){
           ? `<div class="hoje-load-more" id="more-${limitKey}">Ver mais ${rest} item${rest!==1?'s':''} →</div>`
           : '');
 
+    // Tarefas: abre modal de edição direto
+    container.querySelectorAll('[data-task-id]').forEach(row=>{
+      row.addEventListener('click',()=>{
+        const company = state.companies.find(c=>c.id===row.dataset.companyId);
+        if(company) openTaskModal(company, row.dataset.taskId);
+      });
+    });
+    // Decisões RAID: navega pro deal
     container.querySelectorAll('[data-go]').forEach(row=>{
       row.addEventListener('click',()=>{ view.tab='deal'; view.dealId=row.dataset.go; render(); });
     });
