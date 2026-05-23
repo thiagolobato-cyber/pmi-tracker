@@ -4124,8 +4124,11 @@ function openTaskModal(company, taskId){
     e.preventDefault();
     const fd = new FormData(e.target);
     const errEl = m.querySelector('#taskFormErr');
-    const showErr = (msg) => { errEl.textContent = msg; errEl.classList.remove('hidden'); errEl.scrollIntoView({block:'nearest'}); };
-    errEl.classList.add('hidden');
+    const showErr = (msg) => {
+      if(errEl){ errEl.textContent = msg; errEl.classList.remove('hidden'); errEl.scrollIntoView({block:'nearest'}); }
+      else { alert(msg); }
+    };
+    if(errEl) errEl.classList.add('hidden');
 
     const completado = parseFloat(fd.get('completado'))||0;
     const dataRealConclusao = fd.get('dataRealConclusao');
