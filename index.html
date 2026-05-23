@@ -519,7 +519,7 @@ const BHUB_LOGO_ICON = `<svg viewBox="0 0 40 40" fill="currentColor" xmlns="http
 /* ---------- State ---------- */
 let state = defaultState();
 let session = null; // { id, email, username, role }
-let view = { tab:'dashboard', dealId:null, dealTab:'tarefas', executiveArea:DEFAULT_AREAS[0].name, raidFilter:'all', synergyFilter:'all', dashFilters:{deals:[],areas:[],owners:[]}, empresasSearch:'', empresasSortCol:'name', empresasSortDir:'asc' };
+let view = { tab:'dashboard', dealId:null, dealTab:'tarefas', executiveArea:DEFAULT_AREAS[0].name, raidFilter:'all', synergyFilter:'all', dashFilters:{deals:[],areas:[],owners:[]}, empresasSearch:'', empresasSortCol:'date', empresasSortDir:'desc' };
 
 function defaultState(){
   return {
@@ -686,7 +686,7 @@ async function logout(){
   // visualmente do app na hora, mesmo se o signOut do Supabase travar.
   session = null;
   state = defaultState();
-  view = { tab:'dashboard', dealId:null, dealTab:'tarefas', executiveArea:DEFAULT_AREAS[0].name, raidFilter:'all', synergyFilter:'all', dashFilters:{deals:[],areas:[],owners:[]}, empresasSearch:'', empresasSortCol:'name', empresasSortDir:'asc' };
+  view = { tab:'dashboard', dealId:null, dealTab:'tarefas', executiveArea:DEFAULT_AREAS[0].name, raidFilter:'all', synergyFilter:'all', dashFilters:{deals:[],areas:[],owners:[]}, empresasSearch:'', empresasSortCol:'date', empresasSortDir:'desc' };
   render();
   // signOut local (rápido, não exige round-trip) + global em background
   try { supa.auth.signOut({ scope: 'local' }); } catch(e){}
@@ -763,7 +763,14 @@ async function reloadState(){
 
   state = defaultState();
   state.users = (profiles.data||[]).map(p => ({ id: p.id, username: p.username || '(sem nome)', role: p.role || 'leitor' }));
-  state.companies = (companies.data||[]).map(companyFromDb);
+  state.companies = (companies.data||[]).map(companyFromDb)
+    .sort((a,b)=>{
+      // Mais recente primeiro; sem data vai para o final
+      if(!a.signDate && !b.signDate) return a.name.localeCompare(b.name);
+      if(!a.signDate) return 1;
+      if(!b.signDate) return -1;
+      return b.signDate.localeCompare(a.signDate);
+    });
   state.template = (template.data||[]).map(tplFromDb);
   for(const c of state.companies){
     state.deals[c.id] = { tasks: [], raid: [], synergies: [], health: [] };
@@ -2096,8 +2103,8 @@ function renderEmpresas(){
   }
 
   // ---- Sort ----
-  const sortCol = view.empresasSortCol || 'name';
-  const sortDir = view.empresasSortDir || 'asc';
+  const sortCol = view.empresasSortCol || 'date';
+  const sortDir = view.empresasSortDir || 'desc';
   const sorters = {
     name:  (a,b) => a.company.name.localeCompare(b.company.name),
     date:  (a,b) => (a.company.signDate||'').localeCompare(b.company.signDate||''),
