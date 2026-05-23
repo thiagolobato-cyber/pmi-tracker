@@ -98,6 +98,8 @@
     font-family:'Roboto',sans-serif;text-transform:uppercase;letter-spacing:.04em;font-size:.7rem}
   .pill{display:inline-block;padding:.15rem .65rem;border-radius:9999px;font-size:.7rem;font-weight:700;letter-spacing:.02em}
   .scroll-x{overflow-x:auto}
+  .sticky-col{position:sticky;left:0;z-index:2;background:#fff}
+  thead .sticky-col{background:var(--bhub-beige-soft);z-index:3}
   .kpi{background:#fff;border:1px solid var(--bhub-border);border-radius:1.25rem;padding:1.1rem 1.2rem;transition:transform .2s,box-shadow .2s}
   .kpi:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(15,23,39,.08)}
   .kpi-label{font-size:.7rem;color:var(--bhub-muted);text-transform:uppercase;letter-spacing:.08em;font-weight:600;font-family:'Roboto',sans-serif}
@@ -1843,9 +1845,9 @@ function renderDashboard(){
         </div>
         <div class="scroll-x">
           <table class="text-xs">
-            <thead><tr><th>ÁREA</th>${data.map(d=>`<th class="whitespace-nowrap"><span class="deal-link" data-summary="${d.company.id}" title="Ver resumo executivo">${escapeHtml(d.company.name)}</span></th>`).join('')}</tr></thead>
+            <thead><tr><th class="sticky-col">ÁREA</th>${data.map(d=>`<th class="whitespace-nowrap"><span class="deal-link" data-summary="${d.company.id}" title="Ver resumo executivo">${escapeHtml(d.company.name)}</span></th>`).join('')}</tr></thead>
             <tbody>
-              ${areas.map(a=>`<tr><td class="whitespace-nowrap font-medium"><span class="deal-link" data-area="${escapeHtml(a)}">${escapeHtml(a)}</span></td>${data.map(d=>{
+              ${areas.map(a=>`<tr><td class="whitespace-nowrap font-medium sticky-col"><span class="deal-link" data-area="${escapeHtml(a)}">${escapeHtml(a)}</span></td>${data.map(d=>{
                 const st = cellStatus(d, a);
                 return `<td class="hm-${st==='ontrack'?'ontrack':st} text-center cursor-pointer" data-deal="${d.company.id}">${statusLabel(st)}</td>`;
               }).join('')}</tr>`).join('')}
@@ -2004,11 +2006,17 @@ function renderDashboardRagMatrix(data){
     return arr[0]?.rag || 'na';
   }
   return `<div class="scroll-x"><table class="w-full text-xs">
-    <thead><tr><th class="text-left">WORKSTREAM</th>${data.map(d=>`<th class="text-center whitespace-nowrap" style="max-width:80px"><div class="truncate deal-link" data-summary="${d.company.id}" title="Ver resumo executivo">${escapeHtml(d.company.name)}</div></th>`).join('')}</tr></thead>
-    <tbody>${allAreas.map(a=>`<tr><td class="font-medium whitespace-nowrap"><span class="deal-link" data-area="${escapeHtml(a)}">${escapeHtml(a)}</span></td>${data.map(d=>{
-      const rag = lastRagFor(d.company.id, a);
-      return `<td class="text-center"><span class="rag rag-${rag}" style="font-size:.6rem;padding:.1rem .4rem"><span class="rag-dot"></span>${rag==='g'?'G':rag==='a'?'A':rag==='r'?'R':'—'}</span></td>`;
-    }).join('')}</tr>`).join('')}</tbody>
+    <thead><tr>
+      <th class="text-left sticky-col">ÁREA</th>
+      ${data.map(d=>`<th class="text-center whitespace-nowrap" style="max-width:80px"><div class="truncate deal-link" data-summary="${d.company.id}" title="Ver resumo executivo">${escapeHtml(d.company.name)}</div></th>`).join('')}
+    </tr></thead>
+    <tbody>${allAreas.map(a=>`<tr>
+      <td class="font-medium whitespace-nowrap sticky-col"><span class="deal-link" data-area="${escapeHtml(a)}">${escapeHtml(a)}</span></td>
+      ${data.map(d=>{
+        const rag = lastRagFor(d.company.id, a);
+        return `<td class="text-center"><span class="rag rag-${rag}" style="font-size:.6rem;padding:.1rem .4rem"><span class="rag-dot"></span>${rag==='g'?'G':rag==='a'?'A':rag==='r'?'R':'—'}</span></td>`;
+      }).join('')}
+    </tr>`).join('')}</tbody>
   </table></div>`;
 }
 
