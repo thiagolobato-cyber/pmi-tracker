@@ -267,14 +267,15 @@
   @media (max-width:1024px){.kpi-hero-section{flex-direction:column}}
   .kpi-hero{
     background:linear-gradient(145deg,var(--bhub-navy) 0%,#1a2438 100%);
-    color:#fff;border:none;border-radius:1.25rem;padding:2rem 1.5rem;
-    display:flex;flex-direction:column;align-items:center;text-align:center;gap:.55rem;
+    color:#fff;border:none;border-radius:1.25rem;padding:1.25rem 1.5rem;
+    display:flex;flex-direction:column;align-items:center;text-align:center;gap:.5rem;
     box-shadow:0 8px 24px rgba(15,23,39,.18);justify-content:center;
-    flex:0 0 clamp(200px,22%,280px);align-self:flex-start;
+    width:clamp(200px,22%,280px);flex-shrink:0;flex-grow:0;
+    align-self:center;height:fit-content;
   }
   .kpi-hero:hover{transform:none;box-shadow:0 8px 28px rgba(15,23,39,.25)}
   .kpi-hero .kpi-label{font-size:.7rem;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:.08em;font-weight:600;font-family:'Roboto',sans-serif}
-  .kpi-hero .kpi-value{font-size:3rem;font-weight:700;color:#fff;line-height:1;font-family:'Roboto',sans-serif;margin:.2rem 0}
+  .kpi-hero .kpi-value{font-size:2.5rem;font-weight:700;color:#fff;line-height:1;font-family:'Roboto',sans-serif;margin:.1rem 0}
   .kpi-hero .kpi-sub{font-size:.75rem;color:rgba(255,255,255,.55);font-family:'Roboto',sans-serif}
   .kpi-hero .hero-bar{height:4px;background:rgba(255,255,255,.15);border-radius:99px;overflow:hidden;margin:.35rem 0;align-self:stretch;width:100%}
   .kpi-hero .hero-bar-fill{height:100%;background:var(--bhub-blue);border-radius:99px;transition:width .8s ease}
@@ -1594,7 +1595,7 @@ function renderDashboard(){
 
       <section class="kpi-hero-section">
         <!-- HERO: % Integração -->
-        <div class="kpi kpi-hero" title="Tarefas concluídas ÷ tarefas totais do portfólio (média ponderada por deal). Deals com mais tarefas pesam proporcionalmente mais.">
+        <div class="kpi-hero" title="Tarefas concluídas ÷ tarefas totais do portfólio (média ponderada por deal). Deals com mais tarefas pesam proporcionalmente mais.">
           <div class="kpi-label">% Integração do Portfólio</div>
           <div class="kpi-value">${avgPct}%</div>
           <div class="hero-bar"><div class="hero-bar-fill" style="width:${avgPct}%"></div></div>
