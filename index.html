@@ -434,7 +434,7 @@ const STORE_KEY = 'bhub_pmi_state_v1'; // mantido apenas para import do localSto
 /* ---------- Supabase ---------- */
 const SUPABASE_URL = 'https://vscrdxwgtbokgjaiging.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZzY3JkeHdndGJva2dqYWlnaW5nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkzNjczNzIsImV4cCI6MjA5NDk0MzM3Mn0.vm2M_eJndTUsVXl8pIjkrDNY8Zo9INTVdh6r-Z7usdQ';
-const SUPABASE_FUNCTIONS_URL = `${SUPABASE_URL.replace('supabase.co','functions.supabase.co')}/v1`;
+const SUPABASE_FUNCTIONS_URL = `${SUPABASE_URL}/functions/v1`;
 const supa = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 /* ---------- Indicador global "salvando…" ---------- */
