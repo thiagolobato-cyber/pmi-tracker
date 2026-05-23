@@ -191,6 +191,33 @@
   .sidebar-user .info .name{font-size:.825rem;font-weight:600;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .sidebar-user .info .role{font-size:.7rem;color:rgba(255,255,255,.55);text-transform:capitalize;font-weight:500}
 
+  /* Sidebar group labels */
+  .sidebar-group-label{font-size:.62rem;font-weight:700;letter-spacing:.09em;color:rgba(255,255,255,.3);text-transform:uppercase;padding:.8rem .875rem .2rem;user-select:none}
+
+  /* Sidebar collapse button (bottom of nav) */
+  .sidebar-collapse-btn{display:flex;align-items:center;justify-content:center;width:2rem;height:2rem;margin:auto auto .2rem auto;background:none;border:none;cursor:pointer;color:rgba(255,255,255,.3);border-radius:.375rem;transition:color .15s,background .15s;flex-shrink:0}
+  .sidebar-collapse-btn:hover{color:rgba(255,255,255,.7);background:rgba(255,255,255,.05)}
+
+  /* Collapsible sidebar state */
+  .sidebar{transition:width .22s ease,flex-basis .22s ease}
+  .sidebar.collapsed{width:56px;flex:0 0 56px}
+  .sidebar.collapsed .sidebar-brand{justify-content:center;padding:1.35rem .5rem 1.1rem}
+  .sidebar.collapsed .sidebar-brand .logo-text{display:none}
+  .sidebar.collapsed .sidebar-group-label{display:none}
+  .sidebar.collapsed .sidebar-item{justify-content:center;padding:.625rem}
+  .sidebar.collapsed .sidebar-item .sidebar-label{display:none}
+  .sidebar.collapsed .sidebar-user{justify-content:center}
+  .sidebar.collapsed .sidebar-user .info{display:none}
+
+  /* Avatar dropdown */
+  .sidebar-footer{position:relative}
+  .sidebar-user-btn{display:block;width:100%;background:none;border:none;cursor:pointer;border-radius:.5rem;transition:background .15s;padding:0}
+  .sidebar-user-btn:hover{background:rgba(255,255,255,.05)}
+  .sidebar-avatar-menu{position:absolute;bottom:100%;left:.625rem;right:.625rem;margin-bottom:.375rem;background:#1e2d45;border:1px solid rgba(255,255,255,.12);border-radius:.625rem;overflow:hidden;z-index:50;box-shadow:0 8px 24px rgba(0,0,0,.4)}
+  .sidebar-avatar-menu button{width:100%;display:flex;align-items:center;gap:.625rem;padding:.625rem .875rem;font-size:.825rem;color:rgba(255,255,255,.8);background:none;border:none;cursor:pointer;text-align:left;font-family:'Roboto',sans-serif;transition:background .12s,color .12s}
+  .sidebar-avatar-menu button:hover{background:rgba(255,255,255,.07);color:#fff}
+  .sidebar-avatar-menu .menu-divider{height:1px;background:rgba(255,255,255,.08);margin:.25rem 0}
+
   .main-area{flex:1;min-width:0;display:flex;flex-direction:column;background:#f8f9fc}
   .topbar{
     background:#fff;border-bottom:1px solid var(--bhub-border);
@@ -519,7 +546,7 @@ const BHUB_LOGO_ICON = `<svg viewBox="0 0 40 40" fill="currentColor" xmlns="http
 /* ---------- State ---------- */
 let state = defaultState();
 let session = null; // { id, email, username, role }
-let view = { tab:'dashboard', dealId:null, dealTab:'tarefas', executiveArea:DEFAULT_AREAS[0].name, raidFilter:'all', synergyFilter:'all', dashFilters:{deals:[],areas:[],owners:[]}, empresasSearch:'', empresasSortCol:'date', empresasSortDir:'desc' };
+let view = { tab:'dashboard', dealId:null, dealTab:'tarefas', executiveArea:DEFAULT_AREAS[0].name, raidFilter:'all', synergyFilter:'all', dashFilters:{deals:[],areas:[],owners:[]}, empresasSearch:'', empresasSortCol:'date', empresasSortDir:'desc', sidebarCollapsed:false };
 
 function defaultState(){
   return {
@@ -1340,37 +1367,70 @@ function renderShell(){
 }
 
 function renderSidebar(){
-  const tabs = [
-    ['hoje',     'Hoje',              '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L13.09 8.26L19 7L15.45 12L19 17L13.09 15.74L12 22L10.91 15.74L5 17L8.55 12L5 7L10.91 8.26L12 2Z"/></svg>'],
-    ['dashboard','Dashboard',         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>'],
-    ['executiva','Visão Executiva',   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l3-3 4 4 5-7"/></svg>'],
-    ['empresas','Empresas / Deals',   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="8" height="14" rx="1"/><rect x="13" y="3" width="8" height="17" rx="1"/><line x1="6" y1="10" x2="8" y2="10"/><line x1="6" y1="14" x2="8" y2="14"/><line x1="16" y1="7" x2="18" y2="7"/><line x1="16" y1="11" x2="18" y2="11"/><line x1="16" y1="15" x2="18" y2="15"/></svg>'],
-    ['template','Template',           '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="13" y2="16"/></svg>'],
-    ['usuarios','Usuários',           '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9.5" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>'],
+  const portfolioTabs = [
+    ['hoje',     'Hoje',           '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L13.09 8.26L19 7L15.45 12L19 17L13.09 15.74L12 22L10.91 15.74L5 17L8.55 12L5 7L10.91 8.26L12 2Z"/></svg>'],
+    ['dashboard','Dashboard',     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>'],
+    ['executiva','Visão Executiva','<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l3-3 4 4 5-7"/></svg>'],
+    ['empresas', 'Deals',         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="8" height="14" rx="1"/><rect x="13" y="3" width="8" height="17" rx="1"/><line x1="6" y1="10" x2="8" y2="10"/><line x1="6" y1="14" x2="8" y2="14"/><line x1="16" y1="7" x2="18" y2="7"/><line x1="16" y1="11" x2="18" y2="11"/><line x1="16" y1="15" x2="18" y2="15"/></svg>'],
   ];
+  const configTabs = [
+    ['template', 'Template',  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="13" y2="16"/></svg>'],
+    ['usuarios', 'Usuários',  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9.5" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>'],
+  ];
+  const collapsed = view.sidebarCollapsed ? 'collapsed' : '';
   const initials = (session.username||'?').slice(0,2).toUpperCase();
+  const chevronCollapse = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>`;
+  const chevronExpand  = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>`;
+  const tabHtml = (tabs) => tabs.map(([k,l,icon])=>`<button data-tab="${k}" class="sidebar-item ${view.tab===k?'active':''}" title="${l}"><span class="icon">${icon}</span><span class="sidebar-label">${l}</span></button>`).join('');
+  const logoutIcon = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`;
   const node = el(`
-    <aside class="sidebar">
+    <aside class="sidebar ${collapsed}" id="appSidebar">
       <div class="sidebar-brand">
         <div class="bhub-logo" style="height:30px;width:30px;color:#fff">${BHUB_LOGO_ICON}</div>
         <div class="logo-text">PMI <span class="blue">Tracker</span></div>
       </div>
       <nav class="sidebar-nav">
-        ${tabs.map(([k,l,icon])=>`<button data-tab="${k}" class="sidebar-item ${view.tab===k?'active':''}"><span class="icon">${icon}</span><span>${l}</span></button>`).join('')}
+        <div class="sidebar-group-label">Portfólio</div>
+        ${tabHtml(portfolioTabs)}
+        <div class="sidebar-group-label" style="margin-top:.5rem">Configurações</div>
+        ${tabHtml(configTabs)}
+        <button class="sidebar-collapse-btn" id="sidebarToggle" title="Recolher / expandir sidebar (tecla [)">${view.sidebarCollapsed ? chevronExpand : chevronCollapse}</button>
       </nav>
       <div class="sidebar-footer">
-        <div class="sidebar-user">
-          <div class="avatar">${initials}</div>
-          <div class="info">
-            <div class="name">${escapeHtml(session.username||'')}</div>
-            <span class="role-pill role-${session.role||'leitor'}">${session.role||''}</span>
+        <button class="sidebar-user-btn" id="sidebarUserBtn" title="Menu do usuário">
+          <div class="sidebar-user">
+            <div class="avatar">${initials}</div>
+            <div class="info">
+              <div class="name">${escapeHtml(session.username||'')}</div>
+              <span class="role-pill role-${session.role||'leitor'}">${session.role||''}</span>
+            </div>
           </div>
-        </div>
+        </button>
       </div>
     </aside>
   `);
+  // Tab navigation
   node.querySelectorAll('button[data-tab]').forEach(b=>{
     b.addEventListener('click',()=>{ view.tab = b.dataset.tab; view.dealId=null; render(); });
+  });
+  // Collapse toggle
+  node.querySelector('#sidebarToggle').addEventListener('click', ()=>{
+    view.sidebarCollapsed = !view.sidebarCollapsed;
+    render();
+  });
+  // Avatar dropdown
+  const userBtn = node.querySelector('#sidebarUserBtn');
+  userBtn.addEventListener('click', ()=>{
+    const existing = node.querySelector('.sidebar-avatar-menu');
+    if(existing){ existing.remove(); return; }
+    const menu = el(`
+      <div class="sidebar-avatar-menu">
+        <button id="sidebarLogout">${logoutIcon} Sair</button>
+      </div>
+    `);
+    menu.querySelector('#sidebarLogout').addEventListener('click', logout);
+    node.querySelector('.sidebar-footer').appendChild(menu);
+    setTimeout(()=>{ document.addEventListener('click', ()=>menu.remove(), { once:true }); }, 0);
   });
   return node;
 }
@@ -1378,23 +1438,13 @@ function renderSidebar(){
 function renderTopbar(){
   const node = el(`
     <header class="topbar">
-      <div class="topbar-search">
+      <div class="topbar-search" style="max-width:none;flex:1">
         <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         <input id="dealSearch" type="text" autocomplete="off" placeholder="Buscar empresas, deals, usuários…" />
         <div id="dealSearchResults" class="hidden absolute left-0 right-0 mt-1 bg-white rounded-lg shadow-2xl border max-h-96 overflow-y-auto z-30" style="border-color:var(--bhub-border)"></div>
       </div>
-      <div class="topbar-user">
-        <div class="who">
-          ${escapeHtml(session.username||'')}
-          <span class="role-pill role-${session.role||'leitor'}">${session.role||''}</span>
-        </div>
-        <button id="logout" class="icon-btn" title="Sair" aria-label="Sair">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-        </button>
-      </div>
     </header>
   `);
-  node.querySelector('#logout').addEventListener('click', logout);
 
   // Busca de empresas / deals
   const searchInput = node.querySelector('#dealSearch');
@@ -1458,7 +1508,7 @@ function renderHeader(){
   const tabs = [
     ['dashboard','Dashboard'],
     ['executiva','Visão Executiva'],
-    ['empresas','Empresas / Deals'],
+    ['empresas','Deals'],
     ['template','Template'],
     ['usuarios','Usuários'],
   ];
@@ -2184,7 +2234,7 @@ function renderEmpresas(){
     <div class="space-y-4">
       <div class="flex items-center justify-between flex-wrap gap-2">
         <div>
-          <h1 class="text-xl font-bold">Empresas / Deals</h1>
+          <h1 class="text-xl font-bold">Deals</h1>
           <p class="text-sm text-gray-500">Clique na linha para abrir o detalhe do deal</p>
         </div>
         <div class="flex items-center gap-2">
@@ -5033,6 +5083,11 @@ document.addEventListener('keydown', (e)=>{
   if((e.ctrlKey||e.metaKey) && (e.key === 'k' || e.key === 'K')){
     const inp = document.getElementById('dealSearch');
     if(inp){ inp.focus(); inp.select(); e.preventDefault(); }
+  }
+  // [ recolhe / expande a sidebar
+  if(e.key === '[' && !['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName) && !e.ctrlKey && !e.metaKey){
+    view.sidebarCollapsed = !view.sidebarCollapsed;
+    render();
   }
 });
 
