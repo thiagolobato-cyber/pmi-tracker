@@ -5210,9 +5210,94 @@ function renderBootError(err){
   // Re-render quando a sessão muda (token refresh, signOut em outra aba, etc.)
   // IMPORTANTE: usamos a `sess` que vem no callback — NAO chamamos getSession()
   // ou loadSession() aqui, pra evitar deadlock do lock interno do supabase-js.
+  function openPasswordResetModal(){
+    // Remove modal anterior se existir
+    document.querySelector('#pwdResetOverlay')?.remove();
+    const m = el(`
+      <div id="pwdResetOverlay" style="position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;padding:1.5rem;background:linear-gradient(135deg,#0F1727 0%,#1a2438 60%,#0171E4 140%)">
+        <div style="background:#fff;border-radius:1.5rem;padding:2.5rem;width:100%;max-width:22rem;box-shadow:0 24px 60px rgba(15,23,39,.35)">
+          <div style="text-align:center;margin-bottom:1.5rem">
+            <img src="bhub-logo.png" alt="BHub" style="height:48px;width:auto;border-radius:8px;margin:0 auto 1rem" />
+            <div style="font-size:1.1rem;font-weight:700;color:var(--bhub-navy);font-family:'Roboto',sans-serif">Redefinir senha</div>
+            <div style="font-size:.8rem;color:var(--bhub-muted);margin-top:.25rem">Digite e confirme sua nova senha.</div>
+          </div>
+          <div class="space-y-3">
+            <div>
+              <label style="font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--bhub-muted)">Nova senha</label>
+              <div style="position:relative;margin-top:.25rem">
+                <input id="newPwd" type="password" placeholder="Mínimo 6 caracteres" minlength="6" style="padding-right:2.8rem;width:100%" />
+                <button type="button" id="toggleNewPwd" tabindex="-1" style="position:absolute;right:.75rem;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--bhub-muted);line-height:1;padding:.2rem">
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+              </div>
+            </div>
+            <div>
+              <label style="font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--bhub-muted)">Confirmar senha</label>
+              <input id="confirmPwd" type="password" placeholder="Repita a senha" minlength="6" style="margin-top:.25rem;width:100%" />
+            </div>
+            <div id="pwdResetErr" class="text-xs rounded-lg p-2 hidden" style="color:#991b1b;background:#fee2e2"></div>
+            <div id="pwdResetOk" class="text-xs rounded-lg p-2 hidden" style="color:#166534;background:#dcfce7"></div>
+            <button id="savePwd" class="btn btn-primary w-full justify-center" style="margin-top:.5rem">Salvar nova senha →</button>
+          </div>
+        </div>
+      </div>
+    `);
+    document.body.appendChild(m);
+
+    // Toggle mostrar/ocultar nova senha
+    m.querySelector('#toggleNewPwd').addEventListener('click', ()=>{
+      const inp = m.querySelector('#newPwd');
+      inp.type = inp.type === 'password' ? 'text' : 'password';
+    });
+
+    m.querySelector('#savePwd').addEventListener('click', async ()=>{
+      const pwd = m.querySelector('#newPwd').value;
+      const confirm = m.querySelector('#confirmPwd').value;
+      const errEl = m.querySelector('#pwdResetErr');
+      const okEl = m.querySelector('#pwdResetOk');
+      errEl.classList.add('hidden');
+      okEl.classList.add('hidden');
+
+      if(pwd.length < 6){
+        errEl.textContent = 'A senha deve ter no mínimo 6 caracteres.';
+        errEl.classList.remove('hidden'); return;
+      }
+      if(pwd !== confirm){
+        errEl.textContent = 'As senhas não conferem.';
+        errEl.classList.remove('hidden'); return;
+      }
+      const btn = m.querySelector('#savePwd');
+      btn.disabled = true; btn.textContent = 'Salvando…';
+      try{
+        const { error } = await supa.auth.updateUser({ password: pwd });
+        if(error) throw error;
+        okEl.textContent = 'Senha redefinida com sucesso! Redirecionando…';
+        okEl.classList.remove('hidden');
+        setTimeout(()=>{ m.remove(); render(); }, 1800);
+      }catch(err){
+        errEl.textContent = 'Erro ao salvar: ' + (err.message || err);
+        errEl.classList.remove('hidden');
+        btn.disabled = false; btn.textContent = 'Salvar nova senha →';
+      }
+    });
+
+    // Permitir submeter com Enter
+    [m.querySelector('#newPwd'), m.querySelector('#confirmPwd')].forEach(inp=>{
+      inp.addEventListener('keydown', e=>{ if(e.key==='Enter') m.querySelector('#savePwd').click(); });
+    });
+
+    // Foca no campo de nova senha
+    setTimeout(()=>m.querySelector('#newPwd').focus(), 100);
+  }
+
   supa.auth.onAuthStateChange(async (event, sess)=>{
     if(event === 'SIGNED_OUT'){
       session = null; state = defaultState(); stopRealtime(); render();
+      return;
+    }
+    if(event === 'PASSWORD_RECOVERY'){
+      // Usuário chegou pelo link de reset de senha — mostrar modal para definir nova senha
+      openPasswordResetModal();
       return;
     }
     if(event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN' || event === 'INITIAL_SESSION'){
