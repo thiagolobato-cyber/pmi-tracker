@@ -434,6 +434,7 @@ const STORE_KEY = 'bhub_pmi_state_v1'; // mantido apenas para import do localSto
 /* ---------- Supabase ---------- */
 const SUPABASE_URL = 'https://vscrdxwgtbokgjaiging.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZzY3JkeHdndGJva2dqYWlnaW5nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkzNjczNzIsImV4cCI6MjA5NDk0MzM3Mn0.vm2M_eJndTUsVXl8pIjkrDNY8Zo9INTVdh6r-Z7usdQ';
+const SUPABASE_FUNCTIONS_URL = `${SUPABASE_URL.replace('supabase.co','functions.supabase.co')}/v1`;
 const supa = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 /* ---------- Indicador global "salvando…" ---------- */
@@ -4202,15 +4203,24 @@ function openTemplateModal(id){
 
 /* ---------- Usuários (read-only) + Admin actions ---------- */
 /* ===== User Management helpers ===== */
-async function inviteUserByEmail(email, role){
-  // Envia OTP magic link — cria auth user se não existir.
-  // O trigger handle_new_user() cria o profile automaticamente no primeiro login.
-  const { error } = await supa.auth.signInWithOtp({
-    email: email.trim(),
-    options: { shouldCreateUser: true }
+async function createUserViaFunction(email, password, role, username){
+  // Chama a Edge Function create-user (server-side, usa service_role key).
+  // Requer que o caller seja admin — o JWT é enviado no header.
+  const { data: { session } } = await supa.auth.getSession();
+  const token = session?.access_token;
+  if(!token) throw new Error('Sessão expirada — faça login novamente');
+
+  const res = await fetch(`${SUPABASE_FUNCTIONS_URL}/create-user`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify({ email, password, role, username: username || email.split('@')[0] }),
   });
-  if(error) throw error;
-  return true;
+  const data = await res.json();
+  if(!res.ok) throw new Error(data.error || `Erro ${res.status}`);
+  return data;
 }
 
 async function changeUserRole(userId, newRole){
@@ -4231,50 +4241,66 @@ function openInviteUserModal(){
   const m = el(`
   <div class="fixed inset-0 bg-black/40 z-20 flex items-center justify-center p-4">
     <div class="bg-white rounded-xl w-full max-w-md p-6 shadow-xl">
-      <div class="text-lg font-semibold mb-1" style="font-family:'Roboto'">Convidar usuário</div>
-      <p class="text-sm text-gray-500 mb-4">Um link de acesso será enviado ao e-mail informado. Após o primeiro login, você pode ajustar o perfil nesta tela.</p>
+      <div class="text-lg font-semibold mb-1" style="font-family:'Roboto'">Criar usuário</div>
+      <p class="text-sm text-gray-500 mb-4">O usuário poderá entrar imediatamente com o e-mail e senha definidos aqui. Compartilhe as credenciais com ele por outro canal.</p>
       <form id="inviteForm" class="space-y-3">
+        <div>
+          <label class="text-xs font-semibold uppercase tracking-wider" style="color:var(--bhub-muted)">Nome de exibição</label>
+          <input name="username" type="text" placeholder="Ex: João Silva" />
+        </div>
         <div>
           <label class="text-xs font-semibold uppercase tracking-wider" style="color:var(--bhub-muted)">E-mail *</label>
           <input name="email" type="email" required placeholder="nome@empresa.com" />
         </div>
+        <div style="position:relative">
+          <label class="text-xs font-semibold uppercase tracking-wider" style="color:var(--bhub-muted)">Senha temporária * <span style="font-weight:400;text-transform:none">(mínimo 6 caracteres)</span></label>
+          <input name="password" id="invPwd" type="password" required minlength="6" placeholder="Defina uma senha inicial" />
+          <button type="button" id="togglePwd" style="position:absolute;right:.7rem;bottom:.5rem;background:none;border:none;cursor:pointer;color:var(--bhub-muted);font-size:.8rem">mostrar</button>
+        </div>
         <div>
-          <label class="text-xs font-semibold uppercase tracking-wider" style="color:var(--bhub-muted)">Perfil inicial</label>
+          <label class="text-xs font-semibold uppercase tracking-wider" style="color:var(--bhub-muted)">Perfil</label>
           <select name="role">
             <option value="leitor">leitor — somente leitura</option>
-            <option value="owner">owner — pode editar</option>
+            <option value="owner">owner — pode criar e editar</option>
             <option value="admin">admin — acesso total</option>
           </select>
-          <p class="text-xs text-gray-400 mt-1">O perfil definitivo pode ser ajustado após o primeiro login.</p>
         </div>
-        <div id="inviteErr" class="text-xs hidden" style="color:var(--bhub-red)"></div>
+        <div id="inviteErr" class="text-xs rounded-lg p-2 hidden" style="color:#991b1b;background:#fee2e2"></div>
         <div class="flex justify-end gap-2 pt-2">
           <button type="button" id="cancelInv" class="btn btn-secondary">Cancelar</button>
-          <button class="btn btn-primary" id="sendInvBtn">Enviar convite</button>
+          <button class="btn btn-primary" id="sendInvBtn">Criar usuário</button>
         </div>
       </form>
     </div>
   </div>`);
   document.body.appendChild(m);
   m.querySelector('#cancelInv').onclick = ()=>m.remove();
+  m.querySelector('#togglePwd').onclick = ()=>{
+    const inp = m.querySelector('#invPwd');
+    const btn = m.querySelector('#togglePwd');
+    if(inp.type==='password'){ inp.type='text'; btn.textContent='ocultar'; }
+    else { inp.type='password'; btn.textContent='mostrar'; }
+  };
   m.querySelector('#inviteForm').onsubmit = async (e)=>{
     e.preventDefault();
     const fd = new FormData(e.target);
-    const email = fd.get('email').trim();
-    const role  = fd.get('role');
-    const btn = m.querySelector('#sendInvBtn');
+    const email    = fd.get('email').trim();
+    const password = fd.get('password');
+    const role     = fd.get('role');
+    const username = fd.get('username').trim();
+    const btn   = m.querySelector('#sendInvBtn');
     const errEl = m.querySelector('#inviteErr');
-    btn.disabled = true; btn.textContent = 'Enviando…';
+    btn.disabled = true; btn.textContent = 'Criando…';
     errEl.classList.add('hidden');
     try{
-      await inviteUserByEmail(email, role);
+      await createUserViaFunction(email, password, role, username);
       m.remove();
-      alert(`✅ Convite enviado para ${email}!\n\nApós o primeiro login, localize o usuário nesta tela e ajuste o perfil para "${role}" se necessário.`);
+      alert(`✅ Usuário criado!\n\nE-mail: ${email}\nPerfil: ${role}\n\nCompartilhe as credenciais com o usuário para que ele possa entrar.`);
       await reloadState(); render();
     }catch(err){
-      errEl.textContent = err.message || 'Erro ao enviar convite';
+      errEl.textContent = err.message || 'Erro ao criar usuário';
       errEl.classList.remove('hidden');
-      btn.disabled = false; btn.textContent = 'Enviar convite';
+      btn.disabled = false; btn.textContent = 'Criar usuário';
     }
   };
 }
