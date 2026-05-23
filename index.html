@@ -1198,17 +1198,34 @@ function renderLogin(){
           </div>
           <div>
             <label class="text-xs font-semibold uppercase tracking-wider" style="color:var(--bhub-muted)">Senha</label>
-            <input class="mt-1" name="p" type="password" autocomplete="current-password" required />
+            <div class="relative mt-1">
+              <input id="loginPwd" name="p" type="password" autocomplete="current-password" required style="padding-right:2.8rem;width:100%" />
+              <button type="button" id="toggleLoginPwd" tabindex="-1" style="position:absolute;right:.75rem;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--bhub-muted);line-height:1;padding:.2rem" title="Mostrar/ocultar senha">
+                <svg id="eyeIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+            </div>
           </div>
-          <div id="loginErr" class="text-xs hidden" style="color:var(--bhub-red)"></div>
+          <div id="loginErr" class="text-xs rounded-lg p-2 hidden" style="color:#991b1b;background:#fee2e2"></div>
+          <div id="loginOk" class="text-xs rounded-lg p-2 hidden" style="color:#166534;background:#dcfce7"></div>
           <button id="loginBtn" class="btn btn-primary w-full justify-center" type="submit">Entrar →</button>
         </form>
-        <div class="mt-6 text-center">
-          <button id="forgotPwd" class="text-xs font-semibold" style="color:var(--bhub-blue);background:transparent;border:none;cursor:pointer;padding:.4rem .6rem;border-radius:.4rem">
+
+        <!-- Esqueci senha: modo normal → link; modo ativo → campo inline -->
+        <div class="mt-5 text-center">
+          <button id="forgotPwd" class="text-xs font-semibold" style="color:var(--bhub-blue);background:transparent;border:none;cursor:pointer;padding:.3rem .5rem;border-radius:.4rem">
             Esqueci minha senha
           </button>
         </div>
-        <div class="mt-3 text-xs text-center border-t pt-4" style="color:var(--bhub-muted);border-color:var(--bhub-border)">
+        <div id="resetPanel" class="hidden mt-3 border-t pt-4" style="border-color:var(--bhub-border)">
+          <p class="text-xs text-gray-500 mb-2">Digite seu e-mail e enviaremos um link de redefinição.</p>
+          <input id="resetEmail" type="email" placeholder="seu@email.com" autocomplete="email" />
+          <div class="flex gap-2 mt-2">
+            <button id="cancelReset" type="button" class="btn btn-secondary flex-1" style="font-size:.78rem">Cancelar</button>
+            <button id="sendReset" type="button" class="btn btn-primary flex-1" style="font-size:.78rem">Enviar link →</button>
+          </div>
+        </div>
+
+        <div class="mt-4 text-xs text-center border-t pt-4" style="color:var(--bhub-muted);border-color:var(--bhub-border)">
           Entre com sua conta BHub.
         </div>
       </div>
@@ -1226,38 +1243,66 @@ function renderLogin(){
       errEl.textContent = err; errEl.classList.remove('hidden');
     }else render();
   });
-  // Esqueci minha senha — envia magic link de reset via Supabase
-  node.querySelector('#forgotPwd').addEventListener('click', async ()=>{
-    const emailInput = node.querySelector('input[name="u"]');
-    let email = (emailInput.value||'').trim();
-    if(!email){
-      email = prompt('Digite seu e-mail BHub:');
-      if(!email) return;
-      email = email.trim();
-    }
+  // Toggle mostrar/ocultar senha
+  node.querySelector('#toggleLoginPwd').addEventListener('click', ()=>{
+    const inp = node.querySelector('#loginPwd');
+    const icon = node.querySelector('#eyeIcon');
+    const showing = inp.type === 'text';
+    inp.type = showing ? 'password' : 'text';
+    // Olho aberto vs. riscado
+    icon.innerHTML = showing
+      ? '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>'
+      : '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/>';
+  });
+
+  // Esqueci minha senha — painel inline
+  const resetPanel = node.querySelector('#resetPanel');
+  const forgotBtn = node.querySelector('#forgotPwd');
+  const okEl = node.querySelector('#loginOk');
+  const errEl = node.querySelector('#loginErr');
+
+  forgotBtn.addEventListener('click', ()=>{
+    // Pré-preenche com e-mail já digitado
+    const emailVal = (node.querySelector('input[name="u"]').value||'').trim();
+    if(emailVal) node.querySelector('#resetEmail').value = emailVal;
+    resetPanel.classList.remove('hidden');
+    forgotBtn.classList.add('hidden');
+    node.querySelector('#resetEmail').focus();
+  });
+
+  node.querySelector('#cancelReset').addEventListener('click', ()=>{
+    resetPanel.classList.add('hidden');
+    forgotBtn.classList.remove('hidden');
+  });
+
+  node.querySelector('#sendReset').addEventListener('click', async ()=>{
+    const email = (node.querySelector('#resetEmail').value||'').trim();
     if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){
-      alert('E-mail invalido.'); return;
+      errEl.textContent = 'Digite um e-mail válido.';
+      errEl.classList.remove('hidden');
+      okEl.classList.add('hidden');
+      return;
     }
-    const btnEl = node.querySelector('#forgotPwd');
-    btnEl.disabled = true; btnEl.textContent = 'Enviando…';
-    try {
+    const sendBtn = node.querySelector('#sendReset');
+    sendBtn.disabled = true; sendBtn.textContent = 'Enviando…';
+    errEl.classList.add('hidden'); okEl.classList.add('hidden');
+    try{
       const { error } = await supa.auth.resetPasswordForEmail(email, {
         redirectTo: location.origin + location.pathname
       });
       if(error) throw error;
-      const errEl = node.querySelector('#loginErr');
-      errEl.style.color = 'var(--bhub-green)';
-      errEl.textContent = 'Link de redefinicao enviado pra ' + email + '. Cheque sua caixa de entrada.';
+      okEl.textContent = `Link enviado para ${email}. Verifique sua caixa de entrada.`;
+      okEl.classList.remove('hidden');
+      resetPanel.classList.add('hidden');
+      forgotBtn.classList.remove('hidden');
+    }catch(err){
+      errEl.textContent = 'Não foi possível enviar: ' + (err.message||err);
       errEl.classList.remove('hidden');
-    } catch(err){
-      const errEl = node.querySelector('#loginErr');
-      errEl.style.color = 'var(--bhub-red)';
-      errEl.textContent = 'Nao foi possivel enviar: ' + (err.message || err);
-      errEl.classList.remove('hidden');
-    } finally {
-      btnEl.disabled = false; btnEl.textContent = 'Esqueci minha senha';
+    }finally{
+      sendBtn.disabled = false; sendBtn.textContent = 'Enviar link →';
     }
   });
+
   return node;
 }
 
