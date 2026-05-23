@@ -4415,6 +4415,26 @@ function openChangeRoleModal(user){
    ================================================================ */
 function renderHoje(){
   const today = new Date(); today.setHours(0,0,0,0);
+
+  // Conjunto de tokens que identificam "eu": username, email completo, prefixo do email
+  const meTokens = new Set(
+    [
+      session.username||'',
+      session.email||'',
+      (session.email||'').split('@')[0],
+    ].map(s=>s.trim().toLowerCase()).filter(Boolean)
+  );
+  const isMe = (owner) => {
+    const o = (owner||'').trim().toLowerCase();
+    if(!o) return false;
+    // match exato contra qualquer token
+    if(meTokens.has(o)) return true;
+    // match parcial: qualquer token está contido no owner ou vice-versa
+    for(const tok of meTokens){
+      if(tok && (o.includes(tok) || tok.includes(o))) return true;
+    }
+    return false;
+  };
   const me = (session.username||'').trim().toLowerCase();
 
   // Coleta todas as tarefas de todos os deals com _f computado
@@ -4439,7 +4459,7 @@ function renderHoje(){
 
   // ---- Seção 1: Minhas tarefas críticas (atrasadas, owner = eu) ----
   const myLate = allTasks
-    .filter(t => t._f.status==='late' && (t.owner||'').trim().toLowerCase()===me)
+    .filter(t => t._f.status==='late' && isMe(t.owner))
     .sort((a,b) => (b._f.diasAtraso||0) - (a._f.diasAtraso||0));
 
   // ---- Seção 2: Decisões pendentes (RAID type=decision, open) ----
@@ -4452,7 +4472,7 @@ function renderHoje(){
   const myUpcoming = allTasks
     .filter(t => {
       if(t._f.status!=='ontrack') return false;
-      if((t.owner||'').trim().toLowerCase()!==me) return false;
+      if(!isMe(t.owner)) return false;
       if(!t._f.dataPrevista) return false;
       const diff = businessDaysBetween(today, t._f.dataPrevista);
       return diff>=0 && diff<=10;
@@ -4538,6 +4558,9 @@ function renderHoje(){
           ? 'Nenhuma ação pendente no momento. Tudo em dia!'
           : `Você tem <strong>${totalActions}</strong> item${totalActions!==1?'s':''} que precisam de atenção.`
         }</p>
+        <p style="font-size:.72rem;color:var(--bhub-muted);margin-top:.3rem">
+          Buscando por owner: <strong>${[...meTokens].join(' · ')}</strong>
+        </p>
       </div>
 
       <!-- Seção 1: Tarefas atrasadas minhas -->
