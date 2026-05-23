@@ -4085,6 +4085,7 @@ function openTaskModal(company, taskId){
         <div class="col-span-2"><label class="text-xs font-medium">Próximo passo</label><textarea name="proximoPasso" rows="2">${t.proximoPasso||''}</textarea></div>
         <div class="col-span-2"><label class="text-xs font-medium">Descrição do bloqueio</label><textarea name="bloqueioDescricao" rows="2">${t.bloqueioDescricao||''}</textarea></div>
 
+        <div id="taskFormErr" class="col-span-2 text-xs rounded-lg p-2 hidden" style="color:#991b1b;background:#fee2e2"></div>
         <div class="col-span-2 flex justify-end gap-2 pt-3 border-t">
           ${!isNew?`<button type="button" id="del" class="btn btn-danger mr-auto">Excluir</button>`:''}
           <button type="button" id="cancel" class="btn btn-secondary">Cancelar</button>
@@ -4122,6 +4123,28 @@ function openTaskModal(company, taskId){
   m.querySelector('#taskForm').onsubmit = async (e)=>{
     e.preventDefault();
     const fd = new FormData(e.target);
+    const errEl = m.querySelector('#taskFormErr');
+    const showErr = (msg) => { errEl.textContent = msg; errEl.classList.remove('hidden'); errEl.scrollIntoView({block:'nearest'}); };
+    errEl.classList.add('hidden');
+
+    const completado = parseFloat(fd.get('completado'))||0;
+    const dataRealConclusao = fd.get('dataRealConclusao');
+
+    // Validação: data real de conclusão não pode ser futura
+    if(dataRealConclusao){
+      const today = new Date(); today.setHours(0,0,0,0);
+      const dataConclusao = new Date(dataRealConclusao + 'T00:00:00');
+      if(dataConclusao > today){
+        showErr('A data real de conclusão não pode ser uma data futura. Uma tarefa só pode ser marcada como concluída após ser finalizada.');
+        return;
+      }
+    }
+    // Validação: se marcou 100% concluído, exige data real de conclusão
+    if(completado >= 100 && !dataRealConclusao){
+      showErr('Para marcar a tarefa como 100% concluída, informe a data real de conclusão.');
+      return;
+    }
+
     const upd = {
       ref: fd.get('ref').trim(),
       area: fd.get('area').trim(),
@@ -4129,8 +4152,8 @@ function openTaskModal(company, taskId){
       owner: fd.get('owner').trim(),
       ferramenta: fd.get('ferramenta').trim(),
       prazo: parseInt(fd.get('prazo'))||0,
-      dataRealConclusao: fd.get('dataRealConclusao'),
-      completado: parseFloat(fd.get('completado'))||0,
+      dataRealConclusao,
+      completado,
       evidencia: fd.get('evidencia').trim(),
       ultimoUpdate: fd.get('ultimoUpdate'),
       proximoPasso: fd.get('proximoPasso').trim(),
