@@ -440,6 +440,10 @@
   .hoje-greeting{margin-bottom:1.25rem}
   .hoje-greeting h1{font-size:1.5rem;font-weight:700;color:var(--bhub-navy);font-family:'Roboto',sans-serif;margin:0 0 .2rem}
   .hoje-greeting p{font-size:.875rem;color:var(--bhub-muted);margin:0}
+  .hoje-filter-bar{display:flex;align-items:center;gap:.5rem;background:#fff;border:1px solid var(--bhub-border);border-radius:.875rem;padding:.55rem 1rem;margin-bottom:1rem}
+  .hoje-filter-bar select{border:none;background:transparent;font-size:.82rem;color:var(--bhub-navy);font-weight:500;cursor:pointer;outline:none;padding:.1rem .25rem;flex:1}
+  .hoje-load-more{padding:.7rem 1.25rem;text-align:center;font-size:.78rem;font-weight:600;color:var(--bhub-blue);cursor:pointer;border-top:1px solid var(--bhub-border);background:var(--bhub-beige-soft);transition:background .12s}
+  .hoje-load-more:hover{background:#e8edf7}
 </style>
 </head>
 <body class="bg-gray-50 text-gray-900">
@@ -4481,147 +4485,165 @@ function openChangeRoleModal(user){
    HOJE — visão pessoal de ação ("What should I do today?")
    ================================================================ */
 function renderHoje(){
+  const PAGE = 10;
   const today = new Date(); today.setHours(0,0,0,0);
 
-  // Conjunto de tokens que identificam "eu": username, email completo, prefixo do email
+  // Tokens que identificam "eu"
   const meTokens = new Set(
-    [
-      session.username||'',
-      session.email||'',
-      (session.email||'').split('@')[0],
-    ].map(s=>s.trim().toLowerCase()).filter(Boolean)
+    [session.username||'', session.email||'', (session.email||'').split('@')[0]]
+      .map(s=>s.trim().toLowerCase()).filter(Boolean)
   );
   const isMe = (owner) => {
     const o = (owner||'').trim().toLowerCase();
     if(!o) return false;
-    // match exato contra qualquer token
     if(meTokens.has(o)) return true;
-    // match parcial: qualquer token está contido no owner ou vice-versa
     for(const tok of meTokens){
       if(tok && (o.includes(tok) || tok.includes(o))) return true;
     }
     return false;
   };
-  const me = (session.username||'').trim().toLowerCase();
 
-  // Coleta todas as tarefas de todos os deals com _f computado
+  // Coleta todas as tarefas/RAID de todos os deals
   const allTasks = [];
   for(const c of state.companies){
     const deal = state.deals[c.id];
     if(!deal) continue;
-    for(const t of (deal.tasks||[])){
-      allTasks.push({...t, _f: computeTaskFields(t,c), _deal: c});
-    }
+    for(const t of (deal.tasks||[])) allTasks.push({...t, _f:computeTaskFields(t,c), _deal:c});
   }
-
-  // Coleta todos os RAID de todos os deals
   const allRaid = [];
   for(const c of state.companies){
     const deal = state.deals[c.id];
     if(!deal) continue;
-    for(const r of (deal.raid||[])){
-      allRaid.push({...r, _deal: c});
-    }
+    for(const r of (deal.raid||[])) allRaid.push({...r, _deal:c});
   }
 
-  // ---- Seção 1: Minhas tarefas críticas (atrasadas, owner = eu) ----
+  // ---- Listas base (sem filtro de deal) ----
   const myLate = allTasks
     .filter(t => t._f.status==='late' && isMe(t.owner))
     .sort((a,b) => (b._f.diasAtraso||0) - (a._f.diasAtraso||0));
 
-  // ---- Seção 2: Decisões pendentes (RAID type=decision, open) ----
-  // Mostra todas as decisões abertas (independente de owner – qualquer um pode precisar aprovar)
   const decisions = allRaid
     .filter(r => r.type==='decision' && r.status==='open')
     .sort((a,b) => (b.severity==='high'?2:b.severity==='med'?1:0) - (a.severity==='high'?2:a.severity==='med'?1:0));
 
-  // ---- Seção 3: Próximos a vencer ≤10 d.u. (ontrack, owner = eu) ----
   const myUpcoming = allTasks
     .filter(t => {
-      if(t._f.status!=='ontrack') return false;
-      if(!isMe(t.owner)) return false;
-      if(!t._f.dataPrevista) return false;
+      if(t._f.status!=='ontrack' || !isMe(t.owner) || !t._f.dataPrevista) return false;
       const diff = businessDaysBetween(today, t._f.dataPrevista);
       return diff>=0 && diff<=10;
     })
     .map(t => ({...t, _diff: businessDaysBetween(today, t._f.dataPrevista)}))
     .sort((a,b) => a._diff - b._diff);
 
-  const totalActions = myLate.length + decisions.length + myUpcoming.length;
+  // Deals únicos que aparecem em qualquer seção (para o filtro)
+  const dealsInView = new Map();
+  [...myLate, ...myUpcoming].forEach(t => dealsInView.set(t._deal.id, t._deal.name));
+  decisions.forEach(r => dealsInView.set(r._deal.id, r._deal.name));
+  const dealList = [...dealsInView.entries()].sort((a,b)=>a[1].localeCompare(b[1]));
 
-  // ---- Saudação contextual ----
+  // Estado local: filtro de deal + limites de paginação por seção
+  let filterDeal = '';
+  const limits = { late: PAGE, dec: PAGE, up: PAGE };
+
   const hour = new Date().getHours();
-  const greet = hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite';
+  const greet = hour<12?'Bom dia':hour<18?'Boa tarde':'Boa noite';
   const firstName = (session.username||'').split(' ')[0];
 
-  function goToDeal(companyId){
-    view.tab='deal'; view.dealId=companyId; render();
-  }
-
+  // ---- Funções de row ----
   function taskRow(t){
     const dias = t._f.diasAtraso||0;
-    const label = dias===1 ? '1 d.u. de atraso' : `${dias} d.u. de atraso`;
-    return `
-      <div class="hoje-row" data-go="${t._deal.id}">
-        <div class="hoje-row-left">
-          <div class="hoje-row-task" title="${escapeHtml(t.task)}">${escapeHtml(t.task)}</div>
-          <div class="hoje-row-meta">
-            <span>${escapeHtml(t._deal.name)}</span>
-            <span class="sep">·</span>
-            <span>${escapeHtml(t.area||'—')}</span>
-            ${t.ref ? `<span class="sep">·</span><span>${escapeHtml(t.ref)}</span>` : ''}
-          </div>
+    return `<div class="hoje-row" data-go="${t._deal.id}">
+      <div class="hoje-row-left">
+        <div class="hoje-row-task" title="${escapeHtml(t.task)}">${escapeHtml(t.task)}</div>
+        <div class="hoje-row-meta">
+          <span>${escapeHtml(t._deal.name)}</span><span class="sep">·</span>
+          <span>${escapeHtml(t.area||'—')}</span>
+          ${t.ref?`<span class="sep">·</span><span>${escapeHtml(t.ref)}</span>`:''}
         </div>
-        <div class="hoje-row-right">
-          <span class="hoje-urgency late">${label}</span>
-        </div>
-      </div>`;
+      </div>
+      <div class="hoje-row-right"><span class="hoje-urgency late">${dias===1?'1 d.u. de atraso':`${dias} d.u. de atraso`}</span></div>
+    </div>`;
   }
-
   function decisionRow(r){
     const sev = r.severity==='high'?'Alta':r.severity==='med'?'Média':'Baixa';
-    return `
-      <div class="hoje-row" data-go="${r._deal.id}">
-        <div class="hoje-row-left">
-          <div class="hoje-row-task" title="${escapeHtml(r.title)}">${escapeHtml(r.title)}</div>
-          <div class="hoje-row-meta">
-            <span>${escapeHtml(r._deal.name)}</span>
-            <span class="sep">·</span>
-            <span>${escapeHtml(r.area||'—')}</span>
-            ${r.owner ? `<span class="sep">·</span><span>Resp: ${escapeHtml(r.owner)}</span>` : ''}
-          </div>
+    return `<div class="hoje-row" data-go="${r._deal.id}">
+      <div class="hoje-row-left">
+        <div class="hoje-row-task" title="${escapeHtml(r.title)}">${escapeHtml(r.title)}</div>
+        <div class="hoje-row-meta">
+          <span>${escapeHtml(r._deal.name)}</span><span class="sep">·</span>
+          <span>${escapeHtml(r.area||'—')}</span>
+          ${r.owner?`<span class="sep">·</span><span>Resp: ${escapeHtml(r.owner)}</span>`:''}
         </div>
-        <div class="hoje-row-right">
-          <span class="hoje-urgency decision">Prioridade ${sev}</span>
-        </div>
-      </div>`;
+      </div>
+      <div class="hoje-row-right"><span class="hoje-urgency decision">Prioridade ${sev}</span></div>
+    </div>`;
   }
-
   function upcomingRow(t){
     const d = t._diff;
-    const label = d===0 ? 'Vence hoje' : d===1 ? 'Vence amanhã' : `${d} d.u.`;
-    return `
-      <div class="hoje-row" data-go="${t._deal.id}">
-        <div class="hoje-row-left">
-          <div class="hoje-row-task" title="${escapeHtml(t.task)}">${escapeHtml(t.task)}</div>
-          <div class="hoje-row-meta">
-            <span>${escapeHtml(t._deal.name)}</span>
-            <span class="sep">·</span>
-            <span>${escapeHtml(t.area||'—')}</span>
-            ${t.ref ? `<span class="sep">·</span><span>${escapeHtml(t.ref)}</span>` : ''}
-          </div>
+    return `<div class="hoje-row" data-go="${t._deal.id}">
+      <div class="hoje-row-left">
+        <div class="hoje-row-task" title="${escapeHtml(t.task)}">${escapeHtml(t.task)}</div>
+        <div class="hoje-row-meta">
+          <span>${escapeHtml(t._deal.name)}</span><span class="sep">·</span>
+          <span>${escapeHtml(t.area||'—')}</span>
+          ${t.ref?`<span class="sep">·</span><span>${escapeHtml(t.ref)}</span>`:''}
         </div>
-        <div class="hoje-row-right">
-          <span class="hoje-urgency soon">${label}</span>
-        </div>
-      </div>`;
+      </div>
+      <div class="hoje-row-right"><span class="hoje-urgency soon">${d===0?'Vence hoje':d===1?'Vence amanhã':`${d} d.u.`}</span></div>
+    </div>`;
   }
+
+  // ---- Renderiza uma seção (lista filtrada + paginação) ----
+  function renderSec(containerId, badgeId, limitKey, items, rowFn, emptyMsg){
+    const visible = filterDeal ? items.filter(x=>x._deal.id===filterDeal) : items;
+    const limit = limits[limitKey];
+    const slice = visible.slice(0, limit);
+    const rest = visible.length - slice.length;
+
+    const container = node.querySelector('#'+containerId);
+    const badge = node.querySelector('#'+badgeId);
+    if(badge) badge.textContent = visible.length;
+
+    container.innerHTML = visible.length===0
+      ? `<div class="hoje-empty">${emptyMsg}</div>`
+      : slice.map(rowFn).join('') + (rest>0
+          ? `<div class="hoje-load-more" id="more-${limitKey}">Ver mais ${rest} item${rest!==1?'s':''} →</div>`
+          : '');
+
+    container.querySelectorAll('[data-go]').forEach(row=>{
+      row.addEventListener('click',()=>{ view.tab='deal'; view.dealId=row.dataset.go; render(); });
+    });
+    const moreBtn = container.querySelector('#more-'+limitKey);
+    if(moreBtn) moreBtn.addEventListener('click',()=>{
+      limits[limitKey] += PAGE;
+      renderSec(containerId, badgeId, limitKey, items, rowFn, emptyMsg);
+    });
+  }
+
+  // ---- Atualiza total + todas as seções ----
+  function refresh(){
+    const f = filterDeal;
+    const totLate  = f ? myLate.filter(x=>x._deal.id===f).length : myLate.length;
+    const totDec   = f ? decisions.filter(x=>x._deal.id===f).length : decisions.length;
+    const totUp    = f ? myUpcoming.filter(x=>x._deal.id===f).length : myUpcoming.length;
+    const total    = totLate + totDec + totUp;
+    const totalEl  = node.querySelector('#hoje-total');
+    if(totalEl) totalEl.innerHTML = total===0
+      ? 'Nenhuma ação pendente no momento. Tudo em dia!'
+      : `Você tem <strong>${total}</strong> item${total!==1?'s':''} que precisam de atenção.`;
+
+    renderSec('sec-late', 'badge-late', 'late', myLate, taskRow, 'Nenhuma tarefa atrasada com seu nome. ✓');
+    renderSec('sec-dec', 'badge-dec', 'dec', decisions, decisionRow, 'Nenhuma decisão aberta no portfólio.');
+    renderSec('sec-up', 'badge-up', 'up', myUpcoming, upcomingRow, 'Nenhuma tarefa sua vence nos próximos 10 dias úteis.');
+  }
+
+  const totalActions = myLate.length + decisions.length + myUpcoming.length;
 
   const node = el(`
     <div class="max-w-3xl mx-auto py-2">
       <div class="hoje-greeting">
         <h1>${greet}, ${escapeHtml(firstName)} 👋</h1>
-        <p>${totalActions===0
+        <p id="hoje-total">${totalActions===0
           ? 'Nenhuma ação pendente no momento. Tudo em dia!'
           : `Você tem <strong>${totalActions}</strong> item${totalActions!==1?'s':''} que precisam de atenção.`
         }</p>
@@ -4630,18 +4652,26 @@ function renderHoje(){
         </p>
       </div>
 
-      <!-- Seção 1: Tarefas atrasadas minhas -->
+      ${dealList.length>1 ? `
+      <div class="hoje-filter-bar">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="color:var(--bhub-muted);flex-shrink:0"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+        <span style="font-size:.78rem;color:var(--bhub-muted);font-weight:600;white-space:nowrap">Filtrar por deal:</span>
+        <select id="dealFilter">
+          <option value="">Todos os deals (${dealList.length})</option>
+          ${dealList.map(([id,name])=>`<option value="${id}">${escapeHtml(name)}</option>`).join('')}
+        </select>
+      </div>` : ''}
+
+      <!-- Seção 1: Tarefas atrasadas -->
       <div class="hoje-section">
         <div class="hoje-section-header">
           <div class="h-icon" style="background:#fde0e3;color:#a01923">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
           </div>
           <span class="h-title">Minhas tarefas críticas</span>
-          <span class="h-badge" style="background:#fde0e3;color:#a01923">${myLate.length}</span>
+          <span id="badge-late" class="h-badge" style="background:#fde0e3;color:#a01923">${myLate.length}</span>
         </div>
-        ${myLate.length===0
-          ? '<div class="hoje-empty">Nenhuma tarefa atrasada com seu nome. ✓</div>'
-          : myLate.map(taskRow).join('')}
+        <div id="sec-late"></div>
       </div>
 
       <!-- Seção 2: Decisões pendentes -->
@@ -4651,11 +4681,9 @@ function renderHoje(){
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
           </div>
           <span class="h-title">Decisões pendentes</span>
-          <span class="h-badge" style="background:#ede9fe;color:#5b21b6">${decisions.length}</span>
+          <span id="badge-dec" class="h-badge" style="background:#ede9fe;color:#5b21b6">${decisions.length}</span>
         </div>
-        ${decisions.length===0
-          ? '<div class="hoje-empty">Nenhuma decisão aberta no portfólio.</div>'
-          : decisions.map(decisionRow).join('')}
+        <div id="sec-dec"></div>
       </div>
 
       <!-- Seção 3: Próximos a vencer -->
@@ -4665,19 +4693,23 @@ function renderHoje(){
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
           </div>
           <span class="h-title">Próximos a vencer (≤ 10 dias úteis)</span>
-          <span class="h-badge" style="background:#fef3c7;color:#92400e">${myUpcoming.length}</span>
+          <span id="badge-up" class="h-badge" style="background:#fef3c7;color:#92400e">${myUpcoming.length}</span>
         </div>
-        ${myUpcoming.length===0
-          ? '<div class="hoje-empty">Nenhuma tarefa sua vence nos próximos 10 dias úteis.</div>'
-          : myUpcoming.map(upcomingRow).join('')}
+        <div id="sec-up"></div>
       </div>
     </div>
   `);
 
-  node.querySelectorAll('[data-go]').forEach(row=>{
-    row.addEventListener('click',()=>goToDeal(row.dataset.go));
+  // Wiring: filtro de deal
+  const filterEl = node.querySelector('#dealFilter');
+  if(filterEl) filterEl.addEventListener('change', ()=>{
+    filterDeal = filterEl.value;
+    limits.late = PAGE; limits.dec = PAGE; limits.up = PAGE;
+    refresh();
   });
 
+  // Render inicial das seções
+  refresh();
   return node;
 }
 
