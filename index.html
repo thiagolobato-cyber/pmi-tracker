@@ -267,14 +267,14 @@
   .kpi-hero{
     background:linear-gradient(145deg,var(--bhub-navy) 0%,#1a2438 100%);
     color:#fff;border:none;border-radius:1.25rem;padding:1.4rem 1.5rem;
-    display:flex;flex-direction:column;gap:.6rem;
-    box-shadow:0 8px 24px rgba(15,23,39,.18);min-height:8rem;
+    display:flex;flex-direction:column;align-items:center;text-align:center;gap:.6rem;
+    box-shadow:0 8px 24px rgba(15,23,39,.18);min-height:8rem;justify-content:center;
   }
   .kpi-hero:hover{transform:none;box-shadow:0 8px 28px rgba(15,23,39,.25)}
   .kpi-hero .kpi-label{font-size:.7rem;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:.08em;font-weight:600;font-family:'Roboto',sans-serif}
   .kpi-hero .kpi-value{font-size:3rem;font-weight:700;color:#fff;line-height:1;font-family:'Roboto',sans-serif;margin:.2rem 0}
   .kpi-hero .kpi-sub{font-size:.75rem;color:rgba(255,255,255,.55);font-family:'Roboto',sans-serif}
-  .kpi-hero .hero-bar{height:4px;background:rgba(255,255,255,.15);border-radius:99px;overflow:hidden;margin:.35rem 0}
+  .kpi-hero .hero-bar{height:4px;background:rgba(255,255,255,.15);border-radius:99px;overflow:hidden;margin:.35rem 0;align-self:stretch;width:100%}
   .kpi-hero .hero-bar-fill{height:100%;background:var(--bhub-blue);border-radius:99px;transition:width .8s ease}
   .kpi-secondary-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.875rem}
   @media (max-width:900px){.kpi-secondary-grid{grid-template-columns:repeat(2,1fr)}}
@@ -381,8 +381,8 @@
   .widget-link svg{width:.95rem;height:.95rem}
 
   .empty-state{
-    display:flex;flex-direction:column;align-items:center;text-align:center;
-    padding:2rem 1rem 1.5rem;color:var(--bhub-muted);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;
+    padding:2rem 1rem 1.5rem;color:var(--bhub-muted);flex:1;
   }
   .empty-state .empty-icon{
     width:3.5rem;height:3.5rem;border-radius:50%;
@@ -1650,21 +1650,35 @@ function renderDashboard(){
               Sinergia consolidada
             </h3>
           </div>
+          ${allSyns.length===0 ? `
+          <div class="empty-state" style="padding:1.5rem 1rem">
+            <div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg></div>
+            <p class="empty-title">Sem sinergias cadastradas</p>
+            <p class="empty-sub">Registre sinergias nas abas de cada deal</p>
+          </div>` : `
           <div class="syn-card">
             <div class="syn-gauge">
               <canvas id="synGauge"></canvas>
               <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none">
                 <div style="font-size:1.9rem;font-weight:700;font-family:'Roboto';color:var(--bhub-navy);line-height:1">${synPct}%</div>
-                <div style="font-size:.7rem;color:var(--bhub-muted);margin-top:.15rem">integração realizada</div>
+                <div style="font-size:.7rem;color:var(--bhub-muted);margin-top:.15rem">captura realizada</div>
               </div>
             </div>
             <div class="syn-stats">
+              <div class="syn-stat">
+                <div class="lbl">Planejado</div>
+                <div class="val">${fmtBRL(synPlan)}</div>
+              </div>
               <div class="syn-stat realized">
-                <div class="lbl">Sinergia realizada</div>
+                <div class="lbl">Realizado</div>
                 <div class="val">${fmtBRL(synReal)}</div>
               </div>
+              <div class="syn-stat">
+                <div class="lbl">A capturar</div>
+                <div class="val" style="color:var(--bhub-blue)">${fmtBRL(Math.max(0,synPlan-synReal))}</div>
+              </div>
             </div>
-          </div>
+          </div>`}
         </div>
       </section>
 
@@ -1885,15 +1899,18 @@ function renderDashboard(){
     }
     // Sinergia gauge (doughnut)
     const gaugeCanvas = node.querySelector('#synGauge');
-    if(gaugeCanvas){
+    if(gaugeCanvas && (synPlan > 0 || synReal > 0)){
       const remaining = Math.max(0, synPlan - synReal);
+      // If synReal > synPlan (over-achieved), show full realized + 0 remaining
+      const realized = synPlan > 0 ? Math.min(synReal, synPlan) : synReal;
+      const rem = synPlan > 0 ? Math.max(0, synPlan - synReal) : 0;
       new Chart(gaugeCanvas.getContext('2d'),{
         type:'doughnut',
         data:{
           labels:['Realizado','A capturar'],
-          datasets:[{data:[synReal, remaining], backgroundColor:['#0171E4','#e6e3d9'], borderWidth:0}]
+          datasets:[{data: rem > 0 ? [realized, rem] : [realized, realized*0.001||1], backgroundColor:['#0171E4','#e6e3d9'], borderWidth:0}]
         },
-        options:{responsive:true, maintainAspectRatio:false, cutout:'72%', plugins:{legend:{display:false}, tooltip:{callbacks:{label:c=>c.label+': '+fmtBRL(c.parsed)}}}}
+        options:{responsive:true, maintainAspectRatio:false, cutout:'72%', plugins:{legend:{display:false}, tooltip:{callbacks:{label:c=>c.label+': '+fmtBRL(c.raw||0)}}}}
       });
     }
   },0);
@@ -1906,7 +1923,7 @@ function renderDashboardRagMatrix(data){
   const allAreas = Array.from(new Set([
     ...DEFAULT_AREAS.map(a=>a.name),
     ...Object.values(state.deals).flatMap(d=>d.tasks.map(t=>t.area))
-  ].filter(Boolean))).slice(0,8);
+  ].filter(Boolean)));
   function lastRagFor(dealId, area){
     const arr = (state.deals[dealId]?.health||[]).filter(h=>h.area===area).sort((a,b)=>b.weekIso.localeCompare(a.weekIso));
     return arr[0]?.rag || 'na';
