@@ -262,23 +262,27 @@
   @media (min-width: 1280px){ .kpi-grid{grid-template-columns:repeat(6,1fr)} }
 
   /* ---- Dashboard Hero KPI layout ---- */
-  .kpi-hero-section{display:flex;gap:.875rem;align-items:flex-start}
+  .kpi-hero-section{display:flex;gap:.875rem;align-items:stretch}
   .kpi-hero-section > .kpi-secondary-grid{flex:3;min-width:0}
   @media (max-width:1024px){.kpi-hero-section{flex-direction:column}}
   .kpi-hero{
     background:linear-gradient(145deg,var(--bhub-navy) 0%,#1a2438 100%);
-    color:#fff;border:none;border-radius:1.25rem;padding:1.25rem 1.5rem;
-    display:flex;flex-direction:column;align-items:center;text-align:center;gap:.5rem;
-    box-shadow:0 8px 24px rgba(15,23,39,.18);justify-content:center;
-    width:clamp(200px,22%,280px);flex-shrink:0;flex-grow:0;
-    align-self:center;height:fit-content;
+    color:#fff;border:none;border-radius:1.25rem;padding:1.5rem 1.25rem;
+    display:flex;flex-direction:column;align-items:center;text-align:center;
+    box-shadow:0 8px 24px rgba(15,23,39,.18);justify-content:space-between;
+    width:clamp(210px,22%,270px);flex-shrink:0;flex-grow:0;
   }
   .kpi-hero:hover{transform:none;box-shadow:0 8px 28px rgba(15,23,39,.25)}
-  .kpi-hero .kpi-label{font-size:.7rem;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:.08em;font-weight:600;font-family:'Roboto',sans-serif}
-  .kpi-hero .kpi-value{font-size:2.5rem;font-weight:700;color:#fff;line-height:1;font-family:'Roboto',sans-serif;margin:.1rem 0}
-  .kpi-hero .kpi-sub{font-size:.75rem;color:rgba(255,255,255,.55);font-family:'Roboto',sans-serif}
-  .kpi-hero .hero-bar{height:4px;background:rgba(255,255,255,.15);border-radius:99px;overflow:hidden;margin:.35rem 0;align-self:stretch;width:100%}
+  .kpi-hero .kpi-label{font-size:.65rem;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:.1em;font-weight:600;font-family:'Roboto',sans-serif;line-height:1.4}
+  .kpi-hero .hero-center{width:100%;display:flex;flex-direction:column;align-items:center;gap:.4rem}
+  .kpi-hero .kpi-value{font-size:4.5rem;font-weight:700;color:#fff;line-height:1;font-family:'Roboto',sans-serif;margin:0}
+  .kpi-hero .kpi-sub{font-size:.7rem;color:rgba(255,255,255,.4);font-family:'Roboto',sans-serif}
+  .kpi-hero .hero-bar{height:6px;background:rgba(255,255,255,.12);border-radius:99px;overflow:hidden;width:100%}
   .kpi-hero .hero-bar-fill{height:100%;background:var(--bhub-blue);border-radius:99px;transition:width .8s ease}
+  .hero-mini-stats{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;width:100%}
+  .hero-mini-stat{background:rgba(255,255,255,.07);border-radius:.625rem;padding:.55rem .4rem;text-align:center}
+  .hero-mini-stat-value{font-size:1.2rem;font-weight:700;color:#fff;line-height:1;font-family:'Roboto',sans-serif}
+  .hero-mini-stat-label{font-size:.6rem;color:rgba(255,255,255,.38);margin-top:.2rem;font-family:'Roboto',sans-serif;text-transform:uppercase;letter-spacing:.06em}
   .kpi-secondary-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.875rem}
   @media (max-width:900px){.kpi-secondary-grid{grid-template-columns:repeat(2,1fr)}}
   @media (max-width:540px){.kpi-secondary-grid{grid-template-columns:1fr 1fr}}
@@ -1596,10 +1600,25 @@ function renderDashboard(){
       <section class="kpi-hero-section">
         <!-- HERO: % Integração -->
         <div class="kpi-hero" title="Tarefas concluídas ÷ tarefas totais do portfólio (média ponderada por deal). Deals com mais tarefas pesam proporcionalmente mais.">
-          <div class="kpi-label">% Integração do Portfólio</div>
-          <div class="kpi-value">${avgPct}%</div>
-          <div class="hero-bar"><div class="hero-bar-fill" style="width:${avgPct}%"></div></div>
-          <div class="kpi-sub">${done} de ${total} tarefas concluídas · ${data.length} deal${data.length!==1?'s':''} ativo${data.length!==1?'s':''}</div>
+          <!-- Andar 1: Label -->
+          <div class="kpi-label">% Integração<br>do Portfólio</div>
+          <!-- Andar 2: Número + barra -->
+          <div class="hero-center">
+            <div class="kpi-value">${avgPct}%</div>
+            <div class="hero-bar"><div class="hero-bar-fill" style="width:${avgPct}%"></div></div>
+            <div class="kpi-sub">${done} de ${total} concluídas</div>
+          </div>
+          <!-- Andar 3: Mini-stats -->
+          <div class="hero-mini-stats">
+            <div class="hero-mini-stat">
+              <div class="hero-mini-stat-value">${data.length}</div>
+              <div class="hero-mini-stat-label">deals</div>
+            </div>
+            <div class="hero-mini-stat">
+              <div class="hero-mini-stat-value" style="color:${late>0?'var(--bhub-red)':'rgba(255,255,255,.8)'}">${late}</div>
+              <div class="hero-mini-stat-label">atrasadas</div>
+            </div>
+          </div>
         </div>
         <!-- Secundários: 2 linhas × 3 colunas -->
         <div class="kpi-secondary-grid">
