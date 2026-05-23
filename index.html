@@ -1608,15 +1608,15 @@ function renderDashboard(){
             <div class="hero-bar"><div class="hero-bar-fill" style="width:${avgPct}%"></div></div>
             <div class="kpi-sub">${done} de ${total} concluídas</div>
           </div>
-          <!-- Andar 3: Mini-stats -->
+          <!-- Andar 3: Mini-stats contextuais -->
           <div class="hero-mini-stats">
             <div class="hero-mini-stat">
-              <div class="hero-mini-stat-value">${data.length}</div>
-              <div class="hero-mini-stat-label">deals</div>
+              <div class="hero-mini-stat-value">${done}</div>
+              <div class="hero-mini-stat-label">feitas</div>
             </div>
             <div class="hero-mini-stat">
-              <div class="hero-mini-stat-value" style="color:${late>0?'var(--bhub-red)':'rgba(255,255,255,.8)'}">${late}</div>
-              <div class="hero-mini-stat-label">atrasadas</div>
+              <div class="hero-mini-stat-value">${total}</div>
+              <div class="hero-mini-stat-label">total</div>
             </div>
           </div>
         </div>
