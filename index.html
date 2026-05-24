@@ -2132,26 +2132,26 @@ function renderDashboardRagMatrix(data){
 function openExecPdfDealModal(deals, onDone){
   const current = view.execPdfDeals ? new Set(view.execPdfDeals) : new Set(deals.map(d=>d.company.id));
   const modal = el(`
-    <div class="modal-overlay" style="z-index:1100">
-      <div class="modal-box" style="max-width:480px;max-height:82vh;display:flex;flex-direction:column;gap:0">
-        <div class="flex items-center justify-between" style="margin-bottom:.75rem">
+    <div class="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+      <div class="bg-white rounded-xl shadow-xl flex flex-col" style="width:100%;max-width:480px;max-height:82vh">
+        <div class="flex items-center justify-between p-5 border-b" style="border-color:var(--bhub-border)">
           <h2 class="text-base font-bold" style="color:var(--bhub-navy)">Deals para o PDF</h2>
-          <button id="closePdfDealModal" style="background:none;border:none;font-size:1.4rem;line-height:1;color:var(--bhub-muted);cursor:pointer">×</button>
+          <button id="closePdfDealModal" class="text-gray-400 hover:text-gray-700" style="background:none;border:none;font-size:1.4rem;line-height:1;cursor:pointer">×</button>
         </div>
-        <div class="flex items-center gap-2" style="margin-bottom:.6rem">
+        <div class="flex items-center gap-2 px-5 pt-3 pb-2">
           <button id="pdfSelAll" class="btn btn-secondary" style="font-size:.75rem;padding:.28rem .6rem">Todos</button>
           <button id="pdfSelNone" class="btn btn-secondary" style="font-size:.75rem;padding:.28rem .6rem">Nenhum</button>
-          <span id="pdfSelCount" class="text-xs" style="margin-left:auto;color:var(--bhub-muted)">${current.size} de ${deals.length} selecionados</span>
+          <span id="pdfSelCount" class="text-xs ml-auto" style="color:var(--bhub-muted)">${current.size} de ${deals.length} selecionados</span>
         </div>
-        <div style="overflow-y:auto;flex:1;border:1px solid var(--bhub-border);border-radius:6px">
+        <div class="overflow-y-auto flex-1 mx-5 mb-2 border rounded-lg" style="border-color:var(--bhub-border)">
           ${deals.map(d=>`
-            <label class="flex items-center gap-2" style="padding:.5rem .75rem;cursor:pointer;border-bottom:1px solid var(--bhub-border);transition:background .1s" onmouseover="this.style.background='var(--bhub-beige-soft)'" onmouseout="this.style.background=''">
+            <label class="flex items-center gap-2 px-3 py-2 cursor-pointer border-b hover:bg-gray-50" style="border-color:var(--bhub-border)">
               <input type="checkbox" class="pdf-deal-chk" data-id="${d.company.id}" ${current.has(d.company.id)?'checked':''}/>
               <span class="text-sm">${escapeHtml(d.company.name)}</span>
             </label>
           `).join('')}
         </div>
-        <div class="flex gap-2 justify-end" style="margin-top:.9rem">
+        <div class="flex gap-2 justify-end p-5 border-t" style="border-color:var(--bhub-border)">
           <button id="cancelPdfDealModal" class="btn btn-secondary">Cancelar</button>
           <button id="confirmPdfDealModal" class="btn btn-primary">Confirmar</button>
         </div>
@@ -2341,7 +2341,7 @@ function renderExecutiva(){
 
     // Build off-screen clone — NO max-height, NO overflow
     const wrap = document.createElement('div');
-    wrap.style.cssText = 'position:absolute;left:-9999px;top:0;background:#fff;padding:10px 12px;font-family:Inter,sans-serif';
+    wrap.style.cssText = 'position:fixed;top:0;left:0;opacity:0.001;pointer-events:none;z-index:-9999;background:#fff;padding:10px 12px;font-family:Inter,sans-serif;overflow:visible';
     wrap.innerHTML = `
       <div style="margin-bottom:7px">
         <div style="font-size:13px;font-weight:700;color:#1a2e44">Visão Executiva — Tarefa × Deal</div>
