@@ -2301,6 +2301,12 @@ function renderExecutiva(){
       return;
     }
 
+    if(pdfDeals.length > 15){
+      alert(`O PDF suporta até 15 deals por vez (${pdfDeals.length} selecionados).\n\nClique em "Deals" para escolher quais incluir.`);
+      btn.disabled = false; btn.textContent = 'PDF';
+      return;
+    }
+
     const execTableEl = node.querySelector('#execTable');
     const areaLabel = view.executiveArea === 'todas' ? 'Todas as Áreas' : view.executiveArea;
 
@@ -4939,7 +4945,7 @@ function renderHoje(){
   const totalActions = myLate.length + decisions.length + myUpcoming.length;
 
   const node = el(`
-    <div class="max-w-3xl mx-auto py-2">
+    <div class="py-2">
       <div class="hoje-greeting">
         <h1>${greet}, ${escapeHtml(firstName)} 👋</h1>
         <p id="hoje-total">${totalActions===0
