@@ -4487,10 +4487,10 @@ function renderTemplate(){
           <h1 class="text-xl font-bold">Template de Tarefas</h1>
           <p class="text-sm text-gray-500">Modelo aplicado a novos deals. ${tpl.length} tarefas.</p>
         </div>
-        ${canEdit() ? `<div class="flex gap-2">
-          <button id="addRow" class="btn btn-primary">+ Tarefa no template</button>
-          <button id="clearTpl" class="btn btn-secondary">Limpar template</button>
-        </div>` : ''}
+        <div class="flex gap-2">
+          ${canEdit() ? `<button id="addRow" class="btn btn-primary">+ Tarefa no template</button>` : ''}
+          ${session?.role==='admin' ? `<button id="clearTpl" class="btn btn-danger" style="opacity:.7">Limpar template</button>` : ''}
+        </div>
       </div>
 
       ${order.map(a=>`
@@ -4523,17 +4523,63 @@ function renderTemplate(){
   const emptyAdd = node.querySelector('#emptyAddTpl');
   if(emptyAdd) emptyAdd.onclick = ()=>openTemplateModal();
   const clr = node.querySelector('#clearTpl');
-  if(clr) clr.onclick = async ()=>{
-    if(!confirm('Apagar todas as tarefas do template?')) return;
-    try{
-      const ids = state.template.map(t=>t.id);
-      if(ids.length){
-        const { error } = await supa.from('template_tasks').delete().in('id', ids);
-        if(error) throw error;
+  if(clr) clr.onclick = ()=>{
+    const total = state.template.length;
+    const dm = el(`
+      <div class="fixed inset-0 bg-black/50 z-20 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl w-full max-w-md shadow-2xl p-6 flex flex-col gap-4">
+          <div class="flex items-center gap-3">
+            <div style="background:#fee2e2;border-radius:50%;width:2.5rem;height:2.5rem;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            </div>
+            <div>
+              <div class="font-bold text-gray-900" style="font-size:1rem">Limpar template?</div>
+              <div class="text-sm text-gray-500 mt-0.5">Esta ação é <strong>irreversível</strong>. As <strong>${total} tarefas</strong> serão apagadas permanentemente do banco de dados.</div>
+            </div>
+          </div>
+          <div class="rounded-lg p-3 text-sm" style="background:#fef2f2;border:1px solid #fecaca;color:#991b1b">
+            ⚠️ Deals já criados <strong>não são afetados</strong>, mas nenhum novo deal terá tarefas aplicadas automaticamente.
+          </div>
+          <div>
+            <label class="text-xs font-semibold block mb-1" style="color:#374151">Digite <strong>LIMPAR</strong> para confirmar:</label>
+            <input id="confirmInput" type="text" placeholder="LIMPAR" autocomplete="off"
+              style="width:100%;padding:.5rem .75rem;border:2px solid #e5e7eb;border-radius:.5rem;font-size:.95rem;outline:none"/>
+          </div>
+          <div class="flex gap-2 justify-end">
+            <button id="dmCancel" class="btn btn-secondary">Cancelar</button>
+            <button id="dmConfirm" class="btn btn-danger" disabled style="opacity:.4;cursor:not-allowed">Sim, limpar tudo</button>
+          </div>
+        </div>
+      </div>`);
+    document.body.appendChild(dm);
+    const inp = dm.querySelector('#confirmInput');
+    const btn = dm.querySelector('#dmConfirm');
+    inp.focus();
+    inp.addEventListener('input', ()=>{
+      const ok = inp.value.trim() === 'LIMPAR';
+      btn.disabled = !ok;
+      btn.style.opacity = ok ? '1' : '.4';
+      btn.style.cursor = ok ? 'pointer' : 'not-allowed';
+    });
+    dm.querySelector('#dmCancel').onclick = ()=>dm.remove();
+    btn.onclick = async ()=>{
+      if(inp.value.trim() !== 'LIMPAR') return;
+      btn.disabled = true;
+      btn.textContent = 'Apagando…';
+      try{
+        const ids = state.template.map(t=>t.id);
+        if(ids.length){
+          const { error } = await supa.from('template_tasks').delete().in('id', ids);
+          if(error) throw error;
+        }
+        state.template = [];
+        dm.remove();
+        render();
+      }catch(err){
+        alert('Erro: '+(err.message||err));
+        dm.remove();
       }
-      state.template = [];
-      render();
-    }catch(err){ alert('Erro: '+(err.message||err)); }
+    };
   };
   node.querySelectorAll('[data-edt]').forEach(b=>b.onclick=()=>openTemplateModal(b.dataset.edt));
   return node;
