@@ -4241,19 +4241,36 @@ async function renderDependenciesPanel(panel, task, company, deal){
     </div>
     <div class="mt-4 pt-3 border-t">
       <div class="text-xs font-semibold mb-2">Adicionar dependência</div>
-      <div class="flex gap-2 flex-wrap items-center">
+      <div class="flex gap-2 flex-wrap items-center mb-2">
         <select id="depRole" class="text-xs" style="width:160px">
           <option value="pred">Tarefa precede esta</option>
           <option value="succ">Tarefa sucede esta</option>
         </select>
+        <select id="depArea" class="text-xs" style="width:200px">
+          <option value="">— filtrar por área —</option>
+          ${Array.from(new Set(others.filter(t=>!linkedIds.has(t.id)).map(t=>t.area||'').filter(Boolean).sort())).map(a=>`<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="flex gap-2 flex-wrap items-center">
         <select id="depTask" class="text-xs flex-1" style="min-width:200px">
           <option value="">— escolher tarefa —</option>
-          ${others.filter(t=>!linkedIds.has(t.id)).map(t=>`<option value="${t.id}">${escapeHtml(t.task||t.ref||'(sem nome)')}</option>`).join('')}
         </select>
         <button id="depAdd" class="btn btn-primary" style="padding:.4rem .9rem">+ Adicionar</button>
       </div>
     </div>
   `;
+
+  const available = others.filter(t=>!linkedIds.has(t.id));
+
+  function populateTaskSelect(areaFilter=''){
+    const sel = panel.querySelector('#depTask');
+    const filtered = areaFilter ? available.filter(t=>t.area===areaFilter) : available;
+    sel.innerHTML = `<option value="">— escolher tarefa —</option>`
+      + filtered.map(t=>`<option value="${t.id}">[${escapeHtml(t.ref||'?')}] ${escapeHtml(t.task||'(sem nome)')}</option>`).join('');
+  }
+
+  panel.querySelector('#depArea').addEventListener('change', e=>populateTaskSelect(e.target.value));
+
   panel.querySelectorAll('[data-depdel]').forEach(b=>b.addEventListener('click', async ()=>{
     await supa.from('task_dependencies').delete().eq('id', b.dataset.depdel);
     renderDependenciesPanel(panel, task, company, deal);
