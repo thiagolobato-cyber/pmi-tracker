@@ -3818,7 +3818,6 @@ function renderDealHistorico(company){
             <option value="synergies">Sinergias</option>
             <option value="health_entries">Health</option>
             <option value="comments">Comentários</option>
-            <option value="attachments">Anexos</option>
             <option value="companies">Empresa</option>
           </select>
           <button id="histReload" class="btn btn-secondary" style="padding:.35rem .7rem;font-size:.75rem">↻ Atualizar</button>
@@ -4174,7 +4173,7 @@ async function renderCommentsPanel(panel, entityType, entityId, companyId){
       }).join('') : '<div class="text-xs text-gray-500 py-2">Sem comentários ainda.</div>'}
     </div>
     <form id="cmForm" class="flex gap-2 mt-3">
-      <textarea name="body" rows="2" placeholder="Adicionar comentário…" class="text-sm flex-1" required></textarea>
+      <textarea name="body" rows="2" placeholder="Adicionar comentário ou cole aqui o link do Drive / SharePoint…" class="text-sm flex-1" required></textarea>
       <button class="btn btn-primary" style="padding:.4rem .9rem">Postar</button>
     </form>
   `;
@@ -4194,67 +4193,6 @@ async function renderCommentsPanel(panel, entityType, entityId, companyId){
     if(error){ alert('Erro ao postar: '+error.message); return; }
     renderCommentsPanel(panel, entityType, entityId, companyId);
   };
-}
-
-async function renderAttachmentsPanel(panel, entityType, entityId, companyId){
-  panel.innerHTML = `<div class="space-y-2">${Array(3).fill('<div class="skel" style="width:100%;height:36px"></div>').join('')}</div>`;
-  const { data, error } = await supa.from('attachments').select('*').eq('entity_type', entityType).eq('entity_id', entityId).order('created_at',{ascending:false});
-  if(error){ panel.innerHTML = `<div class="text-xs text-red-600">Erro: ${escapeHtml(error.message)}</div>`; return; }
-  const list = data || [];
-  panel.innerHTML = `
-    <div class="space-y-1.5 max-h-56 overflow-y-auto pr-1">
-      ${list.length ? list.map(a=>{
-        const when = new Date(a.created_at).toLocaleString('pt-BR');
-        const sizeKB = a.size_bytes ? (a.size_bytes/1024).toFixed(1)+' KB' : '';
-        const mine = session && a.uploader_id === session.id;
-        return `<div class="flex items-center gap-2 border rounded-lg p-2" style="border-color:var(--bhub-border)">
-          <span>📎</span>
-          <div class="flex-1 min-w-0">
-            <button class="text-sm font-medium text-blue-700 hover:underline text-left truncate w-full" data-dlpath="${escapeHtml(a.storage_path)}" data-dlname="${escapeHtml(a.filename)}">${escapeHtml(a.filename)}</button>
-            <div class="text-[11px] text-gray-500">${escapeHtml(a.uploader_name||a.uploader_email||'')} • ${escapeHtml(when)} ${sizeKB?' • '+sizeKB:''}</div>
-          </div>
-          ${mine || (session && session.role==='admin') ? `<button class="text-xs text-red-600 hover:underline" data-atdel="${a.id}" data-atpath="${escapeHtml(a.storage_path)}">excluir</button>` : ''}
-        </div>`;
-      }).join('') : '<div class="text-xs text-gray-500 py-2">Sem anexos.</div>'}
-    </div>
-    <div class="mt-3">
-      <label class="btn btn-secondary cursor-pointer" style="padding:.4rem .9rem">
-        📎 Anexar arquivo<input id="atFile" type="file" class="hidden">
-      </label>
-      <span id="atStatus" class="text-xs text-gray-500 ml-2"></span>
-    </div>
-  `;
-  panel.querySelectorAll('[data-dlpath]').forEach(b=>b.addEventListener('click', async ()=>{
-    const path = b.dataset.dlpath;
-    const { data, error } = await supa.storage.from('pmi-attachments').createSignedUrl(path, 60);
-    if(error){ alert('Erro ao gerar link: '+error.message); return; }
-    window.open(data.signedUrl, '_blank');
-  }));
-  panel.querySelectorAll('[data-atdel]').forEach(b=>b.addEventListener('click', async ()=>{
-    if(!confirm('Excluir este anexo?')) return;
-    await supa.storage.from('pmi-attachments').remove([b.dataset.atpath]);
-    await supa.from('attachments').delete().eq('id', b.dataset.atdel);
-    renderAttachmentsPanel(panel, entityType, entityId, companyId);
-  }));
-  panel.querySelector('#atFile').addEventListener('change', async e=>{
-    const file = e.target.files[0];
-    if(!file) return;
-    if(file.size > 20*1024*1024){ alert('Arquivo maior que 20MB não suportado.'); return; }
-    const status = panel.querySelector('#atStatus');
-    status.textContent = 'Enviando…';
-    const safe = file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
-    const path = `${companyId}/${entityType}/${entityId}/${Date.now()}_${safe}`;
-    const { error: upErr } = await supa.storage.from('pmi-attachments').upload(path, file, { contentType: file.type||'application/octet-stream' });
-    if(upErr){ status.textContent = 'Erro: '+upErr.message; return; }
-    const { error: insErr } = await supa.from('attachments').insert({
-      entity_type: entityType, entity_id: entityId, company_id: companyId,
-      filename: file.name, storage_path: path, mime_type: file.type, size_bytes: file.size,
-      uploader_id: session.id, uploader_email: session.email||null, uploader_name: session.username||null
-    });
-    if(insErr){ status.textContent = 'Erro DB: '+insErr.message; return; }
-    status.textContent = '';
-    renderAttachmentsPanel(panel, entityType, entityId, companyId);
-  });
 }
 
 async function renderDependenciesPanel(panel, task, company, deal){
@@ -4378,7 +4316,6 @@ function openTaskModal(company, taskId){
       <div class="mt-6 pt-4 border-t">
         <div class="flex gap-1 mb-3">
           <button class="subtab active" data-tasksub="comments">💬 Comentários</button>
-          <button class="subtab" data-tasksub="attachments">📎 Anexos</button>
           <button class="subtab" data-tasksub="deps">🔗 Dependências</button>
         </div>
         <div id="taskSubPanel"></div>
@@ -4396,7 +4333,6 @@ function openTaskModal(company, taskId){
     function loadPanel(){
       tabs.forEach(b=>b.classList.toggle('active', b.dataset.tasksub===current));
       if(current==='comments') renderCommentsPanel(panel, 'task', t.id, company.id);
-      else if(current==='attachments') renderAttachmentsPanel(panel, 'task', t.id, company.id);
       else if(current==='deps') renderDependenciesPanel(panel, t, company, deal);
     }
     tabs.forEach(b=>b.addEventListener('click', ()=>{ current = b.dataset.tasksub; loadPanel(); }));
