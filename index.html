@@ -771,6 +771,20 @@ function ownerSelectHtml(currentOwner='', adminOnly=false){
   </select>`;
 }
 
+/* ---------- Helpers: ordenação por REF e por área ---------- */
+function sortByRef(a, b){
+  const parse = r => { const p = String(r||'0.0').split('.'); return [parseInt(p[0])||0, parseInt(p[1])||0]; };
+  const [a0,a1] = parse(a.ref), [b0,b1] = parse(b.ref);
+  return a0 !== b0 ? a0 - b0 : a1 - b1;
+}
+function sortAreaNames(names){
+  return [...names].sort((a,b)=>{
+    const ia = DEFAULT_AREAS.findIndex(x=>x.name===a);
+    const ib = DEFAULT_AREAS.findIndex(x=>x.name===b);
+    return (ia===-1?999:ia) !== (ib===-1?999:ib) ? (ia===-1?999:ia)-(ib===-1?999:ib) : a.localeCompare(b,'pt');
+  });
+}
+
 /* ---------- Reload state from Supabase ---------- */
 // Helper: pagina automaticamente em chunks de 1000 (limite default do PostgREST).
 // Recebe uma funcao que cria um NOVO builder a cada chamada (o builder e' "consumido"
@@ -1612,7 +1626,7 @@ function renderHeader(){
 /* ---------- Dashboard ---------- */
 function aggregate(){
   const deals = state.companies.map(c=>{
-    const tasks = (state.deals[c.id]?.tasks||[]).map(t=>({...t, _f: computeTaskFields(t,c)}));
+    const tasks = (state.deals[c.id]?.tasks||[]).map(t=>({...t, _f: computeTaskFields(t,c)})).sort(sortByRef);
     const total = tasks.length;
     const done = tasks.filter(t=>t._f.status==='done').length;
     const ontrack = tasks.filter(t=>t._f.status==='ontrack').length;
@@ -3244,14 +3258,15 @@ function renderDeal(){
 
 function renderDealTasks(company, deal, tasks){
   const total = tasks.length;
-  // group by area
-  const areasInOrder = [];
+  // group by area, sorted by ref within each group, areas in canonical order
   const grouped = {};
   tasks.forEach(t => {
     const a = t.area || '(sem área)';
-    if(!grouped[a]){ grouped[a]=[]; areasInOrder.push(a); }
+    if(!grouped[a]) grouped[a] = [];
     grouped[a].push(t);
   });
+  Object.values(grouped).forEach(g => g.sort(sortByRef));
+  const areasInOrder = sortAreaNames(Object.keys(grouped));
   const phaseLabel = (t) => {
     const p = phaseFor(t, company);
     return p ? `<span class="phase" style="background:${p.color}22;border-color:${p.color}55;color:${p.color}">${p.name}</span>` : '';
@@ -4248,7 +4263,7 @@ async function renderDependenciesPanel(panel, task, company, deal){
         </select>
         <select id="depArea" class="text-xs" style="width:200px">
           <option value="">— filtrar por área —</option>
-          ${Array.from(new Set(others.filter(t=>!linkedIds.has(t.id)).map(t=>t.area||'').filter(Boolean).sort())).map(a=>`<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('')}
+          ${sortAreaNames(Array.from(new Set(others.filter(t=>!linkedIds.has(t.id)).map(t=>t.area||'').filter(Boolean)))).map(a=>`<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('')}
         </select>
       </div>
       <div class="flex gap-2 flex-wrap items-center">
@@ -4264,7 +4279,7 @@ async function renderDependenciesPanel(panel, task, company, deal){
 
   function populateTaskSelect(areaFilter=''){
     const sel = panel.querySelector('#depTask');
-    const filtered = areaFilter ? available.filter(t=>t.area===areaFilter) : available;
+    const filtered = (areaFilter ? available.filter(t=>t.area===areaFilter) : available).sort(sortByRef);
     sel.innerHTML = `<option value="">— escolher tarefa —</option>`
       + filtered.map(t=>`<option value="${t.id}">[${escapeHtml(t.ref||'?')}] ${escapeHtml(t.task||'(sem nome)')}</option>`).join('');
   }
@@ -4437,12 +4452,14 @@ function openTaskModal(company, taskId){
 /* ---------- Template ---------- */
 function renderTemplate(){
   const tpl = state.template;
-  const grouped = {}; const order = [];
+  const grouped = {};
   tpl.forEach(t=>{
     const a = t.area || '(sem área)';
-    if(!grouped[a]){ grouped[a]=[]; order.push(a); }
+    if(!grouped[a]) grouped[a] = [];
     grouped[a].push(t);
   });
+  Object.values(grouped).forEach(g => g.sort(sortByRef));
+  const order = sortAreaNames(Object.keys(grouped));
   const node = el(`
     <div class="space-y-4">
       <div class="flex items-center justify-between flex-wrap gap-3">
