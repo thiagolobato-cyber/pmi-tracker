@@ -4439,7 +4439,13 @@ function openTaskModal(company, taskId){
   };
   const del = m.querySelector('#del');
   if(del) del.onclick = async ()=>{
-    if(!confirm('Excluir esta tarefa?')) return;
+    const ok = await confirmDeleteModal({
+      title: 'Excluir esta tarefa?',
+      ref: t.ref || '',
+      description: t.task || '',
+      warning: 'Esta ação é <strong>irreversível</strong>. A tarefa e seu histórico serão removidos permanentemente.'
+    });
+    if(!ok) return;
     try{
       const { error } = await supa.from('tasks').delete().eq('id', t.id);
       if(error) throw error;
@@ -4447,6 +4453,39 @@ function openTaskModal(company, taskId){
       m.remove(); render();
     }catch(err){ alert('Erro: '+(err.message||err)); }
   };
+}
+
+/* ---------- Helper: modal de confirmação de exclusão ---------- */
+function confirmDeleteModal({ title='Excluir?', ref='', description='', warning='' } = {}){
+  return new Promise(resolve => {
+    const dm = el(`
+      <div class="fixed inset-0 bg-black/50 z-30 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl w-full max-w-md shadow-2xl p-6 flex flex-col gap-4">
+          <div class="flex items-start gap-3">
+            <div style="background:#fee2e2;border-radius:50%;min-width:2.5rem;height:2.5rem;display:flex;align-items:center;justify-content:center">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="font-bold text-gray-900" style="font-size:1rem">${escapeHtml(title)}</div>
+              ${ref ? `<div class="text-xs font-mono mt-0.5 px-1.5 py-0.5 rounded inline-block" style="background:#f3f4f6;color:#374151">REF ${escapeHtml(ref)}</div>` : ''}
+              ${description ? `<div class="text-sm text-gray-600 mt-1 truncate" title="${escapeHtml(description)}">${escapeHtml(description)}</div>` : ''}
+            </div>
+          </div>
+          <div class="rounded-lg p-3 text-sm" style="background:#fef2f2;border:1px solid #fecaca;color:#991b1b">
+            ⚠️ ${warning || 'Esta ação é <strong>irreversível</strong>. A tarefa será removida permanentemente.'}
+          </div>
+          <div class="flex gap-2 justify-end">
+            <button id="dmCancel" class="btn btn-secondary">Cancelar</button>
+            <button id="dmConfirm" class="btn btn-danger">Sim, excluir</button>
+          </div>
+        </div>
+      </div>`);
+    document.body.appendChild(dm);
+    dm.querySelector('#dmCancel').onclick  = () => { dm.remove(); resolve(false); };
+    dm.querySelector('#dmConfirm').onclick = () => { dm.remove(); resolve(true); };
+    const onKey = e => { if(e.key==='Escape'){ dm.remove(); resolve(false); document.removeEventListener('keydown', onKey); } };
+    document.addEventListener('keydown', onKey);
+  });
 }
 
 /* ---------- Template ---------- */
