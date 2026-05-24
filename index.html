@@ -2345,6 +2345,15 @@ function renderExecutiva(){
     });
   });
 
+  // Fix sticky-col-2 left offset: measure actual rendered width of the # column
+  setTimeout(() => {
+    const numCell = node.querySelector('#execTable .sticky-col');
+    if(numCell){
+      const w = numCell.getBoundingClientRect().width;
+      node.querySelectorAll('#execTable .sticky-col-2').forEach(c => { c.style.left = w + 'px'; });
+    }
+  }, 0);
+
   return node;
 }
 
