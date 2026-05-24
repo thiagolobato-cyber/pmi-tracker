@@ -4541,30 +4541,91 @@ function renderTemplate(){
 function openTemplateModal(id){
   const t = id ? state.template.find(x=>x.id===id) : {id:uid(), ref:'', area:'', task:'', defaultOwner:'', defaultPrazo:0};
   const isNew = !id;
-  const allAreas = Array.from(new Set([...DEFAULT_AREAS.map(a=>a.name), ...state.template.map(x=>x.area)].filter(Boolean)));
+
+  // Areas: DEFAULT_AREAS + quaisquer áreas customizadas já no template
+  const allAreas = [...DEFAULT_AREAS.map(a=>a.name)];
+  state.template.forEach(x=>{ if(x.area && !allAreas.includes(x.area)) allAreas.push(x.area); });
+
+  // Usuários com login para o select de owner
+  const users = [...(state.users||[])].sort((a,b)=>a.username.localeCompare(b.username));
+
+  // Auto-gera REF com base na área selecionada
+  function nextRefForArea(areaName){
+    const entry = DEFAULT_AREAS.find(a=>a.name===areaName);
+    if(!entry) return '';
+    const prefix = entry.n.split('.')[0];
+    const nums = state.template
+      .filter(x=>x.area===areaName && x.id!==t.id)
+      .map(x=>{ const p=(x.ref||'').split('.'); return p.length>=2?parseInt(p[1]):0; })
+      .filter(n=>!isNaN(n)&&n>0);
+    return prefix+'.'+( nums.length ? Math.max(...nums)+1 : 1 );
+  }
+
+  const initRef = t.ref || (t.area ? nextRefForArea(t.area) : '');
+
   const m = el(`
   <div class="fixed inset-0 bg-black/40 z-20 flex items-center justify-center p-4">
-    <div class="bg-white rounded-xl w-full max-w-xl p-6 shadow-xl">
-      <div class="text-lg font-semibold mb-4">${isNew?'Nova tarefa no template':'Editar tarefa do template'}</div>
-      <form id="tplForm" class="grid grid-cols-2 gap-3 text-sm">
-        <div><label class="text-xs font-medium">REF #</label><input name="ref" value="${t.ref}"/></div>
-        <div><label class="text-xs font-medium">Área</label>
-          <input name="area" list="aL" value="${t.area||''}"/>
-          <datalist id="aL">${allAreas.map(a=>`<option value="${a}">`).join('')}</datalist>
-        </div>
-        <div class="col-span-2"><label class="text-xs font-medium">Tarefa *</label><textarea name="task" rows="2" required>${t.task||''}</textarea></div>
-        <div><label class="text-xs font-medium">Owner padrão</label><input name="defaultOwner" value="${t.defaultOwner||''}"/></div>
-        <div><label class="text-xs font-medium">Prazo (d.u.)</label><input name="defaultPrazo" type="number" min="0" value="${t.defaultPrazo||0}"/></div>
-        <div class="col-span-2 flex justify-end gap-2 pt-3 border-t">
-          ${!isNew?`<button type="button" id="del" class="btn btn-danger mr-auto">Excluir</button>`:''}
-          <button type="button" id="cancel" class="btn btn-secondary">Cancelar</button>
-          <button class="btn btn-primary">Salvar</button>
-        </div>
-      </form>
+    <div class="bg-white rounded-xl w-full max-w-xl shadow-xl flex flex-col" style="max-height:90vh">
+      <div class="p-6 pb-3">
+        <div class="text-lg font-semibold mb-4">${isNew?'Nova tarefa no template':'Editar tarefa do template'}</div>
+        <form id="tplForm" class="flex flex-col gap-3 text-sm">
+
+          <div>
+            <label class="text-xs font-semibold block mb-1" style="color:var(--bhub-navy)">Área *</label>
+            <select name="area" id="tplArea" required>
+              <option value="">Selecione a área…</option>
+              ${allAreas.map(a=>`<option value="${escapeHtml(a)}"${t.area===a?' selected':''}>${escapeHtml(a)}</option>`).join('')}
+            </select>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-xs font-semibold block mb-1" style="color:var(--bhub-navy)">
+                REF # <span style="color:var(--bhub-muted);font-weight:400">(automático)</span>
+              </label>
+              <input name="ref" id="tplRef" value="${escapeHtml(initRef)}"
+                style="background:var(--bhub-beige-soft);color:var(--bhub-muted);cursor:default" readonly/>
+            </div>
+            <div>
+              <label class="text-xs font-semibold block mb-1" style="color:var(--bhub-navy)">Prazo (d.u.)</label>
+              <input name="defaultPrazo" type="number" min="0" value="${t.defaultPrazo||0}"/>
+            </div>
+          </div>
+
+          <div>
+            <label class="text-xs font-semibold block mb-1" style="color:var(--bhub-navy)">Tarefa *</label>
+            <textarea name="task" rows="3" required>${escapeHtml(t.task||'')}</textarea>
+          </div>
+
+          <div>
+            <label class="text-xs font-semibold block mb-1" style="color:var(--bhub-navy)">
+              Owner padrão
+              <span style="color:var(--bhub-muted);font-weight:400">— aparece na Visão Usuário</span>
+            </label>
+            <select name="defaultOwner" id="tplOwner">
+              <option value="">— Sem owner —</option>
+              ${users.map(u=>`<option value="${escapeHtml(u.username)}"${t.defaultOwner===u.username?' selected':''}>${escapeHtml(u.username)}</option>`).join('')}
+            </select>
+          </div>
+
+          <div class="flex justify-end gap-2 pt-3 border-t" style="border-color:var(--bhub-border)">
+            ${!isNew?`<button type="button" id="del" class="btn btn-danger mr-auto">Excluir</button>`:''}
+            <button type="button" id="cancel" class="btn btn-secondary">Cancelar</button>
+            <button class="btn btn-primary">Salvar</button>
+          </div>
+        </form>
+      </div>
     </div>
   </div>`);
+
   document.body.appendChild(m);
-  m.querySelector('#cancel').onclick=()=>m.remove();
+
+  m.querySelector('#tplArea').addEventListener('change', e=>{
+    m.querySelector('#tplRef').value = nextRefForArea(e.target.value);
+  });
+
+  m.querySelector('#cancel').onclick = ()=>m.remove();
+
   m.querySelector('#tplForm').onsubmit = async (e)=>{
     e.preventDefault();
     const fd = new FormData(e.target);
@@ -4589,6 +4650,7 @@ function openTemplateModal(id){
       m.remove(); render();
     }catch(err){ alert('Erro ao salvar: '+(err.message||err)); }
   };
+
   const del = m.querySelector('#del');
   if(del) del.onclick = async ()=>{
     if(!confirm('Excluir?')) return;
