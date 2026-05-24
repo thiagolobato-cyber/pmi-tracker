@@ -2129,19 +2129,29 @@ function renderDashboardRagMatrix(data){
 
 /* ---------- Visão Executiva ---------- */
 function renderExecutiva(){
-  const data = aggregate();
+  // Collect all areas
   const allAreas = Array.from(new Set([
     ...state.template.map(t=>t.area),
     ...Object.values(state.deals).flatMap(d=>d.tasks.map(t=>t.area))
   ].filter(Boolean)));
   if(!allAreas.length) allAreas.push(...DEFAULT_AREAS.map(a=>a.name));
-  if(!allAreas.includes(view.executiveArea)) view.executiveArea = allAreas[0];
+  if(view.executiveArea !== 'todas' && !allAreas.includes(view.executiveArea)) view.executiveArea = 'todas';
+  if(!view.executivaDealSearch) view.executivaDealSearch = '';
 
-  // Distinct tasks per area (by name) - union across deals and template
-  const taskList = Array.from(new Set([
-    ...state.template.filter(t=>t.area===view.executiveArea).map(t=>t.task),
-    ...Object.values(state.deals).flatMap(d=>d.tasks.filter(t=>t.area===view.executiveArea).map(t=>t.task))
-  ]));
+  // P3 — Filter deals by company name search
+  const dealQ = (view.executivaDealSearch||'').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+  let data = aggregate();
+  if(dealQ) data = data.filter(d => d.company.name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').includes(dealQ));
+
+  // P2 — Areas to render
+  const areasToShow = view.executiveArea === 'todas' ? allAreas : [view.executiveArea];
+
+  function getTasksForArea(area){
+    return Array.from(new Set([
+      ...state.template.filter(t=>t.area===area).map(t=>t.task),
+      ...Object.values(state.deals).flatMap(d=>d.tasks.filter(t=>t.area===area).map(t=>t.task))
+    ]));
+  }
 
   function cellFor(deal, taskName){
     const t = deal.tasks.find(x=>x.task===taskName);
@@ -2149,46 +2159,91 @@ function renderExecutiva(){
     return t._f.status;
   }
 
+  // Build table body rows per area
+  let taskCounter = 0;
+  const tbodyRows = areasToShow.map(area=>{
+    const taskList = getTasksForArea(area);
+    if(!taskList.length) return '';
+    const areaHeader = view.executiveArea === 'todas'
+      ? `<tr class="exec-area-header"><td colspan="${data.length + 2}">${area}</td></tr>` : '';
+    const rows = taskList.map(tn=>{
+      taskCounter++;
+      const n = taskCounter;
+      return `<tr>
+        <td class="text-center text-gray-500 sticky-col" style="width:2.25rem;min-width:2.25rem">${n}</td>
+        <td class="sticky-col-2" style="min-width:16rem;max-width:20rem;word-break:break-word;padding-right:.75rem">${escapeHtml(tn)}</td>
+        ${data.map(d=>{
+          const st = cellFor(d, tn);
+          if(!st) return `<td class="hm-empty text-center">—</td>`;
+          return `<td class="hm-${st==='ontrack'?'ontrack':st} text-center">${statusLabel(st)}</td>`;
+        }).join('')}
+      </tr>`;
+    }).join('');
+    return areaHeader + rows;
+  }).join('');
+
   const node = el(`
     <div class="space-y-4">
       <div class="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 class="text-xl font-bold">Visão Executiva — Tarefa × Deal</h1>
-          <p class="text-sm text-gray-500">Status por área para reunião executiva</p>
+          <p class="text-sm text-gray-500">Status por área · ${data.length} deal${data.length!==1?'s':''} · ${taskCounter} tarefas</p>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 flex-wrap">
           <label class="text-xs text-gray-600">Área:</label>
-          <select id="areaSel" class="w-72">
-            ${allAreas.map(a=>`<option ${a===view.executiveArea?'selected':''}>${a}</option>`).join('')}
+          <select id="areaSel" style="min-width:14rem">
+            <option value="todas" ${view.executiveArea==='todas'?'selected':''}>— Todas as áreas —</option>
+            ${allAreas.map(a=>`<option value="${escapeHtml(a)}" ${a===view.executiveArea?'selected':''}>${escapeHtml(a)}</option>`).join('')}
           </select>
+          <div class="relative">
+            <svg style="position:absolute;left:.55rem;top:50%;transform:translateY(-50%);width:13px;height:13px;color:var(--bhub-muted);pointer-events:none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input id="dealSearchExec" type="text" placeholder="Filtrar deals…" value="${escapeHtml(view.executivaDealSearch||'')}" style="padding:.45rem .7rem .45rem 1.9rem;width:160px;font-size:.82rem"/>
+          </div>
+          <button id="execPdf" class="btn btn-secondary" style="gap:.4rem;display:flex;align-items:center">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+            PDF
+          </button>
         </div>
       </div>
 
-      <div class="bhub-card p-4" style="max-height:75vh;overflow:auto">
-        <table class="text-xs">
-          <thead class="sticky top-0 bg-white z-10">
+      <div id="execTable" class="bhub-card" style="max-height:75vh;overflow:auto">
+        <table class="text-xs" style="border-collapse:separate;border-spacing:0">
+          <thead style="position:sticky;top:0;z-index:10">
             <tr>
-              <th class="w-12">#</th>
-              <th class="min-w-[24rem]">TAREFA</th>
-              ${data.map(d=>`<th class="whitespace-nowrap"><span class="deal-link" data-summary="${d.company.id}" title="Ver resumo executivo">${escapeHtml(d.company.name)}</span></th>`).join('')}
+              <th class="sticky-col" style="width:2.25rem;min-width:2.25rem">#</th>
+              <th class="sticky-col-2" style="min-width:16rem">TAREFA</th>
+              ${data.map(d=>`<th class="whitespace-nowrap"><span class="deal-link" data-summary="${d.company.id}" title="Ver resumo">${escapeHtml(d.company.name)}</span></th>`).join('')}
             </tr>
           </thead>
-          <tbody>
-            ${taskList.map((tn,i)=>`<tr>
-              <td class="text-center text-gray-500">${i+1}</td>
-              <td>${tn}</td>
-              ${data.map(d=>{
-                const st = cellFor(d, tn);
-                if(!st) return `<td class="hm-empty text-center">—</td>`;
-                return `<td class="hm-${st==='ontrack'?'ontrack':st} text-center">${statusLabel(st)}</td>`;
-              }).join('')}
-            </tr>`).join('')}
-          </tbody>
+          <tbody>${tbodyRows || `<tr><td colspan="${data.length+2}" class="py-8 text-center text-gray-400 text-sm">Nenhuma tarefa encontrada para os filtros selecionados.</td></tr>`}</tbody>
         </table>
       </div>
     </div>
   `);
+
+  // Area select
   node.querySelector('#areaSel').addEventListener('change', e=>{ view.executiveArea = e.target.value; render(); });
+
+  // Deal search filter (debounced)
+  const dsi = node.querySelector('#dealSearchExec');
+  let debT;
+  dsi.addEventListener('input', ()=>{ clearTimeout(debT); debT = setTimeout(()=>{ view.executivaDealSearch = dsi.value; render(); }, 220); });
+
+  // P4 — PDF export
+  node.querySelector('#execPdf').addEventListener('click', ()=>{
+    const btn = node.querySelector('#execPdf');
+    btn.disabled = true; btn.textContent = 'Gerando…';
+    const el2 = node.querySelector('#execTable');
+    const areaLabel = view.executiveArea === 'todas' ? 'Todas as Áreas' : view.executiveArea;
+    html2pdf().set({
+      margin: [8,6],
+      filename: `visao-executiva-${areaLabel.replace(/\s+/g,'-').toLowerCase()}.pdf`,
+      image: { type:'jpeg', quality:.95 },
+      html2canvas: { scale:1.8, useCORS:true, scrollX:0, scrollY:0 },
+      jsPDF: { unit:'mm', format:'a3', orientation:'landscape' }
+    }).from(el2).save().then(()=>{ btn.disabled=false; btn.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg> PDF'; });
+  });
+
   return node;
 }
 
