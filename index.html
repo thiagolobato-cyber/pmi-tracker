@@ -2286,12 +2286,11 @@ function renderExecutiva(){
     openExecPdfDealModal(data, ()=>render());
   });
 
-  // P4 — PDF export (full table, no overflow truncation, auto font-size by deal count)
+  // P4 — PDF export: capture actual rendered table (remove overflow temporarily)
   node.querySelector('#execPdf').addEventListener('click', ()=>{
     const btn = node.querySelector('#execPdf');
     btn.disabled = true; btn.textContent = 'Gerando…';
 
-    // Which deals to include
     const pdfDeals = view.execPdfDeals
       ? data.filter(d => view.execPdfDeals.includes(d.company.id))
       : data;
@@ -2302,73 +2301,39 @@ function renderExecutiva(){
       return;
     }
 
-    // Auto font-size: scale down so columns fit
-    const nD = pdfDeals.length;
-    const fs  = nD <= 8  ? 11 : nD <= 14 ? 9.5 : nD <= 20 ? 8 : nD <= 28 ? 7 : 6;
-    const colW = nD <= 8 ? 90 : nD <= 14 ? 76 : nD <= 20 ? 64 : nD <= 28 ? 56 : 48;
-
-    // Status color map (inline styles — no CSS classes in clone)
-    const STATUS_BG = { done:'#d1fae5', ontrack:'#dbeafe', late:'#fee2e2', noowner:'#fef9c3', blocked:'#fce7f3' };
-    const STATUS_CO = { done:'#065f46', ontrack:'#1e40af', late:'#991b1b', noowner:'#78350f', blocked:'#9d174d' };
-
-    // Rebuild rows for selected deals only
-    let tc2 = 0;
+    const execTableEl = node.querySelector('#execTable');
     const areaLabel = view.executiveArea === 'todas' ? 'Todas as Áreas' : view.executiveArea;
-    const pdfRows = areasToShow.map(area=>{
-      const taskList = getTasksForArea(area);
-      if(!taskList.length) return '';
-      const ah = view.executiveArea === 'todas'
-        ? `<tr style="background:#f0f0e8"><td colspan="${pdfDeals.length+2}" style="font-size:${fs-1}px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:.3rem .5rem;color:#1a2e44;border-top:2px solid #d1c9a8">${escapeHtml(area)}</td></tr>`
-        : '';
-      const rs = taskList.map(tn=>{
-        tc2++;
-        const cells = pdfDeals.map(d=>{
-          const t = d.tasks.find(x=>x.task===tn);
-          const st = t ? t._f.status : null;
-          const bg = STATUS_BG[st] || '#f9f9f9';
-          const co = STATUS_CO[st] || '#9ca3af';
-          const lbl = st ? statusLabel(st) : '—';
-          return `<td style="text-align:center;background:${bg};color:${co};min-width:${colW}px;padding:.2rem .15rem;font-size:${fs}px;border:1px solid #e5e7eb">${escapeHtml(lbl)}</td>`;
-        }).join('');
-        return `<tr>
-          <td style="text-align:center;color:#9ca3af;width:22px;min-width:22px;padding:.2rem .15rem;font-size:${fs}px;border:1px solid #e5e7eb">${tc2}</td>
-          <td style="min-width:150px;max-width:220px;word-break:break-word;padding:.2rem .4rem;font-size:${fs}px;border:1px solid #e5e7eb">${escapeHtml(tn)}</td>
-          ${cells}
-        </tr>`;
-      }).join('');
-      return ah + rs;
-    }).join('');
 
-    // Build off-screen clone — NO max-height, NO overflow
-    const wrap = document.createElement('div');
-    wrap.style.cssText = 'position:fixed;top:0;left:0;opacity:0.001;pointer-events:none;z-index:-9999;background:#fff;padding:10px 12px;font-family:Inter,sans-serif;overflow:visible';
-    wrap.innerHTML = `
-      <div style="margin-bottom:7px">
-        <div style="font-size:13px;font-weight:700;color:#1a2e44">Visão Executiva — Tarefa × Deal</div>
-        <div style="font-size:9px;color:#9ca3af;margin-top:2px">${escapeHtml(areaLabel)} · ${pdfDeals.length} deal${pdfDeals.length!==1?'s':''} · ${tc2} tarefas · ${new Date().toLocaleDateString('pt-BR')}</div>
-      </div>
-      <table style="border-collapse:collapse;width:100%">
-        <thead>
-          <tr style="background:#f0f0e8">
-            <th style="text-align:center;width:22px;min-width:22px;padding:.2rem .15rem;font-size:${fs}px;border:1px solid #d1c9a8">#</th>
-            <th style="text-align:left;min-width:150px;padding:.2rem .4rem;font-size:${fs}px;border:1px solid #d1c9a8">TAREFA</th>
-            ${pdfDeals.map(d=>`<th style="text-align:center;min-width:${colW}px;padding:.2rem .15rem;font-size:${fs}px;border:1px solid #d1c9a8;word-break:break-word">${escapeHtml(d.company.name)}</th>`).join('')}
-          </tr>
-        </thead>
-        <tbody>${pdfRows || `<tr><td colspan="${pdfDeals.length+2}" style="padding:16px;text-align:center;color:#9ca3af;font-size:11px">Nenhuma tarefa encontrada.</td></tr>`}</tbody>
-      </table>
-    `;
-    document.body.appendChild(wrap);
+    // Hide columns belonging to excluded deals via nth-child CSS
+    // Col 1 = #, Col 2 = TAREFA, Col 3..N = deals in data order
+    let styleEl = null;
+    if(pdfDeals.length < data.length){
+      const hiddenIdx = data.map((d,i)=> pdfDeals.includes(d) ? null : i+3).filter(n=>n!==null);
+      styleEl = document.createElement('style');
+      styleEl.id = '__pdfColHide';
+      styleEl.textContent = hiddenIdx.map(i=>
+        `#execTable th:nth-child(${i}),#execTable td:nth-child(${i}){display:none!important}`
+      ).join('');
+      document.head.appendChild(styleEl);
+    }
+
+    // Temporarily remove scroll constraints so html2canvas captures full table
+    const origMaxH  = execTableEl.style.maxHeight;
+    const origOverf = execTableEl.style.overflow;
+    execTableEl.style.maxHeight = 'none';
+    execTableEl.style.overflow  = 'visible';
 
     const pdfIcon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>';
     html2pdf().set({
       margin: [8,6],
       filename: `visao-executiva-${areaLabel.replace(/\s+/g,'-').toLowerCase()}.pdf`,
       image: { type:'jpeg', quality:.97 },
-      html2canvas: { scale:1.8, useCORS:true, scrollX:0, scrollY:0, logging:false },
+      html2canvas: { scale:1.8, useCORS:true, scrollX:0, scrollY:-window.scrollY, logging:false },
       jsPDF: { unit:'mm', format:'a3', orientation:'landscape' }
-    }).from(wrap).save().then(()=>{
-      document.body.removeChild(wrap);
+    }).from(execTableEl).save().then(()=>{
+      execTableEl.style.maxHeight = origMaxH;
+      execTableEl.style.overflow  = origOverf;
+      styleEl && styleEl.remove();
       btn.disabled = false;
       btn.innerHTML = pdfIcon + ' PDF';
     });
