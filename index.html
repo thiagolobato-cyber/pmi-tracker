@@ -743,7 +743,12 @@ const canAdmin = () => session && session.role==='admin';
 // Gera o HTML de um <select name="owner"> populado com os usuários cadastrados.
 // currentOwner: valor atual (para marcar como selected).
 // Se não houver usuários, mostra aviso e retorna um select desabilitado.
-function ownerSelectHtml(currentOwner=''){
+function ownerSelectHtml(currentOwner='', adminOnly=false){
+  if(adminOnly && session?.role !== 'admin'){
+    const displayName = currentOwner || '— Sem responsável —';
+    return `<div class="text-sm px-2 py-1.5 rounded" style="background:var(--bhub-beige-soft);color:var(--bhub-navy)">${escapeHtml(displayName)}</div>
+            <input type="hidden" name="owner" value="${escapeHtml(currentOwner||'')}">"`;
+  }
   const users = (state && state.users) ? state.users : [];
   if(!users.length){
     return `<select name="owner" disabled title="Cadastre usuários em Usuários antes de atribuir responsáveis">
@@ -751,12 +756,17 @@ function ownerSelectHtml(currentOwner=''){
     </select>
     <div class="text-xs mt-1" style="color:#b45309">Acesse <strong>Usuários</strong> e crie um perfil antes de atribuir esta tarefa.</div>`;
   }
+  const matchedInList = users.some(u => (u.username||'').trim() === (currentOwner||'').trim());
+  const extraOpt = (currentOwner && !matchedInList)
+    ? `<option value="${escapeHtml(currentOwner)}" selected>${escapeHtml(currentOwner)}</option>`
+    : '';
   const opts = users.map(u=>{
     const sel = (u.username||'').trim() === (currentOwner||'').trim() ? 'selected' : '';
     return `<option value="${escapeHtml(u.username)}" ${sel}>${escapeHtml(u.username)}</option>`;
   }).join('');
   return `<select name="owner">
     <option value="" ${!currentOwner?'selected':''}>— Responsável —</option>
+    ${extraOpt}
     ${opts}
   </select>`;
 }
@@ -4286,7 +4296,7 @@ function openTaskModal(company, taskId){
           <datalist id="areaList">${allAreas.map(a=>`<option value="${a}">`).join('')}</datalist>
         </div>
         <div class="col-span-2"><label class="text-xs font-medium">Tarefa *</label><textarea name="task" rows="2" required>${t.task||''}</textarea></div>
-        <div><label class="text-xs font-medium">Owner</label>${ownerSelectHtml(t.owner||'')}</div>
+        <div><label class="text-xs font-medium">Owner</label>${ownerSelectHtml(t.owner||'', true)}</div>
         <div><label class="text-xs font-medium">Ferramenta</label><input name="ferramenta" value="${t.ferramenta||''}"/></div>
         <div><label class="text-xs font-medium">Prazo (dias úteis)</label><input name="prazo" type="number" min="0" value="${t.prazo||0}"/></div>
         <div><label class="text-xs font-medium">Data real de conclusão</label><input name="dataRealConclusao" type="date" value="${t.dataRealConclusao||''}"/></div>
