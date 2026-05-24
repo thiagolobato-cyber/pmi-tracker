@@ -546,7 +546,7 @@ const BHUB_LOGO_ICON = `<svg viewBox="0 0 40 40" fill="currentColor" xmlns="http
 /* ---------- State ---------- */
 let state = defaultState();
 let session = null; // { id, email, username, role }
-let view = { tab:'dashboard', dealId:null, dealTab:'tarefas', executiveArea:DEFAULT_AREAS[0].name, raidFilter:'all', synergyFilter:'all', dashFilters:{deals:[],areas:[],owners:[]}, empresasSearch:'', empresasSortCol:'date', empresasSortDir:'desc', sidebarCollapsed:false };
+let view = { tab:'dashboard', dealId:null, dealTab:'tarefas', executiveArea:DEFAULT_AREAS[0].name, raidFilter:'all', synergyFilter:'all', dashFilters:{deals:[],areas:[],owners:[]}, empresasSearch:'', empresasSortCol:'date', empresasSortDir:'desc', sidebarCollapsed:false, executivaDealSearch:'', execPdfDeals:null };
 
 function defaultState(){
   return {
@@ -2128,6 +2128,54 @@ function renderDashboardRagMatrix(data){
 }
 
 /* ---------- Visão Executiva ---------- */
+/* ---------- PDF deal selector modal ---------- */
+function openExecPdfDealModal(deals, onDone){
+  const current = view.execPdfDeals ? new Set(view.execPdfDeals) : new Set(deals.map(d=>d.company.id));
+  const modal = el(`
+    <div class="modal-overlay" style="z-index:1100">
+      <div class="modal-box" style="max-width:480px;max-height:82vh;display:flex;flex-direction:column;gap:0">
+        <div class="flex items-center justify-between" style="margin-bottom:.75rem">
+          <h2 class="text-base font-bold" style="color:var(--bhub-navy)">Deals para o PDF</h2>
+          <button id="closePdfDealModal" style="background:none;border:none;font-size:1.4rem;line-height:1;color:var(--bhub-muted);cursor:pointer">×</button>
+        </div>
+        <div class="flex items-center gap-2" style="margin-bottom:.6rem">
+          <button id="pdfSelAll" class="btn btn-secondary" style="font-size:.75rem;padding:.28rem .6rem">Todos</button>
+          <button id="pdfSelNone" class="btn btn-secondary" style="font-size:.75rem;padding:.28rem .6rem">Nenhum</button>
+          <span id="pdfSelCount" class="text-xs" style="margin-left:auto;color:var(--bhub-muted)">${current.size} de ${deals.length} selecionados</span>
+        </div>
+        <div style="overflow-y:auto;flex:1;border:1px solid var(--bhub-border);border-radius:6px">
+          ${deals.map(d=>`
+            <label class="flex items-center gap-2" style="padding:.5rem .75rem;cursor:pointer;border-bottom:1px solid var(--bhub-border);transition:background .1s" onmouseover="this.style.background='var(--bhub-beige-soft)'" onmouseout="this.style.background=''">
+              <input type="checkbox" class="pdf-deal-chk" data-id="${d.company.id}" ${current.has(d.company.id)?'checked':''}/>
+              <span class="text-sm">${escapeHtml(d.company.name)}</span>
+            </label>
+          `).join('')}
+        </div>
+        <div class="flex gap-2 justify-end" style="margin-top:.9rem">
+          <button id="cancelPdfDealModal" class="btn btn-secondary">Cancelar</button>
+          <button id="confirmPdfDealModal" class="btn btn-primary">Confirmar</button>
+        </div>
+      </div>
+    </div>
+  `);
+  function upCount(){
+    const n = [...modal.querySelectorAll('.pdf-deal-chk:checked')].length;
+    modal.querySelector('#pdfSelCount').textContent = `${n} de ${deals.length} selecionados`;
+  }
+  modal.querySelector('#closePdfDealModal').onclick = ()=>modal.remove();
+  modal.querySelector('#cancelPdfDealModal').onclick = ()=>modal.remove();
+  modal.querySelector('#pdfSelAll').onclick   = ()=>{ modal.querySelectorAll('.pdf-deal-chk').forEach(c=>c.checked=true);  upCount(); };
+  modal.querySelector('#pdfSelNone').onclick  = ()=>{ modal.querySelectorAll('.pdf-deal-chk').forEach(c=>c.checked=false); upCount(); };
+  modal.querySelectorAll('.pdf-deal-chk').forEach(c=>c.addEventListener('change',upCount));
+  modal.querySelector('#confirmPdfDealModal').onclick = ()=>{
+    const sel = [...modal.querySelectorAll('.pdf-deal-chk:checked')].map(c=>c.dataset.id);
+    view.execPdfDeals = sel.length === deals.length ? null : sel;
+    modal.remove();
+    onDone();
+  };
+  document.body.appendChild(modal);
+}
+
 function renderExecutiva(){
   // Collect all areas
   const allAreas = Array.from(new Set([
@@ -2199,7 +2247,11 @@ function renderExecutiva(){
             <svg style="position:absolute;left:.55rem;top:50%;transform:translateY(-50%);width:13px;height:13px;color:var(--bhub-muted);pointer-events:none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <input id="dealSearchExec" type="text" placeholder="Filtrar deals…" value="${escapeHtml(view.executivaDealSearch||'')}" style="padding:.45rem .7rem .45rem 1.9rem;width:160px;font-size:.82rem"/>
           </div>
-          <button id="execPdf" class="btn btn-secondary" style="gap:.4rem;display:flex;align-items:center">
+          <button id="execPdfSelect" class="btn btn-secondary" style="gap:.35rem;display:flex;align-items:center;font-size:.8rem" title="Escolher deals para o PDF">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 12l2 2 4-4"/></svg>
+            Deals${view.execPdfDeals?` (${view.execPdfDeals.length})`:''}
+          </button>
+          <button id="execPdf" class="btn btn-primary" style="gap:.4rem;display:flex;align-items:center">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
             PDF
           </button>
@@ -2229,19 +2281,97 @@ function renderExecutiva(){
   let debT;
   dsi.addEventListener('input', ()=>{ clearTimeout(debT); debT = setTimeout(()=>{ view.executivaDealSearch = dsi.value; render(); }, 220); });
 
-  // P4 — PDF export
+  // Deal selector button
+  node.querySelector('#execPdfSelect').addEventListener('click', ()=>{
+    openExecPdfDealModal(data, ()=>render());
+  });
+
+  // P4 — PDF export (full table, no overflow truncation, auto font-size by deal count)
   node.querySelector('#execPdf').addEventListener('click', ()=>{
     const btn = node.querySelector('#execPdf');
     btn.disabled = true; btn.textContent = 'Gerando…';
-    const el2 = node.querySelector('#execTable');
+
+    // Which deals to include
+    const pdfDeals = view.execPdfDeals
+      ? data.filter(d => view.execPdfDeals.includes(d.company.id))
+      : data;
+
+    if(!pdfDeals.length){
+      alert('Nenhum deal selecionado. Clique em "Deals" para selecionar.');
+      btn.disabled = false; btn.textContent = 'PDF';
+      return;
+    }
+
+    // Auto font-size: scale down so columns fit
+    const nD = pdfDeals.length;
+    const fs  = nD <= 8  ? 11 : nD <= 14 ? 9.5 : nD <= 20 ? 8 : nD <= 28 ? 7 : 6;
+    const colW = nD <= 8 ? 90 : nD <= 14 ? 76 : nD <= 20 ? 64 : nD <= 28 ? 56 : 48;
+
+    // Status color map (inline styles — no CSS classes in clone)
+    const STATUS_BG = { done:'#d1fae5', ontrack:'#dbeafe', late:'#fee2e2', noowner:'#fef9c3', blocked:'#fce7f3' };
+    const STATUS_CO = { done:'#065f46', ontrack:'#1e40af', late:'#991b1b', noowner:'#78350f', blocked:'#9d174d' };
+
+    // Rebuild rows for selected deals only
+    let tc2 = 0;
     const areaLabel = view.executiveArea === 'todas' ? 'Todas as Áreas' : view.executiveArea;
+    const pdfRows = areasToShow.map(area=>{
+      const taskList = getTasksForArea(area);
+      if(!taskList.length) return '';
+      const ah = view.executiveArea === 'todas'
+        ? `<tr style="background:#f0f0e8"><td colspan="${pdfDeals.length+2}" style="font-size:${fs-1}px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:.3rem .5rem;color:#1a2e44;border-top:2px solid #d1c9a8">${escapeHtml(area)}</td></tr>`
+        : '';
+      const rs = taskList.map(tn=>{
+        tc2++;
+        const cells = pdfDeals.map(d=>{
+          const t = d.tasks.find(x=>x.task===tn);
+          const st = t ? t._f.status : null;
+          const bg = STATUS_BG[st] || '#f9f9f9';
+          const co = STATUS_CO[st] || '#9ca3af';
+          const lbl = st ? statusLabel(st) : '—';
+          return `<td style="text-align:center;background:${bg};color:${co};min-width:${colW}px;padding:.2rem .15rem;font-size:${fs}px;border:1px solid #e5e7eb">${escapeHtml(lbl)}</td>`;
+        }).join('');
+        return `<tr>
+          <td style="text-align:center;color:#9ca3af;width:22px;min-width:22px;padding:.2rem .15rem;font-size:${fs}px;border:1px solid #e5e7eb">${tc2}</td>
+          <td style="min-width:150px;max-width:220px;word-break:break-word;padding:.2rem .4rem;font-size:${fs}px;border:1px solid #e5e7eb">${escapeHtml(tn)}</td>
+          ${cells}
+        </tr>`;
+      }).join('');
+      return ah + rs;
+    }).join('');
+
+    // Build off-screen clone — NO max-height, NO overflow
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'position:absolute;left:-9999px;top:0;background:#fff;padding:10px 12px;font-family:Inter,sans-serif';
+    wrap.innerHTML = `
+      <div style="margin-bottom:7px">
+        <div style="font-size:13px;font-weight:700;color:#1a2e44">Visão Executiva — Tarefa × Deal</div>
+        <div style="font-size:9px;color:#9ca3af;margin-top:2px">${escapeHtml(areaLabel)} · ${pdfDeals.length} deal${pdfDeals.length!==1?'s':''} · ${tc2} tarefas · ${new Date().toLocaleDateString('pt-BR')}</div>
+      </div>
+      <table style="border-collapse:collapse;width:100%">
+        <thead>
+          <tr style="background:#f0f0e8">
+            <th style="text-align:center;width:22px;min-width:22px;padding:.2rem .15rem;font-size:${fs}px;border:1px solid #d1c9a8">#</th>
+            <th style="text-align:left;min-width:150px;padding:.2rem .4rem;font-size:${fs}px;border:1px solid #d1c9a8">TAREFA</th>
+            ${pdfDeals.map(d=>`<th style="text-align:center;min-width:${colW}px;padding:.2rem .15rem;font-size:${fs}px;border:1px solid #d1c9a8;word-break:break-word">${escapeHtml(d.company.name)}</th>`).join('')}
+          </tr>
+        </thead>
+        <tbody>${pdfRows || `<tr><td colspan="${pdfDeals.length+2}" style="padding:16px;text-align:center;color:#9ca3af;font-size:11px">Nenhuma tarefa encontrada.</td></tr>`}</tbody>
+      </table>
+    `;
+    document.body.appendChild(wrap);
+
+    const pdfIcon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>';
     html2pdf().set({
       margin: [8,6],
       filename: `visao-executiva-${areaLabel.replace(/\s+/g,'-').toLowerCase()}.pdf`,
-      image: { type:'jpeg', quality:.95 },
-      html2canvas: { scale:1.8, useCORS:true, scrollX:0, scrollY:0 },
+      image: { type:'jpeg', quality:.97 },
+      html2canvas: { scale:1.8, useCORS:true, scrollX:0, scrollY:0, logging:false },
       jsPDF: { unit:'mm', format:'a3', orientation:'landscape' }
-    }).from(el2).save().then(()=>{ btn.disabled=false; btn.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg> PDF'; });
+    }).from(wrap).save().then(()=>{
+      document.body.removeChild(wrap);
+      btn.disabled = false;
+      btn.innerHTML = pdfIcon + ' PDF';
+    });
   });
 
   return node;
@@ -4921,7 +5051,7 @@ function renderUsuarios(){
   const isAdmin = canAdmin();
   const ROLE_INFO = { admin:'Acesso total', owner:'Pode criar e editar', leitor:'Somente leitura' };
   const node = el(`
-    <div class="space-y-4 max-w-3xl">
+    <div class="space-y-4">
       <div class="flex items-center justify-between flex-wrap gap-2">
         <div>
           <h1 class="text-xl font-bold">Usuários</h1>
