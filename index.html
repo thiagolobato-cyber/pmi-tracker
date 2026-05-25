@@ -1673,6 +1673,25 @@ function dashFiltersActive(){
   return (f.deals?.length||0) + (f.areas?.length||0) + (f.owners?.length||0);
 }
 
+// Helpers para tabelas expansíveis do dashboard (evita template literals aninhados)
+function dealLink(id, name){ return id ? '<span class="deal-link" data-summary="'+id+'">'+escapeHtml(name)+'</span>' : escapeHtml(name||''); }
+function areaLink(a){ return a ? '<span class="deal-link" data-area="'+escapeHtml(a)+'">'+escapeHtml(a)+'</span>' : ''; }
+function ownerLink(o){ return o ? '<span class="deal-link" data-owner="'+escapeHtml(o)+'">'+escapeHtml(o)+'</span>' : ''; }
+function dealRow6(r, col5, col6){ return '<tr><td>'+dealLink(r.dealId,r.deal)+'</td><td>'+areaLink(r.area)+'</td><td>'+escapeHtml(r.task||'')+'</td><td>'+ownerLink(r.owner)+'</td><td>'+col5+'</td><td class="text-center">'+col6+'</td></tr>'; }
+function dealRow5desc(r){ return '<tr><td>'+dealLink(r.dealId,r.deal)+'</td><td>'+areaLink(r.area)+'</td><td>'+escapeHtml(r.task||'')+'</td><td>'+ownerLink(r.owner)+'</td><td>'+escapeHtml(r.desc||'')+'</td></tr>'; }
+function dealRowLate(r){ return '<tr><td>'+dealLink(r.dealId,r.deal)+'</td><td>'+areaLink(r.area)+'</td><td>'+ownerLink(r.owner)+'</td><td>'+escapeHtml(r.task||'')+'</td><td class="text-right text-red-700 font-semibold">'+r.dias+'</td></tr>'; }
+function dashExpandTable(id, rows, headers, rowFn){
+  var thead = '<thead><tr>'+headers.map(function(h){return '<th>'+h+'</th>';}).join('')+'</tr></thead>';
+  var visible = rows.slice(0,10).map(rowFn).join('');
+  var html = '<div class="scroll-x"><table class="w-full text-xs">'+thead+'<tbody>'+visible+'</tbody></table></div>';
+  if(rows.length > 10){
+    var extra = rows.slice(10).map(rowFn).join('');
+    html += '<button class="btn btn-secondary" style="margin-top:.5rem;font-size:.72rem;width:100%" id="more-'+id+'">Ver todos ('+rows.length+') ▾</button>';
+    html += '<div id="extra-'+id+'" style="display:none"><div class="scroll-x"><table class="w-full text-xs">'+thead+'<tbody>'+extra+'</tbody></table></div></div>';
+  }
+  return html;
+}
+
 function renderDashboard(){
   const rawData = aggregate();
   const data = applyDashFilters(rawData);
@@ -1941,13 +1960,7 @@ function renderDashboard(){
               Vencimento em ≤ 10 d.u. (${due10.length})
             </h3>
           </div>
-          ${due10.length ? `
-          <div class="scroll-x">
-            <table class="w-full text-xs" id="tbl-due10"><thead><tr><th>Deal</th><th>Área</th><th>Tarefa</th><th>Owner</th><th>Vence em</th><th>d.u.</th></tr></thead><tbody>
-              ${due10.slice(0,10).map(r=>`<tr><td>${r.dealId?`<span class="deal-link" data-summary="${r.dealId}">${escapeHtml(r.deal)}</span>`:escapeHtml(r.deal)}</td><td>${r.area?`<span class="deal-link" data-area="${escapeHtml(r.area)}">${escapeHtml(r.area)}</span>`:''}</td><td>${escapeHtml(r.task||'')}</td><td>${r.owner?`<span class="deal-link" data-owner="${escapeHtml(r.owner)}">${escapeHtml(r.owner)}</span>`:''}</td><td>${fmtDate(r.due)}</td><td class="text-center">${r.diff}</td></tr>`).join('')}
-            </tbody></table>
-          </div>
-          ${due10.length>10?`<button class="btn btn-secondary" style="margin-top:.5rem;font-size:.72rem;width:100%" id="more-due10">Ver todos (${due10.length}) ▾</button><div id="extra-due10" style="display:none"><div class="scroll-x"><table class="w-full text-xs"><thead><tr><th>Deal</th><th>Área</th><th>Tarefa</th><th>Owner</th><th>Vence em</th><th>d.u.</th></tr></thead><tbody>${due10.slice(10).map(r=>`<tr><td>${r.dealId?`<span class="deal-link" data-summary="${r.dealId}">${escapeHtml(r.deal)}</span>`:escapeHtml(r.deal)}</td><td>${r.area?`<span class="deal-link" data-area="${escapeHtml(r.area)}">${escapeHtml(r.area)}</span>`:''}</td><td>${escapeHtml(r.task||'')}</td><td>${r.owner?`<span class="deal-link" data-owner="${escapeHtml(r.owner)}">${escapeHtml(r.owner)}</span>`:''}</td><td>${fmtDate(r.due)}</td><td class="text-center">${r.diff}</td></tr>`).join('')}</tbody></table></div></div>`:''}` : `
+          ${due10.length ? dashExpandTable('due10', due10, ['Deal','Área','Tarefa','Owner','Vence em','d.u.'], r=>dealRow6(r, fmtDate(r.due), r.diff)) : `
           <div class="empty-state">
             <div class="empty-icon">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
@@ -1963,13 +1976,7 @@ function renderDashboard(){
               Bloqueios ativos (${blocks.length})
             </h3>
           </div>
-          ${blocks.length ? `
-          <div class="scroll-x">
-            <table class="w-full text-xs"><thead><tr><th>Deal</th><th>Área</th><th>Tarefa</th><th>Owner</th><th>Descrição</th></tr></thead><tbody>
-              ${blocks.slice(0,10).map(r=>`<tr><td>${r.dealId?`<span class="deal-link" data-summary="${r.dealId}">${escapeHtml(r.deal)}</span>`:escapeHtml(r.deal)}</td><td>${r.area?`<span class="deal-link" data-area="${escapeHtml(r.area)}">${escapeHtml(r.area)}</span>`:''}</td><td>${escapeHtml(r.task||'')}</td><td>${r.owner?`<span class="deal-link" data-owner="${escapeHtml(r.owner)}">${escapeHtml(r.owner)}</span>`:''}</td><td>${escapeHtml(r.desc||'')}</td></tr>`).join('')}
-            </tbody></table>
-          </div>
-          ${blocks.length>10?`<button class="btn btn-secondary" style="margin-top:.5rem;font-size:.72rem;width:100%" id="more-blocks">Ver todos (${blocks.length}) ▾</button><div id="extra-blocks" style="display:none"><div class="scroll-x"><table class="w-full text-xs"><thead><tr><th>Deal</th><th>Área</th><th>Tarefa</th><th>Owner</th><th>Descrição</th></tr></thead><tbody>${blocks.slice(10).map(r=>`<tr><td>${r.dealId?`<span class="deal-link" data-summary="${r.dealId}">${escapeHtml(r.deal)}</span>`:escapeHtml(r.deal)}</td><td>${r.area?`<span class="deal-link" data-area="${escapeHtml(r.area)}">${escapeHtml(r.area)}</span>`:''}</td><td>${escapeHtml(r.task||'')}</td><td>${r.owner?`<span class="deal-link" data-owner="${escapeHtml(r.owner)}">${escapeHtml(r.owner)}</span>`:''}</td><td>${escapeHtml(r.desc||'')}</td></tr>`).join('')}</tbody></table></div></div>`:''}` : `
+          ${blocks.length ? dashExpandTable('blocks', blocks, ['Deal','Área','Tarefa','Owner','Descrição'], r=>dealRow5desc(r)) : `
           <div class="empty-state">
             <div class="empty-icon">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><circle cx="12" cy="16" r="1"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>
@@ -2001,14 +2008,7 @@ function renderDashboard(){
 
       <section class="bhub-card p-4">
         <div class="text-sm font-semibold mb-3">📢 Dedo-duro — Maiores atrasos (${top.length})</div>
-        ${top.length ? `
-        <div class="scroll-x">
-          <table class="w-full text-xs"><thead><tr><th>Deal</th><th>Área</th><th>Owner</th><th>Tarefa</th><th>Dias atraso</th></tr></thead><tbody>
-            ${top.slice(0,10).map(r=>`<tr><td>${r.dealId?`<span class="deal-link" data-summary="${r.dealId}">${escapeHtml(r.deal)}</span>`:escapeHtml(r.deal)}</td><td>${r.area?`<span class="deal-link" data-area="${escapeHtml(r.area)}">${escapeHtml(r.area)}</span>`:''}</td><td>${r.owner?`<span class="deal-link" data-owner="${escapeHtml(r.owner)}">${escapeHtml(r.owner)}</span>`:''}</td><td>${escapeHtml(r.task||'')}</td><td class="text-right text-red-700 font-semibold">${r.dias}</td></tr>`).join('')}
-          </tbody></table>
-        </div>
-        ${top.length>10?`<button class="btn btn-secondary" style="margin-top:.5rem;font-size:.72rem;width:100%" id="more-top">Ver todos (${top.length}) ▾</button><div id="extra-top" style="display:none"><div class="scroll-x"><table class="w-full text-xs"><thead><tr><th>Deal</th><th>Área</th><th>Owner</th><th>Tarefa</th><th>Dias atraso</th></tr></thead><tbody>${top.slice(10).map(r=>`<tr><td>${r.dealId?`<span class="deal-link" data-summary="${r.dealId}">${escapeHtml(r.deal)}</span>`:escapeHtml(r.deal)}</td><td>${r.area?`<span class="deal-link" data-area="${escapeHtml(r.area)}">${escapeHtml(r.area)}</span>`:''}</td><td>${r.owner?`<span class="deal-link" data-owner="${escapeHtml(r.owner)}">${escapeHtml(r.owner)}</span>`:''}</td><td>${escapeHtml(r.task||'')}</td><td class="text-right text-red-700 font-semibold">${r.dias}</td></tr>`).join('')}</tbody></table></div></div>`:''}`
-        : '<div class="text-xs text-gray-500">Sem atrasos. 🎉</div>'}
+        ${top.length ? dashExpandTable('top', top, ['Deal','Área','Owner','Tarefa','Dias atraso'], r=>dealRowLate(r)) : '<div class="text-xs text-gray-500">Sem atrasos. 🎉</div>'}
       </section>
 
       <section class="bhub-card p-4">
