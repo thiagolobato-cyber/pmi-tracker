@@ -1473,7 +1473,7 @@ function renderSidebar(){
         <div class="sidebar-group-label">Portfólio</div>
         ${tabHtml(portfolioTabs)}
         <div class="sidebar-group-label" style="margin-top:.5rem">Configurações</div>
-        ${tabHtml(configTabs)}
+        ${tabHtml(configTabs.filter(([k])=> k!=='usuarios' || canAdmin()))}
         <button class="sidebar-collapse-btn" id="sidebarToggle" title="Recolher / expandir sidebar (tecla [)">${view.sidebarCollapsed ? chevronExpand : chevronCollapse}</button>
       </nav>
       <div class="sidebar-footer">
@@ -3677,11 +3677,20 @@ function openRaidModal(company, raidId){
             </div>
           </div>
         </form>
+        ${existing ? `
+        <div class="mt-6 pt-4 border-t">
+          <div class="text-sm font-semibold mb-3" style="color:var(--bhub-navy)">💬 Histórico / Próximos passos</div>
+          <div id="raidCommentPanel"></div>
+        </div>` : ''}
       </div>
     </div>
   `);
   document.body.appendChild(m);
   const close = () => m.remove();
+  if(existing){
+    const raidPanel = m.querySelector('#raidCommentPanel');
+    if(raidPanel) renderCommentsPanel(raidPanel, 'raid', existing.id, null);
+  }
   m.querySelector('#cancel').onclick = close;
 
   const showErr = (msg) => {
@@ -4638,10 +4647,7 @@ function openTaskModal(company, taskId){
       </form>
       ${!isNew ? `
       <div class="mt-6 pt-4 border-t">
-        <div class="flex gap-1 mb-3">
-          <button class="subtab active" data-tasksub="comments">💬 Comentários</button>
-          <button class="subtab" data-tasksub="deps">🔗 Dependências</button>
-        </div>
+        <div class="text-sm font-semibold mb-3" style="color:var(--bhub-navy)">💬 Comentários</div>
         <div id="taskSubPanel"></div>
       </div>` : ''}
     </div>
@@ -4665,15 +4671,7 @@ function openTaskModal(company, taskId){
   // Painéis de comentários / anexos / dependências
   if(!isNew){
     const panel = m.querySelector('#taskSubPanel');
-    const tabs = m.querySelectorAll('[data-tasksub]');
-    let current = 'comments';
-    function loadPanel(){
-      tabs.forEach(b=>b.classList.toggle('active', b.dataset.tasksub===current));
-      if(current==='comments') renderCommentsPanel(panel, 'task', t.id, company.id);
-      else if(current==='deps') renderDependenciesPanel(panel, t, company, deal);
-    }
-    tabs.forEach(b=>b.addEventListener('click', ()=>{ current = b.dataset.tasksub; loadPanel(); }));
-    loadPanel();
+    renderCommentsPanel(panel, 'task', t.id, company.id);
   }
   m.querySelector('#taskForm').onsubmit = async (e)=>{
     e.preventDefault();
