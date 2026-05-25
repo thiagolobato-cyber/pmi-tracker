@@ -1436,15 +1436,14 @@ function renderSidebar(){
         <button class="sidebar-collapse-btn" id="sidebarToggle" title="Recolher / expandir sidebar (tecla [)">${view.sidebarCollapsed ? chevronExpand : chevronCollapse}</button>
       </nav>
       <div class="sidebar-footer">
-        <button class="sidebar-user-btn" id="sidebarUserBtn" title="Menu do usuário">
-          <div class="sidebar-user">
-            <div class="avatar">${initials}</div>
-            <div class="info">
-              <div class="name">${escapeHtml(session.username||'')}</div>
-              <span class="role-pill role-${session.role||'leitor'}">${session.role||''}</span>
-            </div>
+        <div class="sidebar-user" style="flex:1;min-width:0;padding:.5rem .75rem">
+          <div class="avatar">${initials}</div>
+          <div class="info">
+            <div class="name">${escapeHtml(session.username||'')}</div>
+            <span class="role-pill role-${session.role||'leitor'}">${session.role||''}</span>
           </div>
-        </button>
+        </div>
+        <button id="sidebarLogoutBtn" title="Sair" style="flex-shrink:0;background:none;border:none;cursor:pointer;padding:.5rem .75rem;color:rgba(255,255,255,.5);display:flex;align-items:center;border-radius:.5rem;transition:color .15s,background .15s" onmouseover="this.style.color='#fff';this.style.background='rgba(255,255,255,.08)'" onmouseout="this.style.color='rgba(255,255,255,.5)';this.style.background='none'">${logoutIcon}</button>
       </div>
     </aside>
   `);
@@ -1457,20 +1456,8 @@ function renderSidebar(){
     view.sidebarCollapsed = !view.sidebarCollapsed;
     render();
   });
-  // Avatar dropdown
-  const userBtn = node.querySelector('#sidebarUserBtn');
-  userBtn.addEventListener('click', ()=>{
-    const existing = node.querySelector('.sidebar-avatar-menu');
-    if(existing){ existing.remove(); return; }
-    const menu = el(`
-      <div class="sidebar-avatar-menu">
-        <button id="sidebarLogout">${logoutIcon} Sair</button>
-      </div>
-    `);
-    menu.querySelector('#sidebarLogout').addEventListener('click', logout);
-    node.querySelector('.sidebar-footer').appendChild(menu);
-    setTimeout(()=>{ document.addEventListener('click', ()=>menu.remove(), { once:true }); }, 0);
-  });
+  // Logout direto
+  node.querySelector('#sidebarLogoutBtn').addEventListener('click', logout);
   return node;
 }
 
