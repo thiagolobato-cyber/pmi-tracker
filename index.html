@@ -5092,18 +5092,28 @@ function openTemplateModal(id){
           <div>
             <label class="text-xs font-semibold block mb-1" style="color:var(--bhub-navy)">
               🔗 Dependências
-              <span style="color:var(--bhub-muted);font-weight:400">— REFs que precisam ser concluídas antes (ex: 1.1, 2.3)</span>
+              <span style="color:var(--bhub-muted);font-weight:400">— REFs que precisam ser concluídas antes</span>
             </label>
-            <div class="border rounded-lg p-2 bg-gray-50 max-h-32 overflow-y-auto" style="border-color:var(--bhub-border)">
-              ${state.template.filter(x=>x.id!==t.id).map(x=>`
-                <label class="flex items-center gap-2 text-xs py-0.5 cursor-pointer hover:bg-gray-100 rounded px-1">
-                  <input type="checkbox" name="predecessorRefs" value="${escapeHtml(x.ref)}"
-                    ${(t.predecessorRefs||'').split(',').map(r=>r.trim()).filter(Boolean).includes(x.ref)?'checked':''}>
-                  <span class="font-mono text-gray-500 w-8">${escapeHtml(x.ref)}</span>
-                  <span class="truncate">${escapeHtml(x.task)}</span>
-                </label>`).join('')}
-              ${state.template.filter(x=>x.id!==t.id).length===0?'<div class="text-xs text-gray-400 py-1">Nenhuma outra tarefa no template ainda.</div>':''}
-            </div>
+            ${(()=>{
+              const selectedRefs = (t.predecessorRefs||'').split(',').map(r=>r.trim()).filter(Boolean);
+              const sortRef = (a,b)=>{ const p=(s)=>{const[x,y]=(s||'').split('.'); return [parseInt(x)||0,parseInt(y)||0];}; const[ax,ay]=p(a.ref); const[bx,by]=p(b.ref); return ax!==bx?ax-bx:ay-by; };
+              const others = state.template.filter(x=>x.id!==t.id).sort(sortRef);
+              const areas = [...new Set(others.map(x=>x.area).filter(Boolean))].sort();
+              if(others.length===0) return '<div class="text-xs text-gray-400 py-1 border rounded-lg p-2">Nenhuma outra tarefa no template ainda.</div>';
+              return `
+              <select id="predAreaFilter" class="mb-1 text-xs" style="padding:.25rem .5rem;border-radius:.4rem;border:1px solid var(--bhub-border);background:#fff;width:100%">
+                <option value="">— Todas as áreas —</option>
+                ${areas.map(a=>`<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('')}
+              </select>
+              <div id="predList" class="border rounded-lg p-2 bg-gray-50 max-h-40 overflow-y-auto" style="border-color:var(--bhub-border)">
+                ${others.map(x=>`
+                  <label class="pred-row flex items-center gap-2 text-xs py-0.5 cursor-pointer hover:bg-gray-100 rounded px-1" data-area="${escapeHtml(x.area||'')}">
+                    <input type="checkbox" name="predecessorRefs" value="${escapeHtml(x.ref)}"${selectedRefs.includes(x.ref)?' checked':''}>
+                    <span class="font-mono text-gray-400 shrink-0" style="min-width:2.5rem">${escapeHtml(x.ref)}</span>
+                    <span class="truncate">${escapeHtml(x.task)}</span>
+                  </label>`).join('')}
+              </div>`;
+            })()}
           </div>
 
           <div class="flex justify-end gap-2 pt-3 border-t" style="border-color:var(--bhub-border)">
@@ -5122,6 +5132,17 @@ function openTemplateModal(id){
   m.querySelector('#tplArea').addEventListener('change', e=>{
     m.querySelector('#tplRef').value = nextRefForArea(e.target.value);
   });
+
+  // Filtro de área nas dependências
+  const predAreaFilter = m.querySelector('#predAreaFilter');
+  if(predAreaFilter){
+    predAreaFilter.addEventListener('change', ()=>{
+      const sel = predAreaFilter.value;
+      m.querySelectorAll('.pred-row').forEach(row=>{
+        row.style.display = (!sel || row.dataset.area === sel) ? '' : 'none';
+      });
+    });
+  }
 
   m.querySelector('#cancel').onclick = ()=>m.remove();
 
