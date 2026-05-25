@@ -584,10 +584,10 @@ function companyFromDb(c){ return { id: c.id, name: c.name, signDate: c.sign_dat
 function companyToDb(c){ return { name: c.name, sign_date: emptyDate(c.signDate) }; }
 
 function tplFromDb(t){
-  return { id: t.id, ref: t.ref||'', area: t.area||'', task: t.task||'', defaultOwner: t.default_owner||'', defaultPrazo: t.default_prazo||0, ordering: t.ordering||0 };
+  return { id: t.id, ref: t.ref||'', area: t.area||'', task: t.task||'', defaultOwner: t.default_owner||'', defaultPrazo: t.default_prazo||0, ordering: t.ordering||0, predecessorRefs: t.predecessor_refs||'' };
 }
 function tplToDb(t){
-  return { ref: t.ref||'', area: t.area||'', task: t.task||'', default_owner: t.defaultOwner||'', default_prazo: t.defaultPrazo||0, ordering: t.ordering||0 };
+  return { ref: t.ref||'', area: t.area||'', task: t.task||'', default_owner: t.defaultOwner||'', default_prazo: t.defaultPrazo||0, ordering: t.ordering||0, predecessor_refs: t.predecessorRefs||'' };
 }
 
 function taskFromDb(r){
@@ -4885,10 +4885,11 @@ function renderTemplate(){
         <section class="bhub-card overflow-hidden">
           <div class="px-4 py-2 bg-gray-50 border-b font-semibold text-sm">${a} <span class="text-xs text-gray-500 font-normal">(${grouped[a].length})</span></div>
           <div class="scroll-x">
-            <table class="w-full"><thead><tr><th>REF</th><th class="min-w-[24rem]">TAREFA</th><th>OWNER PADRÃO</th><th>PRAZO (d.u.)</th>${canEdit()?'<th></th>':''}</tr></thead>
+            <table class="w-full"><thead><tr><th>REF</th><th class="min-w-[24rem]">TAREFA</th><th>OWNER PADRÃO</th><th>PRAZO (d.u.)</th><th>DEPENDE DE</th>${canEdit()?'<th></th>':''}</tr></thead>
             <tbody>
               ${grouped[a].map(t=>`<tr>
                 <td>${t.ref||''}</td><td>${t.task||''}</td><td>${t.defaultOwner||''}</td><td class="text-center">${t.defaultPrazo||0}</td>
+                <td class="text-xs text-gray-500 font-mono">${t.predecessorRefs ? escapeHtml(t.predecessorRefs) : '<span class="text-gray-300">—</span>'}</td>
                 ${canEdit()?`<td><button class="btn btn-secondary" data-edt="${t.id}">✎</button></td>`:''}
               </tr>`).join('')}
             </tbody></table>
@@ -5043,6 +5044,23 @@ function openTemplateModal(id){
             </select>
           </div>
 
+          <div>
+            <label class="text-xs font-semibold block mb-1" style="color:var(--bhub-navy)">
+              🔗 Dependências
+              <span style="color:var(--bhub-muted);font-weight:400">— REFs que precisam ser concluídas antes (ex: 1.1, 2.3)</span>
+            </label>
+            <div class="border rounded-lg p-2 bg-gray-50 max-h-32 overflow-y-auto" style="border-color:var(--bhub-border)">
+              ${state.template.filter(x=>x.id!==t.id).map(x=>`
+                <label class="flex items-center gap-2 text-xs py-0.5 cursor-pointer hover:bg-gray-100 rounded px-1">
+                  <input type="checkbox" name="predecessorRefs" value="${escapeHtml(x.ref)}"
+                    ${(t.predecessorRefs||'').split(',').map(r=>r.trim()).filter(Boolean).includes(x.ref)?'checked':''}>
+                  <span class="font-mono text-gray-500 w-8">${escapeHtml(x.ref)}</span>
+                  <span class="truncate">${escapeHtml(x.task)}</span>
+                </label>`).join('')}
+              ${state.template.filter(x=>x.id!==t.id).length===0?'<div class="text-xs text-gray-400 py-1">Nenhuma outra tarefa no template ainda.</div>':''}
+            </div>
+          </div>
+
           <div class="flex justify-end gap-2 pt-3 border-t" style="border-color:var(--bhub-border)">
             ${!isNew?`<button type="button" id="del" class="btn btn-danger mr-auto">Excluir</button>`:''}
             <button type="button" id="cancel" class="btn btn-secondary">Cancelar</button>
@@ -5065,13 +5083,15 @@ function openTemplateModal(id){
   m.querySelector('#tplForm').onsubmit = async (e)=>{
     e.preventDefault();
     const fd = new FormData(e.target);
+    const selectedPreds = Array.from(m.querySelectorAll('input[name="predecessorRefs"]:checked')).map(cb=>cb.value);
     const upd = {
       ref: fd.get('ref').trim(),
       area: fd.get('area').trim(),
       task: fd.get('task').trim(),
       defaultOwner: fd.get('defaultOwner').trim(),
       defaultPrazo: parseInt(fd.get('defaultPrazo'))||0,
-      ordering: t.ordering || (state.template.length)
+      ordering: t.ordering || (state.template.length),
+      predecessorRefs: selectedPreds.join(', ')
     };
     try{
       if(isNew){
