@@ -5427,13 +5427,22 @@ function renderHoje(){
         if(company) openTaskModal(company, row.dataset.taskId);
       });
     });
-    // Iniciativas (Decisões): navega para página Iniciativas e abre modal de edição
+    // Iniciativas (Decisões): navega para o subtab Iniciativas do deal e abre o modal
     container.querySelectorAll('[data-raid-id]').forEach(row=>{
       row.addEventListener('click',()=>{
-        view.tab='raid';
+        const raidId = row.dataset.raidId;
+        const raidItem = decisions.find(x=>x.id===raidId);
+        if(raidItem && raidItem._deal){
+          // Abre o deal correto já na aba Iniciativas
+          view.tab='deal';
+          view.dealId=raidItem._deal.id;
+          view.dealTab='raid';
+        } else {
+          // Fallback: página global de Iniciativas
+          view.tab='raid';
+        }
         render();
-        // Abre o modal de edição da iniciativa após o render
-        setTimeout(()=>openRaidModal(null, row.dataset.raidId), 50);
+        setTimeout(()=>openRaidModal(raidItem?._deal||null, raidId), 50);
       });
     });
     const moreBtn = container.querySelector('#more-'+limitKey);
