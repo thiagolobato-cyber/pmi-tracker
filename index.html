@@ -584,10 +584,10 @@ function companyFromDb(c){ return { id: c.id, name: c.name, signDate: c.sign_dat
 function companyToDb(c){ return { name: c.name, sign_date: emptyDate(c.signDate) }; }
 
 function tplFromDb(t){
-  return { id: t.id, ref: t.ref||'', area: t.area||'', task: t.task||'', defaultOwner: t.default_owner||'', defaultPrazo: t.default_prazo||0, ordering: t.ordering||0, predecessorRefs: t.predecessor_refs||'' };
+  return { id: t.id, ref: t.ref||'', area: t.area||'', task: t.task||'', defaultOwner: t.default_owner||'', defaultPrazo: t.default_prazo||0, ordering: t.ordering||0, predecessorRefs: t.predecessor_refs||'', pendingApproval: t.pending_approval||false };
 }
 function tplToDb(t){
-  return { ref: t.ref||'', area: t.area||'', task: t.task||'', default_owner: t.defaultOwner||'', default_prazo: t.defaultPrazo||0, ordering: t.ordering||0, predecessor_refs: t.predecessorRefs||'' };
+  return { ref: t.ref||'', area: t.area||'', task: t.task||'', default_owner: t.defaultOwner||'', default_prazo: t.defaultPrazo||0, ordering: t.ordering||0, predecessor_refs: t.predecessorRefs||'', pending_approval: t.pendingApproval||false };
 }
 
 function taskFromDb(r){
@@ -4922,7 +4922,7 @@ function renderTemplate(){
         </div>
         <div class="flex gap-2">
           ${canEdit() ? `<button id="addRow" class="btn btn-primary">+ Tarefa no template</button>` : ''}
-          ${session?.role==='admin' ? `<button id="clearTpl" class="btn btn-danger" style="opacity:.7">Limpar template</button>` : ''}
+          ${canAdmin() ? `<button id="clearTpl" class="btn btn-danger" style="opacity:.7">Limpar template</button>` : ''}
         </div>
       </div>
 
@@ -4932,11 +4932,21 @@ function renderTemplate(){
           <div class="scroll-x">
             <table class="w-full"><thead><tr><th>REF</th><th class="min-w-[24rem]">TAREFA</th><th>OWNER PADRÃO</th><th>PRAZO (d.u.)</th><th>DEPENDE DE</th>${canEdit()?'<th></th>':''}</tr></thead>
             <tbody>
-              ${grouped[a].map(t=>`<tr>
-                <td>${t.ref||''}</td><td>${t.task||''}</td><td>${t.defaultOwner||''}</td><td class="text-center">${t.defaultPrazo||0}</td>
+              ${grouped[a].map(t=>{
+                const pendingTplBadge = t.pendingApproval
+                  ? ` <span title="Aguardando aprovação do admin" style="display:inline-block;font-size:.65rem;padding:.1rem .35rem;border-radius:.75rem;background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe;font-weight:600;white-space:nowrap">⏳ Aguard. aprovação</span>`
+                  : '';
+                const approveTplBtn = t.pendingApproval && canAdmin()
+                  ? ` <button data-approve-tpl="${t.id}" title="Aprovar" style="font-size:.65rem;padding:.1rem .4rem;border-radius:.5rem;background:#dcfce7;color:#166534;border:1px solid #bbf7d0;cursor:pointer;font-weight:600">✓</button><button data-reject-tpl="${t.id}" title="Rejeitar e excluir" style="font-size:.65rem;padding:.1rem .4rem;border-radius:.5rem;background:#fee2e2;color:#991b1b;border:1px solid #fecaca;cursor:pointer;font-weight:600">✕</button>`
+                  : '';
+                return `<tr${t.pendingApproval?' style="opacity:.55;background:#f8faff"':''}>
+                <td>${t.ref||''}</td>
+                <td>${t.task||''}${pendingTplBadge}${approveTplBtn}</td>
+                <td>${t.defaultOwner||''}</td>
+                <td class="text-center">${t.defaultPrazo||0}</td>
                 <td class="text-xs text-gray-500 font-mono">${t.predecessorRefs ? escapeHtml(t.predecessorRefs) : '<span class="text-gray-300">—</span>'}</td>
                 ${canEdit()?`<td><button class="btn btn-secondary" data-edt="${t.id}">✎</button></td>`:''}
-              </tr>`).join('')}
+              </tr>`;}).join('')}
             </tbody></table>
           </div>
         </section>
@@ -5017,6 +5027,23 @@ function renderTemplate(){
     };
   };
   node.querySelectorAll('[data-edt]').forEach(b=>b.onclick=()=>openTemplateModal(b.dataset.edt));
+  // Approve/reject pending template tasks (admin only)
+  node.querySelectorAll('[data-approve-tpl]').forEach(b=>b.onclick=async()=>{
+    const tid = b.dataset.approveTpl;
+    const { error } = await supa.from('template_tasks').update({pending_approval: false}).eq('id', tid);
+    if(error){ alert('Erro: '+error.message); return; }
+    const tpl = state.template.find(x=>x.id===tid);
+    if(tpl) tpl.pendingApproval = false;
+    render();
+  });
+  node.querySelectorAll('[data-reject-tpl]').forEach(b=>b.onclick=async()=>{
+    const tid = b.dataset.rejectTpl;
+    if(!confirm('Rejeitar e excluir esta tarefa do template?')) return;
+    const { error } = await supa.from('template_tasks').delete().eq('id', tid);
+    if(error){ alert('Erro: '+error.message); return; }
+    state.template = state.template.filter(x=>x.id!==tid);
+    render();
+  });
   return node;
 }
 function openTemplateModal(id){
@@ -5159,22 +5186,34 @@ function openTemplateModal(id){
       ordering: t.ordering || (state.template.length),
       predecessorRefs: selectedPreds.join(', ')
     };
+    const needsApproval = !canAdmin();
     try{
       if(isNew){
-        const { data, error } = await supa.from('template_tasks').insert(tplToDb(upd)).select().single();
+        const payload = { ...tplToDb(upd), pending_approval: needsApproval };
+        const { data, error } = await supa.from('template_tasks').insert(payload).select().single();
         if(error) throw error;
         state.template.push(tplFromDb(data));
       }else{
-        const { error } = await supa.from('template_tasks').update(tplToDb(upd)).eq('id', t.id);
+        const payload = { ...tplToDb(upd), pending_approval: needsApproval ? true : (t.pendingApproval || false) };
+        const { error } = await supa.from('template_tasks').update(payload).eq('id', t.id);
         if(error) throw error;
         Object.assign(t, upd);
+        if(needsApproval) t.pendingApproval = true;
       }
       m.remove(); render();
+      if(needsApproval){
+        const toast = el(`<div style="position:fixed;bottom:1.5rem;right:1.5rem;background:#1e2d45;color:#fff;padding:.75rem 1.25rem;border-radius:.75rem;font-size:.85rem;z-index:999;box-shadow:0 8px 24px rgba(0,0,0,.3);max-width:320px">
+          ⏳ Tarefa enviada para aprovação do admin. Ficará ativa após aprovação.
+          </div>`);
+        document.body.appendChild(toast);
+        setTimeout(()=>toast.remove(), 4000);
+      }
     }catch(err){ alert('Erro ao salvar: '+(err.message||err)); }
   };
 
   const del = m.querySelector('#del');
   if(del) del.onclick = async ()=>{
+    if(!canAdmin() && !t.pendingApproval){ alert('Apenas admins podem excluir tarefas aprovadas do template.'); return; }
     if(!confirm('Excluir?')) return;
     try{
       const { error } = await supa.from('template_tasks').delete().eq('id', t.id);
@@ -5626,6 +5665,17 @@ function renderHoje(){
         </div>
         <div id="sec-newtasks"></div>
       </div>
+      <!-- Seção admin: Template tasks pendentes -->
+      <div class="hoje-section" id="sec-tpltasks-wrap" style="${state.template.filter(t=>t.pendingApproval).length===0?'display:none':''}">
+        <div class="hoje-section-header">
+          <div class="h-icon" style="background:#ede9fe;color:#6d28d9">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 13h8M8 17h4"/></svg>
+          </div>
+          <span class="h-title">Tarefas de template aguardando aprovação</span>
+          <span id="badge-tpltasks" class="h-badge" style="background:#ede9fe;color:#6d28d9">${state.template.filter(t=>t.pendingApproval).length}</span>
+        </div>
+        <div id="sec-tpltasks"></div>
+      </div>
       <!-- Seção admin: Solicitações de exclusão pendentes -->
       <div class="hoje-section" id="sec-delreqs-wrap" style="${(state.deletionRequests||[]).length===0?'display:none':''}">
         <div class="hoje-section-header">
@@ -5705,6 +5755,57 @@ function renderHoje(){
           const d = state.deals[cid];
           if(d) d.tasks = d.tasks.filter(x=>x.id!==taskId);
           renderNewTasksSection(); render();
+        }catch(err){ alert('Erro: '+(err.message||err)); }
+      }));
+    }
+
+    const secTplTasks = node.querySelector('#sec-tpltasks');
+    if(secTplTasks) renderPendingTplSection();
+
+    function renderPendingTplSection(){
+      const pending = state.template.filter(t=>t.pendingApproval);
+      const wrap = node.querySelector('#sec-tpltasks-wrap');
+      const badge = node.querySelector('#badge-tpltasks');
+      if(badge) badge.textContent = pending.length;
+      if(wrap) wrap.style.display = pending.length===0 ? 'none' : '';
+      if(!secTplTasks) return;
+      secTplTasks.innerHTML = pending.length===0
+        ? `<div class="hoje-empty">Nenhuma tarefa de template aguardando aprovação.</div>`
+        : pending.map(t=>`
+          <div class="hoje-row">
+            <div class="hoje-row-left" style="flex:1;min-width:0">
+              <div class="hoje-row-task" style="font-weight:600">${t.ref?`<span style="font-family:monospace;font-size:.78rem;background:#f3f4f6;padding:.1rem .3rem;border-radius:.25rem;margin-right:.35rem">${escapeHtml(t.ref)}</span>`:''}${escapeHtml(t.task||'(sem nome)')}</div>
+              <div class="hoje-row-meta">
+                <span>Área: <strong>${escapeHtml(t.area||'—')}</strong></span><span class="sep">·</span>
+                <span>Owner padrão: <strong>${escapeHtml(t.defaultOwner||'—')}</strong></span><span class="sep">·</span>
+                <span>Prazo: ${t.defaultPrazo||0} d.u.</span>
+              </div>
+            </div>
+            <div class="hoje-row-right" style="gap:.5rem;flex-shrink:0">
+              <button class="btn btn-primary" style="font-size:.75rem;padding:.3rem .65rem;background:#16a34a" data-tpl-approve="${t.id}">✓ Aprovar</button>
+              <button class="btn btn-secondary" style="font-size:.75rem;padding:.3rem .65rem" data-tpl-reject="${t.id}">✕ Rejeitar</button>
+            </div>
+          </div>`).join('');
+
+      secTplTasks.querySelectorAll('[data-tpl-approve]').forEach(btn=>btn.addEventListener('click', async ()=>{
+        const tid = btn.dataset.tplApprove;
+        if(!confirm('Aprovar esta tarefa no template?')) return;
+        try{
+          const { error } = await supa.from('template_tasks').update({pending_approval: false}).eq('id', tid);
+          if(error) throw error;
+          const tpl = state.template.find(x=>x.id===tid);
+          if(tpl) tpl.pendingApproval = false;
+          renderPendingTplSection(); render();
+        }catch(err){ alert('Erro: '+(err.message||err)); }
+      }));
+      secTplTasks.querySelectorAll('[data-tpl-reject]').forEach(btn=>btn.addEventListener('click', async ()=>{
+        const tid = btn.dataset.tplReject;
+        if(!confirm('Rejeitar e excluir esta tarefa do template?')) return;
+        try{
+          const { error } = await supa.from('template_tasks').delete().eq('id', tid);
+          if(error) throw error;
+          state.template = state.template.filter(x=>x.id!==tid);
+          renderPendingTplSection(); render();
         }catch(err){ alert('Erro: '+(err.message||err)); }
       }));
     }
