@@ -2134,6 +2134,7 @@ function renderDashboard(){
         },
         options:{responsive:true, maintainAspectRatio:false, cutout:'72%', plugins:{legend:{display:false}, tooltip:{callbacks:{label:c=>c.label+': '+fmtBRL(c.raw||0)}}}}
       });
+    }
     // Botões "Ver todos" dos widgets
     [['more-due10','extra-due10'],['more-blocks','extra-blocks'],['more-top','extra-top']].forEach(([btnId,extraId])=>{
       const btn = node.querySelector('#'+btnId);
