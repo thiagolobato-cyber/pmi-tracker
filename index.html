@@ -1443,7 +1443,6 @@ function renderSidebar(){
             <span class="role-pill role-${session.role||'leitor'}">${session.role||''}</span>
           </div>
         </div>
-        <button id="sidebarLogoutBtn" title="Sair" style="flex-shrink:0;background:none;border:none;cursor:pointer;padding:.5rem .75rem;color:rgba(255,255,255,.5);display:flex;align-items:center;border-radius:.5rem;transition:color .15s,background .15s" onmouseover="this.style.color='#fff';this.style.background='rgba(255,255,255,.08)'" onmouseout="this.style.color='rgba(255,255,255,.5)';this.style.background='none'">${logoutIcon}</button>
       </div>
     </aside>
   `);
@@ -1456,8 +1455,6 @@ function renderSidebar(){
     view.sidebarCollapsed = !view.sidebarCollapsed;
     render();
   });
-  // Logout direto
-  node.querySelector('#sidebarLogoutBtn').addEventListener('click', logout);
   return node;
 }
 
@@ -1469,6 +1466,9 @@ function renderTopbar(){
         <input id="dealSearch" type="text" autocomplete="off" placeholder="Buscar empresas, deals, usuários…" />
         <div id="dealSearchResults" class="hidden absolute left-0 right-0 mt-1 bg-white rounded-lg shadow-2xl border max-h-96 overflow-y-auto z-30" style="border-color:var(--bhub-border)"></div>
       </div>
+      <button id="topbarLogoutBtn" title="Sair" class="topbar-user icon-btn" style="margin-left:.5rem;flex-shrink:0">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      </button>
     </header>
   `);
 
@@ -1619,6 +1619,8 @@ function renderHeader(){
   document.addEventListener('click', (e)=>{
     if(!node.contains(e.target)) searchResults.classList.add('hidden');
   }, { once: false });
+
+  node.querySelector('#topbarLogoutBtn').addEventListener('click', logout);
 
   return node;
 }
