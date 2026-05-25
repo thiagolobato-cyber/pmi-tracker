@@ -559,9 +559,9 @@ let state = defaultState();
 let session = null; // { id, email, username, role }
 let view = { tab:'dashboard', dealId:null, dealTab:'tarefas', executiveArea:'todas', raidFilter:'all', raidPortfolioFilter:'all', synergyFilter:'all', dashFilters:{deals:[],areas:[],owners:[]}, empresasSearch:'', empresasSortCol:'date', empresasSortDir:'desc', sidebarCollapsed:false, executivaDealSearch:'', execPdfDeals:null };
 
-// Tooltip explicativo do acrônimo RAID
+// Tooltip explicativo do acrônimo RAID dentro de Iniciativas
 function raidTooltipLabel(text){
-  return `<span class="raid-tip">${text}<span class="raid-tip-icon">?</span><span class="raid-tip-box"><b>R</b> Risco — evento que pode acontecer e impactar<br><b>A</b> Premissa — o que estamos assumindo como verdadeiro<br><b>I</b> Impedimento — problema que já está bloqueando<br><b>D</b> Dependência — o que precisamos de terceiros</span></span>`;
+  return `<span class="raid-tip">${text}<span class="raid-tip-icon">?</span><span class="raid-tip-box" style="min-width:260px"><b style="color:#f9a8d4">Iniciativas</b> agrupam os 4 aspectos de uma situação crítica:<br><br><b>R</b> isco — o que pode acontecer e impactar o deal<br><b>A</b> ssunção — o que estamos assumindo como verdadeiro<br><b>I</b> mpedimento — o que já está bloqueando agora<br><b>D</b> ependência — o que precisamos de terceiros para avançar<br><br><span style="opacity:.75;font-size:.68rem">Preencha apenas os aspectos que se aplicam.</span></span></span>`;
 }
 
 function defaultState(){
@@ -625,9 +625,13 @@ function taskToDb(t, companyId){
 }
 
 function raidFromDb(r){
+  // derive type from first non-empty aspect (for backward compat)
+  const type = r.type || (r.risco_desc?'risk': r.issue_desc?'issue': r.decisao_desc?'decision': r.premissa_desc?'assumption': 'risk');
   return {
-    id: r.id, type: r.type, area: r.area||'',
-    title: r.title||'', description: r.description||'',
+    id: r.id, type,
+    area: r.area||'', title: r.title||'',
+    riscoDesc: r.risco_desc||'', issueDesc: r.issue_desc||'',
+    decisaoDesc: r.decisao_desc||'', premissaDesc: r.premissa_desc||'',
     severity: r.severity||'med', status: r.status||'open',
     owner: r.owner||'', dueDate: r.due_date||'', mitigation: r.mitigation||'',
     createdAt: r.created_at,
@@ -635,9 +639,13 @@ function raidFromDb(r){
   };
 }
 function raidToDb(r){
+  // derive primary type from first non-empty aspect
+  const type = r.riscoDesc?'risk': r.issueDesc?'issue': r.decisaoDesc?'decision': r.premissaDesc?'assumption': (r.type||'risk');
   return {
-    type: r.type, area: r.area||'',
-    title: r.title||'', description: r.description||'',
+    type, area: r.area||'',
+    title: r.title||'',
+    risco_desc: r.riscoDesc||'', issue_desc: r.issueDesc||'',
+    decisao_desc: r.decisaoDesc||'', premissa_desc: r.premissaDesc||'',
     severity: r.severity||'med', status: r.status||'open',
     owner: r.owner||'', due_date: emptyDate(r.dueDate), mitigation: r.mitigation||''
   };
@@ -1444,7 +1452,7 @@ function renderSidebar(){
     ['hoje',     'Visão Usuário',  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L13.09 8.26L19 7L15.45 12L19 17L13.09 15.74L12 22L10.91 15.74L5 17L8.55 12L5 7L10.91 8.26L12 2Z"/></svg>'],
     ['executiva','Visão Executiva','<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l3-3 4 4 5-7"/></svg>'],
     ['empresas', 'Deals',          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="8" height="14" rx="1"/><rect x="13" y="3" width="8" height="17" rx="1"/><line x1="6" y1="10" x2="8" y2="10"/><line x1="6" y1="14" x2="8" y2="14"/><line x1="16" y1="7" x2="18" y2="7"/><line x1="16" y1="11" x2="18" y2="11"/><line x1="16" y1="15" x2="18" y2="15"/></svg>'],
-    ['raid',     'RAID Portfolio', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L3 6v6c0 5 4 9 9 10 5-1 9-5 9-10V6l-9-4z"/><path d="M12 8v4"/><circle cx="12" cy="16" r=".5" fill="currentColor"/></svg>'],
+    ['raid',     'Iniciativas', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L3 6v6c0 5 4 9 9 10 5-1 9-5 9-10V6l-9-4z"/><path d="M12 8v4"/><circle cx="12" cy="16" r=".5" fill="currentColor"/></svg>'],
   ];
   const configTabs = [
     ['template', 'Template',  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="13" y2="16"/></svg>'],
@@ -1709,36 +1717,67 @@ function dashFiltersActive(){
 
 // Helpers para tabelas expansíveis do dashboard (evita template literals aninhados)
 /* ===== RAID Portfolio Page ===== */
+function raidAspectBadges(r){
+  // Shows filled aspect badges for a RAID item
+  const aspects = [
+    {key:'riscoDesc',    icon:'⚠️', label:'Risco',   cls:'raid-risk'},
+    {key:'issueDesc',    icon:'🔥', label:'Issue',   cls:'raid-issue'},
+    {key:'decisaoDesc',  icon:'⚖️', label:'Decisão', cls:'raid-decision'},
+    {key:'premissaDesc', icon:'💡', label:'Premissa',cls:'raid-assumption'},
+  ];
+  return aspects.map(a=> r[a.key]
+    ? `<span class="pill ${a.cls}" style="font-size:.65rem;padding:.1rem .35rem" title="${escapeHtml(r[a.key])}">${a.icon}</span>`
+    : `<span class="pill" style="font-size:.65rem;padding:.1rem .35rem;opacity:.25">${a.icon}</span>`
+  ).join(' ');
+}
 function renderRaidPortfolio(){
   const filter = view.raidPortfolioFilter || 'all';
   const allItems = state.raid.slice().sort((a,b)=>(a.status==='closed'?1:0)-(b.status==='closed'?1:0)||sevRank(b.severity)-sevRank(a.severity));
-  const filtered = filter==='all' ? allItems : filter==='closed' ? allItems.filter(x=>x.status==='closed') : allItems.filter(x=>x.type===filter && x.status!=='closed');
   const open = allItems.filter(x=>x.status!=='closed');
-  const counts = RAID_TYPES.reduce((a,t)=>{a[t.id]=open.filter(x=>x.type===t.id).length; return a;},{});
+  // Filter: 'all' = all open, 'risco/issue/decisao/premissa' = open items with that field filled, 'closed' = closed
+  const aspectFilterMap = {risco:'riscoDesc', issue:'issueDesc', decisao:'decisaoDesc', premissa:'premissaDesc'};
+  const filtered = filter==='all' ? open
+    : filter==='closed' ? allItems.filter(x=>x.status==='closed')
+    : aspectFilterMap[filter] ? open.filter(x=>x[aspectFilterMap[filter]])
+    : open;
+
+  // KPI counts: items with each aspect filled
+  const kpiCounts = {
+    risco:   open.filter(x=>x.riscoDesc).length,
+    issue:   open.filter(x=>x.issueDesc).length,
+    decisao: open.filter(x=>x.decisaoDesc).length,
+    premissa:open.filter(x=>x.premissaDesc).length,
+  };
+  const kpiCards = [
+    {id:'risco',    icon:'⚠️', label:'Risco',    sub:'Podem acontecer'},
+    {id:'issue',    icon:'🔥', label:'Issue',    sub:'Já estão bloqueando'},
+    {id:'decisao',  icon:'⚖️', label:'Decisão',  sub:'Precisam ser tomadas'},
+    {id:'premissa', icon:'💡', label:'Premissa', sub:'Estamos assumindo'},
+  ];
 
   const node = el(`
     <div class="space-y-5">
       <div class="page-header">
         <div>
-          <h1>${raidTooltipLabel('RAID')} Portfolio</h1>
-          <p class="subtitle">Riscos, Premissas, Impedimentos e Dependências — visão consolidada de todos os deals</p>
+          <h1>${raidTooltipLabel('Iniciativas')}</h1>
+          <p class="subtitle">Riscos, Assunções, Impedimentos e Dependências — visão consolidada de todos os deals</p>
         </div>
-        ${canEdit()?`<button id="addRaidGlobal" class="btn btn-primary">+ Novo item RAID</button>`:''}
+        ${canEdit()?`<button id="addRaidGlobal" class="btn btn-primary">+ Nova Iniciativa</button>`:''}
       </div>
 
       <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-        ${RAID_TYPES.map(t=>`
-          <div class="bhub-card p-3 text-center cursor-pointer hover:border-blue-400 transition-colors" data-rf="${t.id}">
-            <div class="text-2xl mb-1">${t.icon}</div>
-            <div class="text-xl font-bold" style="color:var(--bhub-navy)">${counts[t.id]}</div>
-            <div class="text-xs font-semibold text-gray-600">${t.label}</div>
-            <div class="text-[10px] text-gray-400">${t.id==='risk'?'Podem acontecer':t.id==='assumption'?'Estamos assumindo':t.id==='issue'?'Já estão bloqueando':'Dependemos de terceiros'}</div>
+        ${kpiCards.map(k=>`
+          <div class="bhub-card p-3 text-center cursor-pointer hover:border-blue-400 transition-colors" data-rf="${k.id}">
+            <div class="text-2xl mb-1">${k.icon}</div>
+            <div class="text-xl font-bold" style="color:var(--bhub-navy)">${kpiCounts[k.id]}</div>
+            <div class="text-xs font-semibold text-gray-600">${k.label}</div>
+            <div class="text-[10px] text-gray-400">${k.sub}</div>
           </div>`).join('')}
       </div>
 
       <div class="flex items-center gap-2 flex-wrap">
         <button class="btn ${filter==='all'?'btn-primary':'btn-secondary'}" data-rf="all">Todos abertos (${open.length})</button>
-        ${RAID_TYPES.map(t=>`<button class="btn ${filter===t.id?'btn-primary':'btn-secondary'}" data-rf="${t.id}">${t.icon} ${t.label} (${counts[t.id]})</button>`).join('')}
+        ${kpiCards.map(k=>`<button class="btn ${filter===k.id?'btn-primary':'btn-secondary'}" data-rf="${k.id}">${k.icon} ${k.label} (${kpiCounts[k.id]})</button>`).join('')}
         <button class="btn ${filter==='closed'?'btn-primary':'btn-secondary'}" data-rf="closed">✓ Fechados (${allItems.filter(x=>x.status==='closed').length})</button>
       </div>
 
@@ -1747,8 +1786,8 @@ function renderRaidPortfolio(){
         <div class="scroll-x">
           <table class="w-full text-sm">
             <thead><tr>
-              <th>TIPO</th>
-              <th class="min-w-[18rem]">TÍTULO / DESCRIÇÃO</th>
+              <th class="min-w-[18rem]">TÍTULO</th>
+              <th>ASPECTOS</th>
               <th>DEALS AFETADOS</th>
               <th>ÁREA</th>
               <th>SEVERIDADE</th>
@@ -1764,17 +1803,16 @@ function renderRaidPortfolio(){
       </div>` : `
       <div class="bhub-card p-10 text-center text-gray-400">
         <div style="font-size:2rem;margin-bottom:.5rem">🛡</div>
-        <div class="font-medium">Nenhum item ${filter==='all'?'':RAID_TYPES.find(t=>t.id===filter)?.label||''} aberto</div>
-        ${canEdit()?'<div class="text-xs mt-1">Clique em "+ Novo item RAID" para começar.</div>':''}
+        <div class="font-medium">Nenhum item ${filter==='all'||filter==='closed'?'':kpiCards.find(k=>k.id===filter)?.label+' '||''}aberto</div>
+        ${canEdit()?'<div class="text-xs mt-1">Clique em "+ Nova Iniciativa" para começar.</div>':''}
       </div>`}
     </div>
   `);
 
-  // Populate rows (avoids nested template literals)
+  // Populate rows
   const tbody = node.querySelector('#raidRows');
   if(tbody){
     filtered.forEach(r=>{
-      const t = RAID_TYPES.find(x=>x.id===r.type)||RAID_TYPES[0];
       const sev = SEVERITIES.find(x=>x.id===r.severity);
       const st  = RAID_STATUSES.find(x=>x.id===r.status);
       const dealNames = (r.dealIds||[]).map(id=>{ const c=state.companies.find(x=>x.id===id); return c?`<span class="deal-link text-xs" data-summary="${id}">${escapeHtml(c.name)}</span>`:'' }).filter(Boolean).join(', ');
@@ -1784,8 +1822,9 @@ function renderRaidPortfolio(){
       },0);
       const tr = document.createElement('tr');
       if(r.status==='closed') tr.className='opacity-50';
-      tr.innerHTML = '<td><span class="pill raid-'+r.type+'">'+t.icon+' '+t.label+'</span></td>'
-        +'<td><div class="font-medium">'+escapeHtml(r.title||'')+'</div><div class="text-xs text-gray-500">'+escapeHtml(r.description||'')+'</div></td>'
+      tr.innerHTML = '<td><div class="font-medium">'+escapeHtml(r.title||'')+'</div>'
+          +(r.mitigation?'<div class="text-xs text-gray-500">'+escapeHtml(r.mitigation)+'</div>':'')+'</td>'
+        +'<td>'+raidAspectBadges(r)+'</td>'
         +'<td class="text-xs">'+( dealNames||'<span class="text-gray-400">—</span>' )+'</td>'
         +'<td class="text-xs">'+(r.area?'<span class="deal-link" data-area="'+escapeHtml(r.area)+'">'+escapeHtml(r.area)+'</span>':'')+'</td>'
         +'<td>'+(sev?'<span class="pill sev-'+r.severity+'">'+sev.label+'</span>':'')+'</td>'
@@ -1980,9 +2019,9 @@ function renderDashboard(){
             <div class="kpi-sub">${total>0?Math.round(late/total*100):0}% do portfólio</div>
           </div>
           <div class="kpi">
-            <div class="kpi-head"><div class="kpi-label">RAID abertos</div><div class="kpi-icon kpi-icon-rose"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="22" x2="4" y2="15"/><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/></svg></div></div>
+            <div class="kpi-head"><div class="kpi-label">Iniciativas abertas</div><div class="kpi-icon kpi-icon-rose"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="22" x2="4" y2="15"/><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/></svg></div></div>
             <div class="kpi-value">${openRaid.length}</div>
-            <div class="kpi-sub">${openRaid.filter(r=>r.type==='risk'&&r.severity==='high').length} risco(s) alto(s)</div>
+            <div class="kpi-sub">${openRaid.filter(r=>r.riscoDesc&&r.severity==='high').length} risco(s) alto(s)</div>
           </div>
           <div class="kpi">
             <div class="kpi-head"><div class="kpi-label">Bloqueios</div><div class="kpi-icon kpi-icon-amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div></div>
@@ -2061,17 +2100,17 @@ function renderDashboard(){
           <div class="widget-header">
             <h3 class="widget-title">
               <span class="icon-wrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L3 6v6c0 5 4 9 9 10 5-1 9-5 9-10V6l-9-4z"/><path d="M12 8v4"/><circle cx="12" cy="16" r=".5" fill="currentColor"/></svg></span>
-              Top 10 ${raidTooltipLabel('RAIDs')} abertos — maior nº de bloqueios (${openRaid.length} abertos)
+              Top 10 ${raidTooltipLabel('Iniciativas')} abertas — maior nº de bloqueios (${openRaid.length} abertas)
             </h3>
           </div>
           ${topPortfolioRisks.length ? `
           <div class="scroll-x">
             <table class="w-full text-xs">
-              <thead><tr><th>RAID</th><th>TIPO</th><th>DEAL</th><th>ÁREA</th><th>SEVERIDADE</th><th>OWNER</th><th class="text-center">BLOQUEIOS</th></tr></thead>
+              <thead><tr><th>INICIATIVA</th><th>ASPECTOS</th><th>DEAL</th><th>ÁREA</th><th>SEVERIDADE</th><th>OWNER</th><th class="text-center">BLOQUEIOS</th></tr></thead>
               <tbody>
                 ${topPortfolioRisks.map(r=>`<tr>
                   <td class="font-medium">${escapeHtml(r.title)}</td>
-                  <td>${RAID_TYPES.find(x=>x.id===r.type)?.label||r.type}</td>
+                  <td>${raidAspectBadges(r)}</td>
                   <td>${r.dealId?`<span class="deal-link" data-summary="${r.dealId}">${escapeHtml(r.deal)}</span>`:escapeHtml(r.deal)}</td>
                   <td>${r.area?`<span class="deal-link" data-area="${escapeHtml(r.area)}">${escapeHtml(r.area)}</span>`:''}</td>
                   <td><span style="color:${r.severity==='high'?'#dc2626':r.severity==='med'?'#d97706':'#3b82f6'};font-weight:600">${SEVERITIES.find(s=>s.id===r.severity)?.label||''}</span></td>
@@ -2756,8 +2795,8 @@ function openCompanySummary(companyId){
 
   const raid = deal.raid||[];
   const openRaid = raid.filter(r=>r.status!=='closed');
-  const topRisks = openRaid.filter(r=>r.type==='risk').sort((a,b)=>sevRank(b.severity)-sevRank(a.severity)).slice(0,3);
-  const openIssues = openRaid.filter(r=>r.type==='issue').length;
+  const topRisks = openRaid.filter(r=>r.riscoDesc).sort((a,b)=>sevRank(b.severity)-sevRank(a.severity)).slice(0,3);
+  const openIssues = openRaid.filter(r=>r.issueDesc).length;
 
   const syns = deal.synergies||[];
   const synPlan = syns.reduce((s,x)=>s+(Number(x.plannedValue)||0),0);
@@ -2839,7 +2878,7 @@ function openCompanySummary(companyId){
           <div class="kpi"><div class="kpi-label">On Track</div><div class="kpi-value" style="color:var(--bhub-blue)">${ontrack}</div></div>
           <div class="kpi"><div class="kpi-label">Atrasadas</div><div class="kpi-value" style="color:var(--bhub-red)">${late}</div></div>
           <div class="kpi"><div class="kpi-label">Bloqueios</div><div class="kpi-value" style="color:#92400e">${blocked}</div></div>
-          <div class="kpi"><div class="kpi-label">RAID abertos</div><div class="kpi-value">${openRaid.length}</div></div>
+          <div class="kpi"><div class="kpi-label">Iniciativas abertas</div><div class="kpi-value">${openRaid.length}</div></div>
           <div class="kpi"><div class="kpi-label">Sinergia</div><div class="kpi-value">${synPct}%</div></div>
         </div>
 
@@ -2924,7 +2963,7 @@ function openAreaSummary(areaName){
 
   const allRaid = state.companies.flatMap(c => (state.deals[c.id]?.raid||[]).filter(r=>r.area===areaName).map(r=>({...r, companyName:c.name, companyId:c.id})));
   const openRaid = allRaid.filter(r=>r.status!=='closed');
-  const topRisks = openRaid.filter(r=>r.type==='risk').sort((a,b)=>sevRank(b.severity)-sevRank(a.severity)).slice(0,5);
+  const topRisks = openRaid.filter(r=>r.riscoDesc).sort((a,b)=>sevRank(b.severity)-sevRank(a.severity)).slice(0,5);
 
   const allSyns = state.companies.flatMap(c => (state.deals[c.id]?.synergies||[]).filter(s=>s.area===areaName).map(s=>({...s, companyName:c.name, companyId:c.id})));
   const synPlan = allSyns.reduce((s,x)=>s+(Number(x.plannedValue)||0),0);
@@ -2967,7 +3006,7 @@ function openAreaSummary(areaName){
           <div class="kpi"><div class="kpi-label">On Track</div><div class="kpi-value" style="color:var(--bhub-blue)">${ontrack}</div></div>
           <div class="kpi"><div class="kpi-label">Atrasadas</div><div class="kpi-value" style="color:var(--bhub-red)">${late}</div></div>
           <div class="kpi"><div class="kpi-label">Bloqueios</div><div class="kpi-value" style="color:#92400e">${blocked}</div></div>
-          <div class="kpi"><div class="kpi-label">RAID abertos</div><div class="kpi-value">${openRaid.length}</div></div>
+          <div class="kpi"><div class="kpi-label">Iniciativas abertas</div><div class="kpi-value">${openRaid.length}</div></div>
           <div class="kpi"><div class="kpi-label">Sinergia</div><div class="kpi-value">${synPct}%</div></div>
         </div>
 
@@ -3119,7 +3158,7 @@ function openOwnerSummary(ownerName){
           <div class="kpi"><div class="kpi-label">On Track</div><div class="kpi-value" style="color:var(--bhub-blue)">${ontrack}</div></div>
           <div class="kpi"><div class="kpi-label">Atrasadas</div><div class="kpi-value" style="color:var(--bhub-red)">${late}</div></div>
           <div class="kpi"><div class="kpi-label">Bloqueios</div><div class="kpi-value" style="color:#92400e">${blocked}</div></div>
-          <div class="kpi"><div class="kpi-label">RAID abertos</div><div class="kpi-value">${openRaid.length}</div></div>
+          <div class="kpi"><div class="kpi-label">Iniciativas abertas</div><div class="kpi-value">${openRaid.length}</div></div>
         </div>
 
         <div class="grid lg:grid-cols-2 gap-5">
@@ -3146,8 +3185,8 @@ function openOwnerSummary(ownerName){
 
         ${openRaid.length ? `
         <section class="bhub-card p-4">
-          <div class="text-sm font-semibold mb-2" style="color:var(--bhub-navy)">🛡️ RAID abertos</div>
-          <ul class="space-y-1.5 text-xs">${openRaid.slice(0,8).map(r=>`<li class="flex items-start gap-2"><span class="pill" style="background:${r.severity==='high'?'#fee2e2':r.severity==='med'?'#fef3c7':'#dbeafe'};color:${r.severity==='high'?'#991b1b':r.severity==='med'?'#92400e':'#1e3a8a'}">${(r.type||'').toUpperCase()}/${(r.severity||'').toUpperCase()}</span><span><strong>${escapeHtml(r.title||'')}</strong> <span class="text-gray-500">— <span class="deal-link" data-summary="${r.companyId}">${escapeHtml(r.companyName)}</span>${r.area?` • <span class="deal-link" data-area="${escapeHtml(r.area)}">${escapeHtml(r.area)}</span>`:''}</span></span></li>`).join('')}</ul>
+          <div class="text-sm font-semibold mb-2" style="color:var(--bhub-navy)">🛡️ Iniciativas abertas</div>
+          <ul class="space-y-1.5 text-xs">${openRaid.slice(0,8).map(r=>`<li class="flex items-start gap-2">${raidAspectBadges(r)}<span><strong>${escapeHtml(r.title||'')}</strong> <span class="text-gray-500">— <span class="deal-link" data-summary="${r.companyId}">${escapeHtml(r.companyName)}</span>${r.area?` • <span class="deal-link" data-area="${escapeHtml(r.area)}">${escapeHtml(r.area)}</span>`:''}</span></span></li>`).join('')}</ul>
         </section>` : ''}
       </div>
     </div>
@@ -3296,7 +3335,7 @@ function openCompareDealsView(ids){
             <tr><td class="font-medium">Bloqueios</td>${deals.map((d,i)=>metricCell(deals.map(x=>x.blocked),i,false)).join('')}</tr>
             <tr><td class="font-medium">Sem owner</td>${deals.map((d,i)=>metricCell(deals.map(x=>x.noowner),i,false)).join('')}</tr>
             <tr><td class="font-medium">Próximas (≤10 d.u.)</td>${metrics.map((m_,i)=>metricCell(metrics.map(x=>x.upcoming10),i,false)).join('')}</tr>
-            <tr><td class="font-medium">RAID abertos</td>${metrics.map((m_,i)=>metricCell(metrics.map(x=>x.openRaid),i,false)).join('')}</tr>
+            <tr><td class="font-medium">Iniciativas abertas</td>${metrics.map((m_,i)=>metricCell(metrics.map(x=>x.openRaid),i,false)).join('')}</tr>
             <tr><td class="font-medium">Sinergia plano</td>${metrics.map((m_,i)=>`<td class="text-center">${fmtBRL(metrics[i].synPlan)}</td>`).join('')}</tr>
             <tr><td class="font-medium">Sinergia realizada</td>${metrics.map((m_,i)=>`<td class="text-center">${fmtBRL(metrics[i].synReal)}</td>`).join('')}</tr>
             <tr><td class="font-medium">% sinergia</td>${metrics.map((m_,i)=>metricCell(metrics.map(x=>x.synPct),i,true,'%')).join('')}</tr>
@@ -3358,7 +3397,7 @@ function renderDeal(){
   const subtabs = [
     ['tarefas',   ICN.tarefas   + 'Tarefas',    total],
     ['gantt',     ICN.gantt     + 'Gantt',      null],
-    ['raid',      ICN.raid      + raidTooltipLabel('RAID Log'),   openRaid],
+    ['raid',      ICN.raid      + raidTooltipLabel('Iniciativas'), openRaid],
     ['sinergias', ICN.sinergias + 'Sinergias',  (deal.synergies||[]).length],
     ['historico', ICN.historico + 'Histórico',  null],
     ['briefing',  ICN.briefing  + 'Briefing',   null],
@@ -3396,7 +3435,7 @@ function renderDeal(){
         <div class="mini-stat"><div class="lbl">Tasks Done</div><div class="val">${done}/${total}</div></div>
         <div class="mini-stat"><div class="lbl">Atrasadas</div><div class="val" style="color:var(--bhub-red)">${late}</div></div>
         <div class="mini-stat"><div class="lbl">Bloqueios</div><div class="val" style="color:#92400e">${blocked}</div></div>
-        <div class="mini-stat"><div class="lbl">RAID abertos</div><div class="val">${openRaid}</div></div>
+        <div class="mini-stat"><div class="lbl">Iniciativas abertas</div><div class="val">${openRaid}</div></div>
         <div class="mini-stat"><div class="lbl">Sinergia captura</div><div class="val">${synPct}%</div></div>
       </div>
 
@@ -3488,51 +3527,71 @@ function renderDealTasks(company, deal, tasks){
 /* ===== RAID Log ===== */
 function renderDealRaid(company, deal){
   const items = (deal.raid||[]).slice().sort((a,b)=> (a.status==='closed'?1:0)-(b.status==='closed'?1:0) || (sevRank(b.severity)-sevRank(a.severity)));
+  const open = items.filter(x=>x.status!=='closed');
+  const closed = items.filter(x=>x.status==='closed');
   const filter = view.raidFilter || 'all';
-  const filtered = filter==='all' ? items : items.filter(x=>x.type===filter);
-  const counts = RAID_TYPES.reduce((a,t)=>{a[t.id]=items.filter(x=>x.type===t.id && x.status!=='closed').length; return a;},{});
+  const aspectFilterMap = {risco:'riscoDesc', issue:'issueDesc', decisao:'decisaoDesc', premissa:'premissaDesc'};
+  const filtered = filter==='all' ? open
+    : filter==='closed' ? closed
+    : aspectFilterMap[filter] ? open.filter(x=>x[aspectFilterMap[filter]])
+    : open;
+  const kpiCards = [
+    {id:'risco',    icon:'⚠️', label:'Risco',    field:'riscoDesc'},
+    {id:'issue',    icon:'🔥', label:'Issue',    field:'issueDesc'},
+    {id:'decisao',  icon:'⚖️', label:'Decisão',  field:'decisaoDesc'},
+    {id:'premissa', icon:'💡', label:'Premissa', field:'premissaDesc'},
+  ];
+  const kpiCounts = Object.fromEntries(kpiCards.map(k=>[k.id, open.filter(x=>x[k.field]).length]));
+
   const node = el(`
     <div class="space-y-3">
       <div class="flex items-center justify-between flex-wrap gap-2">
         <div class="flex gap-1 flex-wrap">
-          <button class="btn ${filter==='all'?'btn-primary':'btn-secondary'}" data-rf="all">Todos (${items.filter(x=>x.status!=='closed').length})</button>
-          ${RAID_TYPES.map(t=>`<button class="btn ${filter===t.id?'btn-primary':'btn-secondary'}" data-rf="${t.id}">${t.icon} ${t.label} (${counts[t.id]})</button>`).join('')}
+          <button class="btn ${filter==='all'?'btn-primary':'btn-secondary'}" data-rf="all">Todos (${open.length})</button>
+          ${kpiCards.map(k=>`<button class="btn ${filter===k.id?'btn-primary':'btn-secondary'}" data-rf="${k.id}">${k.icon} ${k.label} (${kpiCounts[k.id]})</button>`).join('')}
+          <button class="btn ${filter==='closed'?'btn-primary':'btn-secondary'}" data-rf="closed">✓ Fechados (${closed.length})</button>
         </div>
-        ${canEdit() ? `<button id="addRaid" class="btn btn-primary">+ Item RAID</button>`:''}
+        ${canEdit() ? `<button id="addRaid" class="btn btn-primary">+ Nova Iniciativa</button>`:''}
       </div>
 
       ${filtered.length ? `
       <div class="bhub-card overflow-hidden">
         <div class="scroll-x">
           <table class="w-full">
-            <thead><tr><th>TIPO</th><th class="min-w-[16rem]">TÍTULO</th><th>ÁREA</th><th>SEVERIDADE</th><th>STATUS</th><th>OWNER</th><th>PRAZO</th><th class="min-w-[14rem]">MITIGAÇÃO / NOTA</th>${canEdit()?'<th></th>':''}</tr></thead>
-            <tbody>
-              ${filtered.map(r=>{
-                const t = RAID_TYPES.find(x=>x.id===r.type) || RAID_TYPES[0];
-                const sev = SEVERITIES.find(x=>x.id===r.severity);
-                const st  = RAID_STATUSES.find(x=>x.id===r.status);
-                return `<tr ${r.status==='closed'?'class="opacity-60"':''}>
-                  <td><span class="pill raid-${r.type}">${t.icon} ${t.label}</span></td>
-                  <td><div class="font-medium">${escapeHtml(r.title||'')}</div><div class="text-xs text-gray-500">${escapeHtml(r.description||'')}</div></td>
-                  <td class="text-xs">${r.area?`<span class="deal-link" data-area="${escapeHtml(r.area)}">${escapeHtml(r.area)}</span>`:''}</td>
-                  <td>${sev?`<span class="pill sev-${r.severity}">${sev.label}</span>`:''}</td>
-                  <td>${st?`<span class="pill">${st.label}</span>`:''}</td>
-                  <td class="text-xs">${r.owner?`<span class="deal-link" data-owner="${escapeHtml(r.owner)}">${escapeHtml(r.owner)}</span>`:''}</td>
-                  <td class="text-xs">${r.dueDate?fmtDate(parseDate(r.dueDate)):''}</td>
-                  <td class="text-xs">${escapeHtml(r.mitigation||'')}</td>
-                  ${canEdit()?`<td><button class="btn btn-secondary" data-raid-edit="${r.id}">✎</button></td>`:''}
-                </tr>`;
-              }).join('')}
-            </tbody>
+            <thead><tr><th class="min-w-[16rem]">TÍTULO</th><th>ASPECTOS</th><th>ÁREA</th><th>SEVERIDADE</th><th>STATUS</th><th>OWNER</th><th>PRAZO</th><th class="min-w-[14rem]">MITIGAÇÃO</th>${canEdit()?'<th></th>':''}</tr></thead>
+            <tbody id="dealRaidRows"></tbody>
           </table>
         </div>
-      </div>` : `<div class="bhub-card p-8 text-center text-gray-500 text-sm">Nenhum item no RAID Log${filter!=='all'?' deste tipo':''}. ${canEdit()?'Clique em "+ Item RAID" para começar.':''}</div>`}
+      </div>` : `<div class="bhub-card p-8 text-center text-gray-500 text-sm">Nenhuma Iniciativa${filter!=='all'?' deste aspecto':''}. ${canEdit()?'Clique em "+ Nova Iniciativa" para começar.':''}</div>`}
     </div>
   `);
+
+  const tbody = node.querySelector('#dealRaidRows');
+  if(tbody){
+    filtered.forEach(r=>{
+      const sev = SEVERITIES.find(x=>x.id===r.severity);
+      const st  = RAID_STATUSES.find(x=>x.id===r.status);
+      const tr = document.createElement('tr');
+      if(r.status==='closed') tr.className='opacity-60';
+      tr.innerHTML = '<td><div class="font-medium">'+escapeHtml(r.title||'')+'</div></td>'
+        +'<td>'+raidAspectBadges(r)+'</td>'
+        +'<td class="text-xs">'+(r.area?'<span class="deal-link" data-area="'+escapeHtml(r.area)+'">'+escapeHtml(r.area)+'</span>':'')+'</td>'
+        +'<td>'+(sev?'<span class="pill sev-'+r.severity+'">'+sev.label+'</span>':'')+'</td>'
+        +'<td>'+(st?'<span class="pill">'+st.label+'</span>':'')+'</td>'
+        +'<td class="text-xs">'+(r.owner?'<span class="deal-link" data-owner="'+escapeHtml(r.owner)+'">'+escapeHtml(r.owner)+'</span>':'')+'</td>'
+        +'<td class="text-xs">'+(r.dueDate?fmtDate(parseDate(r.dueDate)):'')+'</td>'
+        +'<td class="text-xs">'+escapeHtml(r.mitigation||'')+'</td>'
+        +(canEdit()?'<td><button class="btn btn-secondary" data-raid-edit="'+r.id+'">✎</button></td>':'');
+      tbody.appendChild(tr);
+    });
+    node.querySelectorAll('[data-raid-edit]').forEach(b=>b.onclick = ()=>openRaidModal(company, b.dataset.raidEdit));
+    node.querySelectorAll('[data-area]').forEach(b=>b.addEventListener('click',()=>{ view.tab='dashboard'; view.dashFilters={...view.dashFilters||{},areas:[b.dataset.area]}; render(); }));
+    node.querySelectorAll('[data-owner]').forEach(b=>b.addEventListener('click',()=>{ view.tab='dashboard'; view.dashFilters={...view.dashFilters||{},owners:[b.dataset.owner]}; render(); }));
+  }
+
   node.querySelectorAll('[data-rf]').forEach(b=>b.onclick = ()=>{ view.raidFilter=b.dataset.rf; render(); });
   const add = node.querySelector('#addRaid');
   if(add) add.onclick = ()=>openRaidModal(company);
-  node.querySelectorAll('[data-raid-edit]').forEach(b=>b.onclick = ()=>openRaidModal(company, b.dataset.raidEdit));
   return node;
 }
 /* sevRank, escapeHtml importados de js/pure.js */
@@ -3550,13 +3609,11 @@ function openRaidModal(company, raidId){
   const m = el(`
     <div class="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-20">
       <div class="bg-white rounded-2xl p-5 w-full max-w-2xl border border-[color:var(--bhub-border)]" style="box-shadow:0 24px 60px rgba(15,23,39,.25);max-height:90vh;overflow-y:auto">
-        <div class="text-lg font-bold mb-1" style="color:var(--bhub-navy)">${existing?'Editar item '+raidTooltipLabel('RAID'):'Novo item '+raidTooltipLabel('RAID')}</div>
-        <p class="text-xs text-gray-500 mb-3">Owner e prazo são obrigatórios. Um item RAID pode afetar múltiplos deals.</p>
+        <div class="text-lg font-bold mb-1" style="color:var(--bhub-navy)">${existing?'Editar '+raidTooltipLabel('Iniciativa'):'Nova '+raidTooltipLabel('Iniciativa')}</div>
+        <p class="text-xs text-gray-500 mb-3">Owner e prazo são obrigatórios. Uma Iniciativa pode afetar múltiplos deals.</p>
         <form id="raidForm" class="grid grid-cols-2 gap-3 text-sm">
-          <label class="block">Tipo *
-            <select name="type" required>
-              ${RAID_TYPES.map(t=>`<option value="${t.id}" ${(existing?.type||'risk')===t.id?'selected':''}>${t.icon} ${t.label}</option>`).join('')}
-            </select>
+          <label class="block col-span-2">Título *
+            <input name="title" required value="${escapeHtml(existing?.title||'')}" placeholder="Nome da iniciativa (ex: Inclusão no Cockpit)" />
           </label>
           <label class="block">Área
             <select name="area">
@@ -3564,20 +3621,9 @@ function openRaidModal(company, raidId){
               ${allAreas.map(a=>`<option value="${escapeHtml(a)}" ${existing?.area===a?'selected':''}>${escapeHtml(a)}</option>`).join('')}
             </select>
           </label>
-          <label class="block col-span-2">Título *
-            <input name="title" required value="${escapeHtml(existing?.title||'')}" placeholder="Descreva o risco, premissa, impedimento ou dependência" />
-          </label>
-          <label class="block col-span-2">Descrição
-            <textarea name="description" rows="2" placeholder="Contexto adicional...">${escapeHtml(existing?.description||'')}</textarea>
-          </label>
           <label class="block">Severidade
             <select name="severity">
               ${SEVERITIES.map(s=>`<option value="${s.id}" ${(existing?.severity||'med')===s.id?'selected':''}>${s.label}</option>`).join('')}
-            </select>
-          </label>
-          <label class="block">Status
-            <select name="status">
-              ${RAID_STATUSES.map(s=>`<option value="${s.id}" ${(existing?.status||'open')===s.id?'selected':''}>${s.label}</option>`).join('')}
             </select>
           </label>
           <label class="block">Owner *
@@ -3586,7 +3632,29 @@ function openRaidModal(company, raidId){
           <label class="block">Prazo *
             <input name="dueDate" type="date" required value="${existing?.dueDate?toIso(parseDate(existing.dueDate)):''}" />
           </label>
-          <label class="block col-span-2">Mitigação / Plano de ação
+          <label class="block">Status
+            <select name="status">
+              ${RAID_STATUSES.map(s=>`<option value="${s.id}" ${(existing?.status||'open')===s.id?'selected':''}>${s.label}</option>`).join('')}
+            </select>
+          </label>
+          <div class="col-span-2 mt-1">
+            <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Aspectos RAID — preencha os que se aplicam</div>
+            <div class="space-y-2">
+              <label class="block">⚠️ <b>Risco</b> — evento que pode acontecer e impactar
+                <textarea name="riscoDesc" rows="2" placeholder="Descreva o risco...">${escapeHtml(existing?.riscoDesc||'')}</textarea>
+              </label>
+              <label class="block">🔥 <b>Issue</b> — problema que já está bloqueando
+                <textarea name="issueDesc" rows="2" placeholder="O que está bloqueando agora...">${escapeHtml(existing?.issueDesc||'')}</textarea>
+              </label>
+              <label class="block">⚖️ <b>Decisão</b> — o que precisamos decidir / dependemos de terceiros
+                <textarea name="decisaoDesc" rows="2" placeholder="Qual decisão precisa ser tomada...">${escapeHtml(existing?.decisaoDesc||'')}</textarea>
+              </label>
+              <label class="block">💡 <b>Premissa</b> — o que estamos assumindo como verdadeiro
+                <textarea name="premissaDesc" rows="2" placeholder="Qual premissa estamos adotando...">${escapeHtml(existing?.premissaDesc||'')}</textarea>
+              </label>
+            </div>
+          </div>
+          <label class="block col-span-2">🛡️ Mitigação / Plano de ação
             <textarea name="mitigation" rows="2" placeholder="Qual o plano para resolver ou mitigar?">${escapeHtml(existing?.mitigation||'')}</textarea>
           </label>
           <label class="block col-span-2">Deals afetados *
@@ -3622,7 +3690,7 @@ function openRaidModal(company, raidId){
 
   const delBtn = m.querySelector('#del');
   if(delBtn) delBtn.onclick = async ()=>{
-    if(!confirm('Excluir este item RAID? Isso removerá o vínculo com todos os deals.')) return;
+    if(!confirm('Excluir esta Iniciativa? Isso removerá o vínculo com todos os deals.')) return;
     try{
       const { error } = await supa.from('raid_items').delete().eq('id', raidId);
       if(error) throw error;
@@ -3641,8 +3709,12 @@ function openRaidModal(company, raidId){
     if(!fd.get('dueDate')) return showErr('Prazo é obrigatório.');
     if(selectedDeals.length === 0) return showErr('Selecione ao menos um deal afetado.');
     const payload = {
-      type: fd.get('type'), area: fd.get('area')||'',
-      title: fd.get('title')||'', description: fd.get('description')||'',
+      area: fd.get('area')||'',
+      title: fd.get('title')||'',
+      riscoDesc:   fd.get('riscoDesc')||'',
+      issueDesc:   fd.get('issueDesc')||'',
+      decisaoDesc: fd.get('decisaoDesc')||'',
+      premissaDesc:fd.get('premissaDesc')||'',
       severity: fd.get('severity')||'med', status: fd.get('status')||'open',
       owner: fd.get('owner')||'', dueDate: fd.get('dueDate')||'',
       mitigation: fd.get('mitigation')||'',
@@ -4249,8 +4321,8 @@ function renderDealBriefing(company, deal, tasks){
   const late = tasks.filter(t=>t._f.status==='late').length;
   const pct = total?Math.round(done/total*100):0;
   const raid = (deal.raid||[]).filter(r=>r.status!=='closed').sort((a,b)=>sevRank(b.severity)-sevRank(a.severity));
-  const topRisks = raid.filter(r=>r.type==='risk').slice(0,5);
-  const topIssues = raid.filter(r=>r.type==='issue').slice(0,5);
+  const topRisks = raid.filter(r=>r.riscoDesc).slice(0,5);
+  const topIssues = raid.filter(r=>r.issueDesc).slice(0,5);
   const syns = deal.synergies||[];
   const synPlan = syns.reduce((s,x)=>s+(Number(x.plannedValue)||0),0);
   const synReal = syns.reduce((s,x)=>s+(Number(x.realizedValue)||0),0);
@@ -4330,12 +4402,12 @@ function renderDealBriefing(company, deal, tasks){
 
         <div class="grid md:grid-cols-2 gap-4 mb-5">
           <div>
-            <div class="text-sm font-semibold mb-2" style="color:var(--bhub-navy);font-family:'Roboto'">⚠️ Top 5 Riscos</div>
-            ${topRisks.length ? `<ul class="text-xs space-y-1">${topRisks.map(r=>`<li class="border-l-2 pl-2" style="border-color:#f97316"><span class="font-semibold">[${SEVERITIES.find(s=>s.id===r.severity)?.label||''}]</span> ${escapeHtml(r.title)}</li>`).join('')}</ul>` : '<div class="text-xs text-gray-500">Nenhum risco aberto.</div>'}
+            <div class="text-sm font-semibold mb-2" style="color:var(--bhub-navy);font-family:'Roboto'">⚠️ Iniciativas com Risco</div>
+            ${topRisks.length ? `<ul class="text-xs space-y-1">${topRisks.map(r=>`<li class="border-l-2 pl-2" style="border-color:#f97316"><span class="font-semibold">[${SEVERITIES.find(s=>s.id===r.severity)?.label||''}]</span> ${escapeHtml(r.title)} — <span class="text-gray-500">${escapeHtml(r.riscoDesc||'').slice(0,80)}</span></li>`).join('')}</ul>` : '<div class="text-xs text-gray-500">Nenhum risco aberto.</div>'}
           </div>
           <div>
-            <div class="text-sm font-semibold mb-2" style="color:var(--bhub-navy);font-family:'Roboto'">🔥 Top 5 Issues</div>
-            ${topIssues.length ? `<ul class="text-xs space-y-1">${topIssues.map(r=>`<li class="border-l-2 pl-2" style="border-color:#ef4444"><span class="font-semibold">[${SEVERITIES.find(s=>s.id===r.severity)?.label||''}]</span> ${escapeHtml(r.title)}</li>`).join('')}</ul>` : '<div class="text-xs text-gray-500">Nenhum issue aberto.</div>'}
+            <div class="text-sm font-semibold mb-2" style="color:var(--bhub-navy);font-family:'Roboto'">🔥 Iniciativas com Issue</div>
+            ${topIssues.length ? `<ul class="text-xs space-y-1">${topIssues.map(r=>`<li class="border-l-2 pl-2" style="border-color:#ef4444"><span class="font-semibold">[${SEVERITIES.find(s=>s.id===r.severity)?.label||''}]</span> ${escapeHtml(r.title)} — <span class="text-gray-500">${escapeHtml(r.issueDesc||'').slice(0,80)}</span></li>`).join('')}</ul>` : '<div class="text-xs text-gray-500">Nenhum issue aberto.</div>'}
           </div>
         </div>
 
@@ -4539,13 +4611,13 @@ function openTaskModal(company, taskId){
           <select name="bloqueio" id="bloqueioSel"><option ${t.bloqueio!=='Sim'?'selected':''}>Não</option><option ${t.bloqueio==='Sim'?'selected':''}>Sim</option></select>
         </div>
         <div id="raidPickerWrap" class="${t.bloqueio==='Sim'?'':'hidden'} col-span-2">
-          <label class="text-xs font-medium">RAID associado ao bloqueio *
+          <label class="text-xs font-medium">Iniciativa associada ao bloqueio *
             <select name="raidId" id="raidIdSel">
-              <option value="">— Selecione ou crie um RAID —</option>
-              ${state.raid.filter(r=>r.status!=='closed').map(r=>`<option value="${r.id}" ${t.raidId===r.id?'selected':''}>[${(RAID_TYPES.find(x=>x.id===r.type)||{label:'?'}).label}] ${escapeHtml(r.title)}</option>`).join('')}
+              <option value="">— Selecione ou crie uma Iniciativa —</option>
+              ${state.raid.filter(r=>r.status!=='closed').map(r=>`<option value="${r.id}" ${t.raidId===r.id?'selected':''}>${escapeHtml(r.title)}</option>`).join('')}
             </select>
           </label>
-          <button type="button" id="createRaidInline" class="btn btn-secondary mt-1" style="font-size:.72rem;padding:.25rem .6rem">+ Criar novo RAID para este bloqueio</button>
+          <button type="button" id="createRaidInline" class="btn btn-secondary mt-1" style="font-size:.72rem;padding:.25rem .6rem">+ Nova Iniciativa para este bloqueio</button>
         </div>
         <div class="col-span-2"><label class="text-xs font-medium">Fase (auto se vazio)</label>
           <select name="phaseId">
@@ -5249,7 +5321,7 @@ function renderHoje(){
     .sort((a,b) => (b._f.diasAtraso||0) - (a._f.diasAtraso||0));
 
   const decisions = allRaid
-    .filter(r => r.type==='decision' && r.status==='open')
+    .filter(r => r.decisaoDesc && r.status==='open')
     .sort((a,b) => (b.severity==='high'?2:b.severity==='med'?1:0) - (a.severity==='high'?2:a.severity==='med'?1:0));
 
   const myUpcoming = allTasks
