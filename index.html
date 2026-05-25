@@ -136,6 +136,14 @@
   .sev-high{background:#fee2e2;color:#991b1b}
   .sev-med{background:#fef3c7;color:#92400e}
   .sev-low{background:#dbeafe;color:#1e40af}
+  /* RAID acronym tooltip */
+  .raid-tip{display:inline-flex;align-items:center;gap:.25rem;cursor:help;position:relative}
+  .raid-tip-icon{width:13px;height:13px;border-radius:50%;background:rgba(1,113,228,.15);color:var(--bhub-blue);font-size:.6rem;font-weight:700;display:inline-flex;align-items:center;justify-content:center;line-height:1;flex-shrink:0}
+  .raid-tip:hover .raid-tip-box{display:block}
+  .raid-tip-box{display:none;position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:#1e2d45;color:#fff;border-radius:.5rem;padding:.6rem .8rem;font-size:.72rem;line-height:1.6;white-space:nowrap;z-index:200;box-shadow:0 4px 16px rgba(0,0,0,.3);pointer-events:none;min-width:220px}
+  .raid-tip-box::after{content:'';position:absolute;top:100%;left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:#1e2d45}
+  .raid-tip-box b{color:#60a5fa}
+
   /* RAID type chips */
   .raid-risk{background:#fff7ed;color:#9a3412;border:1px solid #fed7aa}
   .raid-issue{background:#fee2e2;color:#991b1b;border:1px solid #fecaca}
@@ -549,7 +557,12 @@ const BHUB_LOGO_ICON = `<svg viewBox="0 0 40 40" fill="currentColor" xmlns="http
 /* ---------- State ---------- */
 let state = defaultState();
 let session = null; // { id, email, username, role }
-let view = { tab:'dashboard', dealId:null, dealTab:'tarefas', executiveArea:'todas', raidFilter:'all', synergyFilter:'all', dashFilters:{deals:[],areas:[],owners:[]}, empresasSearch:'', empresasSortCol:'date', empresasSortDir:'desc', sidebarCollapsed:false, executivaDealSearch:'', execPdfDeals:null };
+let view = { tab:'dashboard', dealId:null, dealTab:'tarefas', executiveArea:'todas', raidFilter:'all', raidPortfolioFilter:'all', synergyFilter:'all', dashFilters:{deals:[],areas:[],owners:[]}, empresasSearch:'', empresasSortCol:'date', empresasSortDir:'desc', sidebarCollapsed:false, executivaDealSearch:'', execPdfDeals:null };
+
+// Tooltip explicativo do acrônimo RAID
+function raidTooltipLabel(text){
+  return `<span class="raid-tip">${text}<span class="raid-tip-icon">?</span><span class="raid-tip-box"><b>R</b> Risco — evento que pode acontecer e impactar<br><b>A</b> Premissa — o que estamos assumindo como verdadeiro<br><b>I</b> Impedimento — problema que já está bloqueando<br><b>D</b> Dependência — o que precisamos de terceiros</span></span>`;
+}
 
 function defaultState(){
   return {
@@ -557,6 +570,7 @@ function defaultState(){
     companies: [],
     template: [],
     deals: {},       // { [companyId]: { tasks, raid, synergies, health } }
+    raid: [],        // global portfolio-level RAID items (each has dealIds:[])
     settings: { initialized:false },
     deletionRequests: []  // pending task deletion requests
   };
@@ -588,7 +602,8 @@ function taskFromDb(r){
     proximoPasso: r.proximo_passo||'',
     bloqueio: r.bloqueio || 'Não',
     bloqueioDescricao: r.bloqueio_descricao||'',
-    phaseId: r.phase_id || ''
+    phaseId: r.phase_id || '',
+    raidId: r.raid_id || null
   };
 }
 function taskToDb(t, companyId){
@@ -604,7 +619,8 @@ function taskToDb(t, companyId){
     proximo_passo: t.proximoPasso||'',
     bloqueio: t.bloqueio || 'Não',
     bloqueio_descricao: t.bloqueioDescricao||'',
-    phase_id: nullIfEmpty(t.phaseId)
+    phase_id: nullIfEmpty(t.phaseId),
+    raid_id: t.raidId || null
   };
 }
 
@@ -614,12 +630,13 @@ function raidFromDb(r){
     title: r.title||'', description: r.description||'',
     severity: r.severity||'med', status: r.status||'open',
     owner: r.owner||'', dueDate: r.due_date||'', mitigation: r.mitigation||'',
-    createdAt: r.created_at
+    createdAt: r.created_at,
+    dealIds: []  // populated after loading raid_deal_links
   };
 }
-function raidToDb(r, companyId){
+function raidToDb(r){
   return {
-    company_id: companyId, type: r.type, area: r.area||'',
+    type: r.type, area: r.area||'',
     title: r.title||'', description: r.description||'',
     severity: r.severity||'med', status: r.status||'open',
     owner: r.owner||'', due_date: emptyDate(r.dueDate), mitigation: r.mitigation||''
@@ -811,12 +828,13 @@ async function fetchAll(makeBuilder){
 }
 async function reloadState(){
   if(!session){ state = defaultState(); return; }
-  const [profiles, companies, template, tasks, raid, syn, health, delReqs] = await Promise.all([
+  const [profiles, companies, template, tasks, raid, raidLinks, syn, health, delReqs] = await Promise.all([
     supa.from('profiles').select('id,username,role').order('username',{nullsFirst:false}),
     supa.from('companies').select('*').order('name'),
     fetchAll(() => supa.from('template_tasks').select('*').order('ordering').order('ref')),
     fetchAll(() => supa.from('tasks').select('*')),
     fetchAll(() => supa.from('raid_items').select('*')),
+    supa.from('raid_deal_links').select('*'),
     fetchAll(() => supa.from('synergies').select('*')),
     fetchAll(() => supa.from('health_entries').select('*')),
     session.role === 'admin'
@@ -828,6 +846,18 @@ async function reloadState(){
 
   state = defaultState();
   state.users = (profiles.data||[]).map(p => ({ id: p.id, username: p.username || '(sem nome)', role: p.role || 'leitor' }));
+
+  // Build global RAID portfolio with dealIds from links
+  const linksByRaid = {};
+  for(const l of (raidLinks.data||[])){
+    if(!linksByRaid[l.raid_id]) linksByRaid[l.raid_id] = [];
+    linksByRaid[l.raid_id].push(l.company_id);
+  }
+  state.raid = (raid.data||[]).map(r => {
+    const item = raidFromDb(r);
+    item.dealIds = linksByRaid[r.id] || (r.company_id ? [r.company_id] : []);
+    return item;
+  });
   state.deletionRequests = (delReqs.data||[]);
   state.companies = (companies.data||[]).map(companyFromDb)
     .sort((a,b)=>{
@@ -845,9 +875,11 @@ async function reloadState(){
     if(!state.deals[r.company_id]) state.deals[r.company_id] = { tasks:[], raid:[], synergies:[], health:[] };
     state.deals[r.company_id].tasks.push(taskFromDb(r));
   }
-  for(const r of (raid.data||[])){
-    if(!state.deals[r.company_id]) continue;
-    state.deals[r.company_id].raid.push(raidFromDb(r));
+  // Populate per-deal raid arrays from global state.raid (filtered by dealIds)
+  for(const r of state.raid){
+    for(const cid of r.dealIds){
+      if(state.deals[cid]) state.deals[cid].raid.push(r);
+    }
   }
   for(const r of (syn.data||[])){
     if(!state.deals[r.company_id]) continue;
@@ -1389,6 +1421,7 @@ function renderShell(){
   else if(view.tab==='dashboard') content.appendChild(renderDashboard());
   else if(view.tab==='executiva') content.appendChild(renderExecutiva());
   else if(view.tab==='empresas') content.appendChild(renderEmpresas());
+  else if(view.tab==='raid') content.appendChild(renderRaidPortfolio());
   else if(view.tab==='template') content.appendChild(renderTemplate());
   else if(view.tab==='deal') content.appendChild(renderDeal());
   else if(view.tab==='usuarios') content.appendChild(renderUsuarios());
@@ -1407,10 +1440,11 @@ function renderShell(){
 
 function renderSidebar(){
   const portfolioTabs = [
-    ['dashboard','Dashboard',     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>'],
-    ['hoje',     'Visão Usuário',   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L13.09 8.26L19 7L15.45 12L19 17L13.09 15.74L12 22L10.91 15.74L5 17L8.55 12L5 7L10.91 8.26L12 2Z"/></svg>'],
+    ['dashboard','Dashboard',      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>'],
+    ['hoje',     'Visão Usuário',  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L13.09 8.26L19 7L15.45 12L19 17L13.09 15.74L12 22L10.91 15.74L5 17L8.55 12L5 7L10.91 8.26L12 2Z"/></svg>'],
     ['executiva','Visão Executiva','<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l3-3 4 4 5-7"/></svg>'],
-    ['empresas', 'Deals',         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="8" height="14" rx="1"/><rect x="13" y="3" width="8" height="17" rx="1"/><line x1="6" y1="10" x2="8" y2="10"/><line x1="6" y1="14" x2="8" y2="14"/><line x1="16" y1="7" x2="18" y2="7"/><line x1="16" y1="11" x2="18" y2="11"/><line x1="16" y1="15" x2="18" y2="15"/></svg>'],
+    ['empresas', 'Deals',          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="8" height="14" rx="1"/><rect x="13" y="3" width="8" height="17" rx="1"/><line x1="6" y1="10" x2="8" y2="10"/><line x1="6" y1="14" x2="8" y2="14"/><line x1="16" y1="7" x2="18" y2="7"/><line x1="16" y1="11" x2="18" y2="11"/><line x1="16" y1="15" x2="18" y2="15"/></svg>'],
+    ['raid',     'RAID Portfolio', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L3 6v6c0 5 4 9 9 10 5-1 9-5 9-10V6l-9-4z"/><path d="M12 8v4"/><circle cx="12" cy="16" r=".5" fill="currentColor"/></svg>'],
   ];
   const configTabs = [
     ['template', 'Template',  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="13" y2="16"/></svg>'],
@@ -1674,6 +1708,106 @@ function dashFiltersActive(){
 }
 
 // Helpers para tabelas expansíveis do dashboard (evita template literals aninhados)
+/* ===== RAID Portfolio Page ===== */
+function renderRaidPortfolio(){
+  const filter = view.raidPortfolioFilter || 'all';
+  const allItems = state.raid.slice().sort((a,b)=>(a.status==='closed'?1:0)-(b.status==='closed'?1:0)||sevRank(b.severity)-sevRank(a.severity));
+  const filtered = filter==='all' ? allItems : filter==='closed' ? allItems.filter(x=>x.status==='closed') : allItems.filter(x=>x.type===filter && x.status!=='closed');
+  const open = allItems.filter(x=>x.status!=='closed');
+  const counts = RAID_TYPES.reduce((a,t)=>{a[t.id]=open.filter(x=>x.type===t.id).length; return a;},{});
+
+  const node = el(`
+    <div class="space-y-5">
+      <div class="page-header">
+        <div>
+          <h1>${raidTooltipLabel('RAID')} Portfolio</h1>
+          <p class="subtitle">Riscos, Premissas, Impedimentos e Dependências — visão consolidada de todos os deals</p>
+        </div>
+        ${canEdit()?`<button id="addRaidGlobal" class="btn btn-primary">+ Novo item RAID</button>`:''}
+      </div>
+
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        ${RAID_TYPES.map(t=>`
+          <div class="bhub-card p-3 text-center cursor-pointer hover:border-blue-400 transition-colors" data-rf="${t.id}">
+            <div class="text-2xl mb-1">${t.icon}</div>
+            <div class="text-xl font-bold" style="color:var(--bhub-navy)">${counts[t.id]}</div>
+            <div class="text-xs font-semibold text-gray-600">${t.label}</div>
+            <div class="text-[10px] text-gray-400">${t.id==='risk'?'Podem acontecer':t.id==='assumption'?'Estamos assumindo':t.id==='issue'?'Já estão bloqueando':'Dependemos de terceiros'}</div>
+          </div>`).join('')}
+      </div>
+
+      <div class="flex items-center gap-2 flex-wrap">
+        <button class="btn ${filter==='all'?'btn-primary':'btn-secondary'}" data-rf="all">Todos abertos (${open.length})</button>
+        ${RAID_TYPES.map(t=>`<button class="btn ${filter===t.id?'btn-primary':'btn-secondary'}" data-rf="${t.id}">${t.icon} ${t.label} (${counts[t.id]})</button>`).join('')}
+        <button class="btn ${filter==='closed'?'btn-primary':'btn-secondary'}" data-rf="closed">✓ Fechados (${allItems.filter(x=>x.status==='closed').length})</button>
+      </div>
+
+      ${filtered.length ? `
+      <div class="bhub-card overflow-hidden">
+        <div class="scroll-x">
+          <table class="w-full text-sm">
+            <thead><tr>
+              <th>TIPO</th>
+              <th class="min-w-[18rem]">TÍTULO / DESCRIÇÃO</th>
+              <th>DEALS AFETADOS</th>
+              <th>ÁREA</th>
+              <th>SEVERIDADE</th>
+              <th>STATUS</th>
+              <th>OWNER</th>
+              <th>PRAZO</th>
+              <th>BLOQUEIOS</th>
+              ${canEdit()?'<th></th>':''}
+            </tr></thead>
+            <tbody id="raidRows"></tbody>
+          </table>
+        </div>
+      </div>` : `
+      <div class="bhub-card p-10 text-center text-gray-400">
+        <div style="font-size:2rem;margin-bottom:.5rem">🛡</div>
+        <div class="font-medium">Nenhum item ${filter==='all'?'':RAID_TYPES.find(t=>t.id===filter)?.label||''} aberto</div>
+        ${canEdit()?'<div class="text-xs mt-1">Clique em "+ Novo item RAID" para começar.</div>':''}
+      </div>`}
+    </div>
+  `);
+
+  // Populate rows (avoids nested template literals)
+  const tbody = node.querySelector('#raidRows');
+  if(tbody){
+    filtered.forEach(r=>{
+      const t = RAID_TYPES.find(x=>x.id===r.type)||RAID_TYPES[0];
+      const sev = SEVERITIES.find(x=>x.id===r.severity);
+      const st  = RAID_STATUSES.find(x=>x.id===r.status);
+      const dealNames = (r.dealIds||[]).map(id=>{ const c=state.companies.find(x=>x.id===id); return c?`<span class="deal-link text-xs" data-summary="${id}">${escapeHtml(c.name)}</span>`:'' }).filter(Boolean).join(', ');
+      const blockCount = (r.dealIds||[]).reduce((n,cid)=>{
+        const tasks = state.deals[cid]?.tasks||[];
+        return n + tasks.filter(t=>t.bloqueio==='Sim' && t.raidId===r.id).length;
+      },0);
+      const tr = document.createElement('tr');
+      if(r.status==='closed') tr.className='opacity-50';
+      tr.innerHTML = '<td><span class="pill raid-'+r.type+'">'+t.icon+' '+t.label+'</span></td>'
+        +'<td><div class="font-medium">'+escapeHtml(r.title||'')+'</div><div class="text-xs text-gray-500">'+escapeHtml(r.description||'')+'</div></td>'
+        +'<td class="text-xs">'+( dealNames||'<span class="text-gray-400">—</span>' )+'</td>'
+        +'<td class="text-xs">'+(r.area?'<span class="deal-link" data-area="'+escapeHtml(r.area)+'">'+escapeHtml(r.area)+'</span>':'')+'</td>'
+        +'<td>'+(sev?'<span class="pill sev-'+r.severity+'">'+sev.label+'</span>':'')+'</td>'
+        +'<td>'+(st?'<span class="pill">'+st.label+'</span>':'')+'</td>'
+        +'<td class="text-xs">'+(r.owner?'<span class="deal-link" data-owner="'+escapeHtml(r.owner)+'">'+escapeHtml(r.owner)+'</span>':'<span class="text-red-500 font-semibold">sem owner</span>')+'</td>'
+        +'<td class="text-xs">'+(r.dueDate?fmtDate(parseDate(r.dueDate)):'<span class="text-red-500 font-semibold">sem prazo</span>')+'</td>'
+        +'<td class="text-center">'+(blockCount>0?'<span style="background:#fee2e2;color:#991b1b;padding:.1rem .45rem;border-radius:9999px;font-weight:700;font-size:.75rem">'+blockCount+'</span>':'<span class="text-gray-400 text-xs">0</span>')+'</td>'
+        +(canEdit()?'<td><button class="btn btn-secondary" data-raid-edit="'+r.id+'">✎</button></td>':'');
+      tbody.appendChild(tr);
+    });
+    node.querySelectorAll('[data-raid-edit]').forEach(b=>b.onclick=()=>openRaidModal(null, b.dataset.raidEdit));
+  }
+
+  node.querySelectorAll('[data-rf]').forEach(b=>b.addEventListener('click',()=>{ view.raidPortfolioFilter=b.dataset.rf; render(); }));
+  const addBtn = node.querySelector('#addRaidGlobal');
+  if(addBtn) addBtn.onclick = ()=>openRaidModal(null);
+  node.querySelectorAll('[data-summary]').forEach(b=>b.addEventListener('click',()=>{ view.tab='deal'; view.dealId=b.dataset.summary; render(); }));
+  node.querySelectorAll('[data-area]').forEach(b=>b.addEventListener('click',()=>{ view.tab='dashboard'; view.dashFilters={...view.dashFilters||{},areas:[b.dataset.area]}; render(); }));
+  node.querySelectorAll('[data-owner]').forEach(b=>b.addEventListener('click',()=>{ view.tab='dashboard'; view.dashFilters={...view.dashFilters||{},owners:[b.dataset.owner]}; render(); }));
+  return node;
+}
+
 function dealLink(id, name){ return id ? '<span class="deal-link" data-summary="'+id+'">'+escapeHtml(name)+'</span>' : escapeHtml(name||''); }
 function areaLink(a){ return a ? '<span class="deal-link" data-area="'+escapeHtml(a)+'">'+escapeHtml(a)+'</span>' : ''; }
 function ownerLink(o){ return o ? '<span class="deal-link" data-owner="'+escapeHtml(o)+'">'+escapeHtml(o)+'</span>' : ''; }
@@ -1713,12 +1847,16 @@ function renderDashboard(){
   const f = view.dashFilters || {deals:[],areas:[],owners:[]};
 
   // Portfolio RAID / Synergies / Health aggregates
-  const allRaid = state.companies.flatMap(c => (state.deals[c.id]?.raid||[]).map(r=>({...r, deal:c.name, dealId:c.id})));
+  const allRaid = state.raid.map(r => {
+    const firstDealId = r.dealIds[0];
+    const dealName = firstDealId ? (state.companies.find(c=>c.id===firstDealId)?.name||'') : '';
+    return {...r, deal: dealName, dealId: firstDealId||null};
+  });
   const openRaid = allRaid.filter(r=>r.status!=='closed');
   // Top 10 RAIDs abertos por nº de bloqueios na mesma área/deal
   const topPortfolioRisks = openRaid.map(r => {
-    const dealTasks = state.deals[r.dealId]?.tasks || [];
-    const blockCount = dealTasks.filter(t => t.bloqueio==='Sim' && (!r.area || t.area===r.area)).length;
+    const allDealTasks = (r.dealIds||[]).flatMap(did => state.deals[did]?.tasks||[]);
+    const blockCount = allDealTasks.filter(t => t.bloqueio==='Sim' && t.raidId===r.id).length;
     return {...r, blockCount};
   }).sort((a,b) => b.blockCount - a.blockCount || sevRank(b.severity) - sevRank(a.severity)).slice(0,10);
   const allSyns = state.companies.flatMap(c => (state.deals[c.id]?.synergies||[]));
@@ -1923,7 +2061,7 @@ function renderDashboard(){
           <div class="widget-header">
             <h3 class="widget-title">
               <span class="icon-wrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L3 6v6c0 5 4 9 9 10 5-1 9-5 9-10V6l-9-4z"/><path d="M12 8v4"/><circle cx="12" cy="16" r=".5" fill="currentColor"/></svg></span>
-              Top 10 RAIDs abertos — maior nº de bloqueios (${openRaid.length} abertos)
+              Top 10 ${raidTooltipLabel('RAIDs')} abertos — maior nº de bloqueios (${openRaid.length} abertos)
             </h3>
           </div>
           ${topPortfolioRisks.length ? `
@@ -3220,7 +3358,7 @@ function renderDeal(){
   const subtabs = [
     ['tarefas',   ICN.tarefas   + 'Tarefas',    total],
     ['gantt',     ICN.gantt     + 'Gantt',      null],
-    ['raid',      ICN.raid      + 'RAID Log',   openRaid],
+    ['raid',      ICN.raid      + raidTooltipLabel('RAID Log'),   openRaid],
     ['sinergias', ICN.sinergias + 'Sinergias',  (deal.synergies||[]).length],
     ['historico', ICN.historico + 'Histórico',  null],
     ['briefing',  ICN.briefing  + 'Briefing',   null],
@@ -3399,22 +3537,25 @@ function renderDealRaid(company, deal){
 }
 /* sevRank, escapeHtml importados de js/pure.js */
 
+// company = deal context (optional, pre-selects that deal); raidId = editing existing
 function openRaidModal(company, raidId){
-  const deal = dealOf(company.id);
-  const existing = raidId ? deal.raid.find(r=>r.id===raidId) : null;
+  const existing = raidId ? state.raid.find(r=>r.id===raidId) : null;
   const allAreas = Array.from(new Set([
     ...DEFAULT_AREAS.map(a=>a.name),
     ...state.template.map(t=>t.area),
-    ...deal.tasks.map(t=>t.area),
+    ...Object.values(state.deals).flatMap(d=>d.tasks.map(t=>t.area))
   ].filter(Boolean)));
+  const preSelectedDeals = existing ? existing.dealIds : (company ? [company.id] : []);
+
   const m = el(`
     <div class="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-20">
-      <div class="bg-white rounded-2xl p-5 w-full max-w-2xl border border-[color:var(--bhub-border)]" style="box-shadow:0 24px 60px rgba(15,23,39,.25)">
-        <div class="text-lg font-bold mb-3" style="color:var(--bhub-navy)">${existing?'Editar item RAID':'Novo item RAID'}</div>
+      <div class="bg-white rounded-2xl p-5 w-full max-w-2xl border border-[color:var(--bhub-border)]" style="box-shadow:0 24px 60px rgba(15,23,39,.25);max-height:90vh;overflow-y:auto">
+        <div class="text-lg font-bold mb-1" style="color:var(--bhub-navy)">${existing?'Editar item '+raidTooltipLabel('RAID'):'Novo item '+raidTooltipLabel('RAID')}</div>
+        <p class="text-xs text-gray-500 mb-3">Owner e prazo são obrigatórios. Um item RAID pode afetar múltiplos deals.</p>
         <form id="raidForm" class="grid grid-cols-2 gap-3 text-sm">
-          <label class="block">Tipo
+          <label class="block">Tipo *
             <select name="type" required>
-              ${RAID_TYPES.map(t=>`<option value="${t.id}" ${existing?.type===t.id?'selected':''}>${t.icon} ${t.label}</option>`).join('')}
+              ${RAID_TYPES.map(t=>`<option value="${t.id}" ${(existing?.type||'risk')===t.id?'selected':''}>${t.icon} ${t.label}</option>`).join('')}
             </select>
           </label>
           <label class="block">Área
@@ -3423,11 +3564,11 @@ function openRaidModal(company, raidId){
               ${allAreas.map(a=>`<option value="${escapeHtml(a)}" ${existing?.area===a?'selected':''}>${escapeHtml(a)}</option>`).join('')}
             </select>
           </label>
-          <label class="block col-span-2">Título
-            <input name="title" required value="${escapeHtml(existing?.title||'')}" />
+          <label class="block col-span-2">Título *
+            <input name="title" required value="${escapeHtml(existing?.title||'')}" placeholder="Descreva o risco, premissa, impedimento ou dependência" />
           </label>
           <label class="block col-span-2">Descrição
-            <textarea name="description" rows="2">${escapeHtml(existing?.description||'')}</textarea>
+            <textarea name="description" rows="2" placeholder="Contexto adicional...">${escapeHtml(existing?.description||'')}</textarea>
           </label>
           <label class="block">Severidade
             <select name="severity">
@@ -3439,15 +3580,26 @@ function openRaidModal(company, raidId){
               ${RAID_STATUSES.map(s=>`<option value="${s.id}" ${(existing?.status||'open')===s.id?'selected':''}>${s.label}</option>`).join('')}
             </select>
           </label>
-          <label class="block">Owner
+          <label class="block">Owner *
             ${ownerSelectHtml(existing?.owner||'')}
           </label>
-          <label class="block">Prazo (data)
-            <input name="dueDate" type="date" value="${existing?.dueDate?toIso(parseDate(existing.dueDate)):''}" />
+          <label class="block">Prazo *
+            <input name="dueDate" type="date" required value="${existing?.dueDate?toIso(parseDate(existing.dueDate)):''}" />
           </label>
           <label class="block col-span-2">Mitigação / Plano de ação
-            <textarea name="mitigation" rows="2">${escapeHtml(existing?.mitigation||'')}</textarea>
+            <textarea name="mitigation" rows="2" placeholder="Qual o plano para resolver ou mitigar?">${escapeHtml(existing?.mitigation||'')}</textarea>
           </label>
+          <label class="block col-span-2">Deals afetados *
+            <div class="text-xs text-gray-400 mb-1">Selecione todos os deals impactados por este item</div>
+            <div id="dealCheckboxes" class="grid grid-cols-2 gap-1 p-2 border rounded-lg bg-gray-50 max-h-36 overflow-y-auto">
+              ${state.companies.map(c=>`
+                <label class="flex items-center gap-1.5 text-xs cursor-pointer">
+                  <input type="checkbox" name="dealIds" value="${c.id}" ${preSelectedDeals.includes(c.id)?'checked':''}>
+                  ${escapeHtml(c.name)}
+                </label>`).join('')}
+            </div>
+          </label>
+          <div id="raidFormErr" class="col-span-2 text-xs rounded-lg p-2 hidden" style="color:#991b1b;background:#fee2e2"></div>
           <div class="col-span-2 flex justify-between mt-2">
             <div>${existing && canEdit()?`<button type="button" id="del" class="btn" style="background:var(--bhub-red);color:#fff">🗑 Excluir</button>`:''}</div>
             <div class="flex gap-2">
@@ -3462,39 +3614,62 @@ function openRaidModal(company, raidId){
   document.body.appendChild(m);
   const close = () => m.remove();
   m.querySelector('#cancel').onclick = close;
+
+  const showErr = (msg) => {
+    const el2 = m.querySelector('#raidFormErr');
+    el2.textContent = msg; el2.classList.remove('hidden');
+  };
+
   const delBtn = m.querySelector('#del');
   if(delBtn) delBtn.onclick = async ()=>{
-    if(!confirm('Excluir este item RAID?')) return;
+    if(!confirm('Excluir este item RAID? Isso removerá o vínculo com todos os deals.')) return;
     try{
       const { error } = await supa.from('raid_items').delete().eq('id', raidId);
       if(error) throw error;
-      deal.raid = deal.raid.filter(r=>r.id!==raidId);
+      state.raid = state.raid.filter(r=>r.id!==raidId);
+      // Remove from all per-deal arrays
+      for(const d of Object.values(state.deals)) d.raid = (d.raid||[]).filter(r=>r.id!==raidId);
       close(); render();
     }catch(err){ alert('Erro: '+(err.message||err)); }
   };
+
   m.querySelector('#raidForm').onsubmit = async (e)=>{
     e.preventDefault();
     const fd = new FormData(e.target);
+    const selectedDeals = Array.from(m.querySelectorAll('input[name="dealIds"]:checked')).map(cb=>cb.value);
+    if(!fd.get('owner')) return showErr('Owner é obrigatório.');
+    if(!fd.get('dueDate')) return showErr('Prazo é obrigatório.');
+    if(selectedDeals.length === 0) return showErr('Selecione ao menos um deal afetado.');
     const payload = {
-      type: fd.get('type'),
-      area: fd.get('area')||'',
-      title: fd.get('title')||'',
-      description: fd.get('description')||'',
-      severity: fd.get('severity')||'med',
-      status: fd.get('status')||'open',
-      owner: fd.get('owner')||'',
-      dueDate: fd.get('dueDate')||'',
+      type: fd.get('type'), area: fd.get('area')||'',
+      title: fd.get('title')||'', description: fd.get('description')||'',
+      severity: fd.get('severity')||'med', status: fd.get('status')||'open',
+      owner: fd.get('owner')||'', dueDate: fd.get('dueDate')||'',
       mitigation: fd.get('mitigation')||'',
     };
     try{
       if(existing){
-        const { error } = await supa.from('raid_items').update(raidToDb(payload, company.id)).eq('id', existing.id);
+        const { error } = await supa.from('raid_items').update(raidToDb(payload)).eq('id', existing.id);
         if(error) throw error;
-        Object.assign(existing, payload);
+        // Update deal links: delete old, insert new
+        await supa.from('raid_deal_links').delete().eq('raid_id', existing.id);
+        if(selectedDeals.length){
+          await supa.from('raid_deal_links').insert(selectedDeals.map(cid=>({raid_id:existing.id, company_id:cid})));
+        }
+        Object.assign(existing, payload, {dealIds: selectedDeals});
+        // Sync per-deal arrays
+        for(const d of Object.values(state.deals)) d.raid = (d.raid||[]).filter(r=>r.id!==existing.id);
+        for(const cid of selectedDeals){ if(state.deals[cid]) state.deals[cid].raid.push(existing); }
       }else{
-        const { data, error } = await supa.from('raid_items').insert(raidToDb(payload, company.id)).select().single();
+        const { data, error } = await supa.from('raid_items').insert(raidToDb(payload)).select().single();
         if(error) throw error;
-        deal.raid.push(raidFromDb(data));
+        const newItem = raidFromDb(data);
+        newItem.dealIds = selectedDeals;
+        if(selectedDeals.length){
+          await supa.from('raid_deal_links').insert(selectedDeals.map(cid=>({raid_id:data.id, company_id:cid})));
+        }
+        state.raid.push(newItem);
+        for(const cid of selectedDeals){ if(state.deals[cid]) state.deals[cid].raid.push(newItem); }
       }
       close(); render();
     }catch(err){ alert('Erro ao salvar: '+(err.message||err)); }
@@ -4361,7 +4536,16 @@ function openTaskModal(company, taskId){
         <div><label class="text-xs font-medium">Evidência (link)</label><input name="evidencia" value="${t.evidencia||''}"/></div>
         <div><label class="text-xs font-medium">Último update</label><input name="ultimoUpdate" type="date" value="${t.ultimoUpdate||''}"/></div>
         <div><label class="text-xs font-medium">Bloqueio</label>
-          <select name="bloqueio"><option ${t.bloqueio!=='Sim'?'selected':''}>Não</option><option ${t.bloqueio==='Sim'?'selected':''}>Sim</option></select>
+          <select name="bloqueio" id="bloqueioSel"><option ${t.bloqueio!=='Sim'?'selected':''}>Não</option><option ${t.bloqueio==='Sim'?'selected':''}>Sim</option></select>
+        </div>
+        <div id="raidPickerWrap" class="${t.bloqueio==='Sim'?'':'hidden'} col-span-2">
+          <label class="text-xs font-medium">RAID associado ao bloqueio *
+            <select name="raidId" id="raidIdSel">
+              <option value="">— Selecione ou crie um RAID —</option>
+              ${state.raid.filter(r=>r.status!=='closed').map(r=>`<option value="${r.id}" ${t.raidId===r.id?'selected':''}>[${(RAID_TYPES.find(x=>x.id===r.type)||{label:'?'}).label}] ${escapeHtml(r.title)}</option>`).join('')}
+            </select>
+          </label>
+          <button type="button" id="createRaidInline" class="btn btn-secondary mt-1" style="font-size:.72rem;padding:.25rem .6rem">+ Criar novo RAID para este bloqueio</button>
         </div>
         <div class="col-span-2"><label class="text-xs font-medium">Fase (auto se vazio)</label>
           <select name="phaseId">
@@ -4391,6 +4575,19 @@ function openTaskModal(company, taskId){
   </div>`);
   document.body.appendChild(m);
   m.querySelector('#cancel').onclick = ()=>m.remove();
+
+  // Bloqueio ↔ RAID picker toggle
+  const bloqueioSel = m.querySelector('#bloqueioSel');
+  const raidWrap = m.querySelector('#raidPickerWrap');
+  if(bloqueioSel && raidWrap){
+    bloqueioSel.addEventListener('change', ()=>{
+      raidWrap.classList.toggle('hidden', bloqueioSel.value !== 'Sim');
+    });
+    m.querySelector('#createRaidInline').addEventListener('click', ()=>{
+      m.remove();
+      openRaidModal(company);
+    });
+  }
 
   // Painéis de comentários / anexos / dependências
   if(!isNew){
@@ -4447,7 +4644,8 @@ function openTaskModal(company, taskId){
       proximoPasso: fd.get('proximoPasso').trim(),
       bloqueio: fd.get('bloqueio'),
       bloqueioDescricao: fd.get('bloqueioDescricao').trim(),
-      phaseId: fd.get('phaseId')||''
+      phaseId: fd.get('phaseId')||'',
+      raidId: fd.get('raidId')||null
     };
     try{
       if(isNew){
@@ -5039,12 +5237,11 @@ function renderHoje(){
     if(!deal) continue;
     for(const t of (deal.tasks||[])) allTasks.push({...t, _f:computeTaskFields(t,c), _deal:c});
   }
-  const allRaid = [];
-  for(const c of state.companies){
-    const deal = state.deals[c.id];
-    if(!deal) continue;
-    for(const r of (deal.raid||[])) allRaid.push({...r, _deal:c});
-  }
+  const allRaid = state.raid.map(r => {
+    const firstDealId = r.dealIds[0];
+    const _deal = firstDealId ? state.companies.find(c=>c.id===firstDealId)||null : null;
+    return {...r, _deal};
+  });
 
   // ---- Listas base (sem filtro de deal) ----
   const myLate = allTasks
@@ -5639,7 +5836,7 @@ function startRealtime(){
   if(_realtimeCh) return;
   // Não dispara reload por mudanças causadas localmente (já temos render)
   // mas é melhor sempre rodar reloadState para garantir consistência cross-tab/usuário.
-  const tables = ['tasks','companies','raid_items','synergies','health_entries','template_tasks','comments','attachments','task_dependencies'];
+  const tables = ['tasks','companies','raid_items','raid_deal_links','synergies','health_entries','template_tasks','comments','attachments','task_dependencies'];
   _realtimeCh = supa.channel('pmi-app');
   tables.forEach(t=>{
     _realtimeCh.on('postgres_changes', { event:'*', schema:'public', table:t }, (payload)=>{
