@@ -819,7 +819,9 @@ async function reloadState(){
     fetchAll(() => supa.from('raid_items').select('*')),
     fetchAll(() => supa.from('synergies').select('*')),
     fetchAll(() => supa.from('health_entries').select('*')),
-    supa.from('deletion_requests').select('*').eq('status','pending'),
+    session.role === 'admin'
+      ? supa.from('deletion_requests').select('*').eq('status','pending')
+      : supa.from('deletion_requests').select('*').eq('status','pending').eq('requested_by_id', session.id),
   ]);
   const errs = [profiles, companies, template, tasks, raid, syn, health].map(r=>r.error).filter(Boolean);
   if(errs.length){ console.warn('reloadState errors', errs); }
