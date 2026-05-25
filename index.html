@@ -5073,9 +5073,10 @@ function renderHoje(){
   // ---- Funções de row ----
   function taskRow(t){
     const dias = t._f.diasAtraso||0;
+    const hasPendingDel = (state.deletionRequests||[]).some(r=>r.task_id===t.id);
     return `<div class="hoje-row" data-task-id="${t.id}" data-company-id="${t._deal.id}" title="Clique para editar">
       <div class="hoje-row-left">
-        <div class="hoje-row-task" title="${escapeHtml(t.task)}">${escapeHtml(t.task)}</div>
+        <div class="hoje-row-task" title="${escapeHtml(t.task)}">${escapeHtml(t.task)}${hasPendingDel?` <span title="Exclusão aguardando aprovação do admin" style="display:inline-block;font-size:.65rem;padding:.1rem .35rem;border-radius:.75rem;background:#fef3c7;color:#92400e;border:1px solid #fde68a;font-weight:600;white-space:nowrap">⏳ Excl. pendente</span>`:''}</div>
         <div class="hoje-row-meta">
           <span>${escapeHtml(t._deal.name)}</span><span class="sep">·</span>
           <span>${escapeHtml(t.area||'—')}</span>
@@ -5101,9 +5102,10 @@ function renderHoje(){
   }
   function upcomingRow(t){
     const d = t._diff;
+    const hasPendingDelUp = (state.deletionRequests||[]).some(r=>r.task_id===t.id);
     return `<div class="hoje-row" data-task-id="${t.id}" data-company-id="${t._deal.id}" title="Clique para editar">
       <div class="hoje-row-left">
-        <div class="hoje-row-task" title="${escapeHtml(t.task)}">${escapeHtml(t.task)}</div>
+        <div class="hoje-row-task" title="${escapeHtml(t.task)}">${escapeHtml(t.task)}${hasPendingDelUp?` <span title="Exclusão aguardando aprovação do admin" style="display:inline-block;font-size:.65rem;padding:.1rem .35rem;border-radius:.75rem;background:#fef3c7;color:#92400e;border:1px solid #fde68a;font-weight:600;white-space:nowrap">⏳ Excl. pendente</span>`:''}</div>
         <div class="hoje-row-meta">
           <span>${escapeHtml(t._deal.name)}</span><span class="sep">·</span>
           <span>${escapeHtml(t.area||'—')}</span>
