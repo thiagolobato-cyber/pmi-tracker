@@ -3490,15 +3490,15 @@ function renderDealTasks(company, deal, tasks){
                 <th>REF</th><th class="min-w-[18rem]">TAREFA</th><th>FASE</th><th>STATUS</th><th>OWNER</th><th>PRAZO</th><th>PREVISTA</th><th>REAL</th><th>%</th><th>ATRASO</th><th>ÚLT.UPD</th><th>PRÓX.PASSO</th><th>BLOQ.</th>${canEdit()?'<th></th>':''}
               </tr></thead>
               <tbody>
-                ${grouped[a].filter(t=> canAdmin() || !t.pendingApproval).map(t=>{
+                ${grouped[a].map(t=>{
                   const hasPendingDel = state.deletionRequests.some(r=>r.task_id===t.id);
                   const pendingBadge = t.pendingApproval
-                    ? ` <span title="Aguardando aprovação do admin" style="display:inline-block;font-size:.65rem;padding:.1rem .35rem;border-radius:.75rem;background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe;font-weight:600;white-space:nowrap">⏳ Aprox. pendente</span>`
+                    ? ` <span title="Aguardando aprovação do admin para ser ativada" style="display:inline-block;font-size:.65rem;padding:.1rem .35rem;border-radius:.75rem;background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe;font-weight:600;white-space:nowrap">⏳ Aguard. aprovação</span>`
                     : '';
                   const approveBtn = t.pendingApproval && canAdmin()
-                    ? ` <button data-approve-task="${t.id}" data-company-id="${company.id}" title="Aprovar tarefa" style="margin-left:.25rem;font-size:.65rem;padding:.1rem .4rem;border-radius:.5rem;background:#dcfce7;color:#166534;border:1px solid #bbf7d0;cursor:pointer;font-weight:600">✓ Aprovar</button><button data-reject-task="${t.id}" data-company-id="${company.id}" title="Rejeitar tarefa" style="font-size:.65rem;padding:.1rem .4rem;border-radius:.5rem;background:#fee2e2;color:#991b1b;border:1px solid #fecaca;cursor:pointer;font-weight:600">✕</button>`
+                    ? ` <button data-approve-task="${t.id}" data-company-id="${company.id}" title="Aprovar tarefa" style="margin-left:.25rem;font-size:.65rem;padding:.1rem .4rem;border-radius:.5rem;background:#dcfce7;color:#166534;border:1px solid #bbf7d0;cursor:pointer;font-weight:600">✓ Aprovar</button><button data-reject-task="${t.id}" data-company-id="${company.id}" title="Rejeitar e excluir" style="font-size:.65rem;padding:.1rem .4rem;border-radius:.5rem;background:#fee2e2;color:#991b1b;border:1px solid #fecaca;cursor:pointer;font-weight:600">✕</button>`
                     : '';
-                  return `<tr${t.pendingApproval?' style="opacity:.6"':''}>
+                  return `<tr${t.pendingApproval?' style="opacity:.55;background:#f8faff"':''}>
                   <td class="text-xs">${t.ref||''}</td>
                   <td>${t.task||''}${pendingBadge}${approveBtn}${hasPendingDel?` <span title="Exclusão aguardando aprovação do admin" style="display:inline-block;font-size:.65rem;padding:.1rem .35rem;border-radius:.75rem;background:#fef3c7;color:#92400e;border:1px solid #fde68a;font-weight:600;white-space:nowrap">⏳ Excl. pendente</span>`:''}</td>
                   <td>${phaseLabel(t)}</td>
