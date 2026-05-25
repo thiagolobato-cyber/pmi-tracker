@@ -3200,7 +3200,6 @@ function renderDeal(){
     ['gantt',     ICN.gantt     + 'Gantt',      null],
     ['raid',      ICN.raid      + 'RAID Log',   openRaid],
     ['sinergias', ICN.sinergias + 'Sinergias',  (deal.synergies||[]).length],
-    ['health',    ICN.health    + 'Health',     null],
     ['historico', ICN.historico + 'Histórico',  null],
     ['briefing',  ICN.briefing  + 'Briefing',   null],
   ];
@@ -3210,7 +3209,6 @@ function renderDeal(){
       case 'gantt':     return renderDealGantt(company, deal, tasks);
       case 'raid':      return renderDealRaid(company, deal);
       case 'sinergias': return renderDealSynergies(company, deal);
-      case 'health':    return renderDealHealth(company, deal);
       case 'historico': return renderDealHistorico(company);
       case 'briefing':  return renderDealBriefing(company, deal, tasks);
       default:          return renderDealTasks(company, deal, tasks);
