@@ -3287,7 +3287,7 @@ function renderDealTasks(company, deal, tasks){
           <div class="scroll-x">
             <table class="w-full">
               <thead><tr>
-                <th>REF</th><th class="min-w-[18rem]">TAREFA</th><th>FASE</th><th>STATUS</th><th>OWNER</th><th>FERRAMENTA</th><th>PRAZO</th><th>PREVISTA</th><th>REAL</th><th>%</th><th>ATRASO</th><th>ÚLT.UPD</th><th>PRÓX.PASSO</th><th>BLOQ.</th>${canEdit()?'<th></th>':''}
+                <th>REF</th><th class="min-w-[18rem]">TAREFA</th><th>FASE</th><th>STATUS</th><th>OWNER</th><th>PRAZO</th><th>PREVISTA</th><th>REAL</th><th>%</th><th>ATRASO</th><th>ÚLT.UPD</th><th>PRÓX.PASSO</th><th>BLOQ.</th>${canEdit()?'<th></th>':''}
               </tr></thead>
               <tbody>
                 ${grouped[a].map(t=>{
@@ -3298,7 +3298,6 @@ function renderDealTasks(company, deal, tasks){
                   <td>${phaseLabel(t)}</td>
                   <td><span class="pill ${statusClass(t._f.status)}">${statusLabel(t._f.status)}</span></td>
                   <td>${t.owner?`<span class="deal-link" data-owner="${escapeHtml(t.owner)}">${escapeHtml(t.owner)}</span>`:''}</td>
-                  <td>${t.ferramenta||''}</td>
                   <td class="text-center">${t.prazo||0}</td>
                   <td>${t._f.dataPrevista?fmtDate(t._f.dataPrevista):''}</td>
                   <td>${t._f.dataReal?fmtDate(t._f.dataReal):''}</td>
