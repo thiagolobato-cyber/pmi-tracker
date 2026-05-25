@@ -102,6 +102,7 @@
   thead .sticky-col{background:var(--bhub-beige-soft);z-index:3}
   .sticky-col-2{position:sticky;left:2.25rem;z-index:2;background:#fff}
   thead .sticky-col-2{background:var(--bhub-beige-soft);z-index:3}
+  .exec-area-header td{background:var(--bhub-beige-soft);font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--bhub-navy);padding:.45rem .75rem;border-top:2px solid var(--bhub-border)}
   .kpi{background:#fff;border:1px solid var(--bhub-border);border-radius:1.25rem;padding:1.1rem 1.2rem;transition:transform .2s,box-shadow .2s}
   .kpi:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(15,23,39,.08)}
   .kpi-label{font-size:.7rem;color:var(--bhub-muted);text-transform:uppercase;letter-spacing:.08em;font-weight:600;font-family:'Roboto',sans-serif}
@@ -548,7 +549,7 @@ const BHUB_LOGO_ICON = `<svg viewBox="0 0 40 40" fill="currentColor" xmlns="http
 /* ---------- State ---------- */
 let state = defaultState();
 let session = null; // { id, email, username, role }
-let view = { tab:'dashboard', dealId:null, dealTab:'tarefas', executiveArea:DEFAULT_AREAS[0].name, raidFilter:'all', synergyFilter:'all', dashFilters:{deals:[],areas:[],owners:[]}, empresasSearch:'', empresasSortCol:'date', empresasSortDir:'desc', sidebarCollapsed:false, executivaDealSearch:'', execPdfDeals:null };
+let view = { tab:'dashboard', dealId:null, dealTab:'tarefas', executiveArea:'todas', raidFilter:'all', synergyFilter:'all', dashFilters:{deals:[],areas:[],owners:[]}, empresasSearch:'', empresasSortCol:'date', empresasSortDir:'desc', sidebarCollapsed:false, executivaDealSearch:'', execPdfDeals:null };
 
 function defaultState(){
   return {
@@ -556,7 +557,8 @@ function defaultState(){
     companies: [],
     template: [],
     deals: {},       // { [companyId]: { tasks, raid, synergies, health } }
-    settings: { initialized:false }
+    settings: { initialized:false },
+    deletionRequests: []  // pending task deletion requests
   };
 }
 // Deprecado: dados agora persistidos por entidade no Supabase. Mantido como no-op
@@ -744,10 +746,11 @@ const canAdmin = () => session && session.role==='admin';
 // currentOwner: valor atual (para marcar como selected).
 // Se não houver usuários, mostra aviso e retorna um select desabilitado.
 function ownerSelectHtml(currentOwner='', adminOnly=false){
+  // Se adminOnly=true e o usuário não é admin: exibe como texto (somente leitura)
   if(adminOnly && session?.role !== 'admin'){
     const displayName = currentOwner || '— Sem responsável —';
     return `<div class="text-sm px-2 py-1.5 rounded" style="background:var(--bhub-beige-soft);color:var(--bhub-navy)">${escapeHtml(displayName)}</div>
-            <input type="hidden" name="owner" value="${escapeHtml(currentOwner||'')}">"`;
+            <input type="hidden" name="owner" value="${escapeHtml(currentOwner||'')}">`;
   }
   const users = (state && state.users) ? state.users : [];
   if(!users.length){
@@ -756,6 +759,8 @@ function ownerSelectHtml(currentOwner='', adminOnly=false){
     </select>
     <div class="text-xs mt-1" style="color:#b45309">Acesse <strong>Usuários</strong> e crie um perfil antes de atribuir esta tarefa.</div>`;
   }
+  // Se o owner atual não está na lista de usuários, adiciona como opção extra
+  // (evita aparecer em branco quando ainda não tem conta criada)
   const matchedInList = users.some(u => (u.username||'').trim() === (currentOwner||'').trim());
   const extraOpt = (currentOwner && !matchedInList)
     ? `<option value="${escapeHtml(currentOwner)}" selected>${escapeHtml(currentOwner)}</option>`
@@ -772,16 +777,20 @@ function ownerSelectHtml(currentOwner='', adminOnly=false){
 }
 
 /* ---------- Helpers: ordenação por REF e por área ---------- */
+// Ordena tasks pelo número do REF (ex: "1.9" < "1.10" < "2.1")
 function sortByRef(a, b){
   const parse = r => { const p = String(r||'0.0').split('.'); return [parseInt(p[0])||0, parseInt(p[1])||0]; };
   const [a0,a1] = parse(a.ref), [b0,b1] = parse(b.ref);
   return a0 !== b0 ? a0 - b0 : a1 - b1;
 }
+// Ordena nomes de área pela ordem canônica de DEFAULT_AREAS; áreas desconhecidas vão ao fim
 function sortAreaNames(names){
   return [...names].sort((a,b)=>{
     const ia = DEFAULT_AREAS.findIndex(x=>x.name===a);
     const ib = DEFAULT_AREAS.findIndex(x=>x.name===b);
-    return (ia===-1?999:ia) !== (ib===-1?999:ib) ? (ia===-1?999:ia)-(ib===-1?999:ib) : a.localeCompare(b,'pt');
+    const ra = ia===-1 ? 999 : ia;
+    const rb = ib===-1 ? 999 : ib;
+    return ra !== rb ? ra - rb : a.localeCompare(b, 'pt');
   });
 }
 
@@ -802,7 +811,7 @@ async function fetchAll(makeBuilder){
 }
 async function reloadState(){
   if(!session){ state = defaultState(); return; }
-  const [profiles, companies, template, tasks, raid, syn, health] = await Promise.all([
+  const [profiles, companies, template, tasks, raid, syn, health, delReqs] = await Promise.all([
     supa.from('profiles').select('id,username,role').order('username',{nullsFirst:false}),
     supa.from('companies').select('*').order('name'),
     fetchAll(() => supa.from('template_tasks').select('*').order('ordering').order('ref')),
@@ -810,12 +819,14 @@ async function reloadState(){
     fetchAll(() => supa.from('raid_items').select('*')),
     fetchAll(() => supa.from('synergies').select('*')),
     fetchAll(() => supa.from('health_entries').select('*')),
+    supa.from('deletion_requests').select('*').eq('status','pending'),
   ]);
   const errs = [profiles, companies, template, tasks, raid, syn, health].map(r=>r.error).filter(Boolean);
   if(errs.length){ console.warn('reloadState errors', errs); }
 
   state = defaultState();
   state.users = (profiles.data||[]).map(p => ({ id: p.id, username: p.username || '(sem nome)', role: p.role || 'leitor' }));
+  state.deletionRequests = (delReqs.data||[]);
   state.companies = (companies.data||[]).map(companyFromDb)
     .sort((a,b)=>{
       // Mais recente primeiro; sem data vai para o final
@@ -3288,9 +3299,11 @@ function renderDealTasks(company, deal, tasks){
                 <th>REF</th><th class="min-w-[18rem]">TAREFA</th><th>FASE</th><th>STATUS</th><th>OWNER</th><th>FERRAMENTA</th><th>PRAZO</th><th>PREVISTA</th><th>REAL</th><th>%</th><th>ATRASO</th><th>ÚLT.UPD</th><th>PRÓX.PASSO</th><th>BLOQ.</th>${canEdit()?'<th></th>':''}
               </tr></thead>
               <tbody>
-                ${grouped[a].map(t=>`<tr>
+                ${grouped[a].map(t=>{
+                  const hasPendingDel = state.deletionRequests.some(r=>r.task_id===t.id);
+                  return `<tr>
                   <td class="text-xs">${t.ref||''}</td>
-                  <td>${t.task||''}</td>
+                  <td>${t.task||''}${hasPendingDel?` <span title="Exclusão aguardando aprovação do admin" style="display:inline-block;font-size:.65rem;padding:.1rem .35rem;border-radius:.75rem;background:#fef3c7;color:#92400e;border:1px solid #fde68a;font-weight:600;white-space:nowrap">⏳ Excl. pendente</span>`:''}</td>
                   <td>${phaseLabel(t)}</td>
                   <td><span class="pill ${statusClass(t._f.status)}">${statusLabel(t._f.status)}</span></td>
                   <td>${t.owner?`<span class="deal-link" data-owner="${escapeHtml(t.owner)}">${escapeHtml(t.owner)}</span>`:''}</td>
@@ -3304,7 +3317,7 @@ function renderDealTasks(company, deal, tasks){
                   <td>${t.proximoPasso||''}</td>
                   <td>${t.bloqueio==='Sim'?'<span class="pill status-late">Sim</span>':'<span class="pill status-empty">Não</span>'}</td>
                   ${canEdit()?`<td><button class="btn btn-secondary" data-edit="${t.id}">✎</button></td>`:''}
-                </tr>`).join('')}
+                </tr>`; }).join('')}
               </tbody>
             </table>
           </div>
@@ -4220,6 +4233,7 @@ async function renderCommentsPanel(panel, entityType, entityId, companyId){
   };
 }
 
+
 async function renderDependenciesPanel(panel, task, company, deal){
   panel.innerHTML = `<div class="space-y-2">${Array(2).fill('<div class="skel" style="width:100%;height:36px"></div>').join('')}</div>`;
   const { data: deps, error } = await supa.from('task_dependencies').select('*').or(`predecessor_id.eq.${task.id},successor_id.eq.${task.id}`);
@@ -4275,6 +4289,7 @@ async function renderDependenciesPanel(panel, task, company, deal){
     </div>
   `;
 
+  // Pool de tarefas disponíveis (sem as já vinculadas e sem a própria tarefa)
   const available = others.filter(t=>!linkedIds.has(t.id));
 
   function populateTaskSelect(areaFilter=''){
@@ -4439,24 +4454,90 @@ function openTaskModal(company, taskId){
   };
   const del = m.querySelector('#del');
   if(del) del.onclick = async ()=>{
-    const ok = await confirmDeleteModal({
-      title: 'Excluir esta tarefa?',
-      ref: t.ref || '',
-      description: t.task || '',
-      warning: 'Esta ação é <strong>irreversível</strong>. A tarefa e seu histórico serão removidos permanentemente.'
-    });
-    if(!ok) return;
-    try{
-      const { error } = await supa.from('tasks').delete().eq('id', t.id);
-      if(error) throw error;
-      deal.tasks = deal.tasks.filter(x=>x.id!==t.id);
-      m.remove(); render();
-    }catch(err){ alert('Erro: '+(err.message||err)); }
+    if(session?.role === 'admin'){
+      // Admin: confirm e deleta diretamente
+      const ok = await confirmDeleteModal({
+        title: 'Excluir esta tarefa?',
+        ref: t.ref || '',
+        description: t.task || '',
+        warning: 'Esta ação é <strong>irreversível</strong>. A tarefa e seu histórico serão removidos permanentemente.'
+      });
+      if(!ok) return;
+      try{
+        const { error } = await supa.from('tasks').delete().eq('id', t.id);
+        if(error) throw error;
+        // também remove eventuais solicitações pendentes para essa tarefa
+        await supa.from('deletion_requests').delete().eq('task_id', t.id);
+        state.deletionRequests = state.deletionRequests.filter(r=>r.task_id!==t.id);
+        deal.tasks = deal.tasks.filter(x=>x.id!==t.id);
+        m.remove(); render();
+      }catch(err){ alert('Erro: '+(err.message||err)); }
+    } else {
+      // Não-admin: cria solicitação de exclusão (aguarda aprovação do admin)
+      const alreadyPending = state.deletionRequests.some(r=>r.task_id===t.id);
+      if(alreadyPending){
+        showInfoModal('Solicitação já enviada', `A exclusão da tarefa <strong>${escapeHtml(t.ref||'')} – ${escapeHtml(t.task||'')}</strong> já está aguardando aprovação do admin.`);
+        return;
+      }
+      const ok = await confirmDeleteModal({
+        title: 'Solicitar exclusão?',
+        ref: t.ref || '',
+        description: t.task || '',
+        warning: 'Sua solicitação será enviada ao admin para aprovação. A tarefa só será removida após o ok dele.',
+        confirmLabel: 'Sim, solicitar'
+      });
+      if(!ok) return;
+      try{
+        const reqData = {
+          task_id: t.id,
+          task_ref: t.ref || '',
+          task_name: t.task || '',
+          area: t.area || '',
+          company_id: company.id,
+          company_name: company.name,
+          requested_by_id: session.id,
+          requested_by_name: session.username || session.email || '',
+          status: 'pending'
+        };
+        const { data: inserted, error } = await supa.from('deletion_requests').insert(reqData).select().single();
+        if(error) throw error;
+        state.deletionRequests.push(inserted);
+        m.remove(); render();
+        showInfoModal('Solicitação enviada ✓', `A exclusão de <strong>${escapeHtml(t.ref||'')} – ${escapeHtml(t.task||'')}</strong> foi solicitada e aguarda aprovação do admin.`);
+      }catch(err){ alert('Erro: '+(err.message||err)); }
+    }
   };
 }
 
+/* ---------- Helper: modal informativo (sem ação) ---------- */
+function showInfoModal(title, bodyHtml){
+  const dm = el(`
+    <div class="fixed inset-0 bg-black/50 z-30 flex items-center justify-center p-4">
+      <div class="bg-white rounded-xl w-full max-w-md shadow-2xl p-6 flex flex-col gap-4">
+        <div class="flex items-start gap-3">
+          <div style="background:#dbeafe;border-radius:50%;min-width:2.5rem;height:2.5rem;display:flex;align-items:center;justify-content:center">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="font-bold text-gray-900" style="font-size:1rem">${escapeHtml(title)}</div>
+            <div class="text-sm text-gray-600 mt-1">${bodyHtml}</div>
+          </div>
+        </div>
+        <div class="flex justify-end">
+          <button id="dmOk" class="btn btn-primary">OK</button>
+        </div>
+      </div>
+    </div>`);
+  document.body.appendChild(dm);
+  dm.querySelector('#dmOk').onclick = () => dm.remove();
+  const onKey = e => { if(e.key==='Escape'||e.key==='Enter'){ dm.remove(); document.removeEventListener('keydown',onKey); } };
+  document.addEventListener('keydown', onKey);
+}
+
 /* ---------- Helper: modal de confirmação de exclusão ---------- */
-function confirmDeleteModal({ title='Excluir?', ref='', description='', warning='' } = {}){
+// Retorna Promise<boolean> — true se o usuário confirmou, false se cancelou.
+// opts: { title, ref, description, warning, confirmLabel }
+function confirmDeleteModal({ title='Excluir?', ref='', description='', warning='', confirmLabel='Sim, excluir' } = {}){
   return new Promise(resolve => {
     const dm = el(`
       <div class="fixed inset-0 bg-black/50 z-30 flex items-center justify-center p-4">
@@ -4476,13 +4557,14 @@ function confirmDeleteModal({ title='Excluir?', ref='', description='', warning=
           </div>
           <div class="flex gap-2 justify-end">
             <button id="dmCancel" class="btn btn-secondary">Cancelar</button>
-            <button id="dmConfirm" class="btn btn-danger">Sim, excluir</button>
+            <button id="dmConfirm" class="btn btn-danger">${escapeHtml(confirmLabel)}</button>
           </div>
         </div>
       </div>`);
     document.body.appendChild(dm);
     dm.querySelector('#dmCancel').onclick  = () => { dm.remove(); resolve(false); };
     dm.querySelector('#dmConfirm').onclick = () => { dm.remove(); resolve(true); };
+    // ESC fecha o modal
     const onKey = e => { if(e.key==='Escape'){ dm.remove(); resolve(false); document.removeEventListener('keydown', onKey); } };
     document.addEventListener('keydown', onKey);
   });
@@ -4543,6 +4625,7 @@ function renderTemplate(){
   if(emptyAdd) emptyAdd.onclick = ()=>openTemplateModal();
   const clr = node.querySelector('#clearTpl');
   if(clr) clr.onclick = ()=>{
+    // Double-confirmation modal — admin only
     const total = state.template.length;
     const dm = el(`
       <div class="fixed inset-0 bg-black/50 z-20 flex items-center justify-center p-4">
@@ -4618,12 +4701,12 @@ function openTemplateModal(id){
   function nextRefForArea(areaName){
     const entry = DEFAULT_AREAS.find(a=>a.name===areaName);
     if(!entry) return '';
-    const prefix = entry.n.split('.')[0];
+    const prefix = entry.n.split('.')[0]; // "1.0" → "1"
     const nums = state.template
       .filter(x=>x.area===areaName && x.id!==t.id)
       .map(x=>{ const p=(x.ref||'').split('.'); return p.length>=2?parseInt(p[1]):0; })
       .filter(n=>!isNaN(n)&&n>0);
-    return prefix+'.'+( nums.length ? Math.max(...nums)+1 : 1 );
+    return `${prefix}.${nums.length?Math.max(...nums)+1:1}`;
   }
 
   const initRef = t.ref || (t.area ? nextRefForArea(t.area) : '');
@@ -4665,7 +4748,7 @@ function openTemplateModal(id){
           <div>
             <label class="text-xs font-semibold block mb-1" style="color:var(--bhub-navy)">
               Owner padrão
-              <span style="color:var(--bhub-muted);font-weight:400">— aparece na Visão Usuário</span>
+              <span style="color:var(--bhub-muted);font-weight:400">— aparecerá na Visão Usuário</span>
             </label>
             <select name="defaultOwner" id="tplOwner">
               <option value="">— Sem owner —</option>
@@ -4685,6 +4768,7 @@ function openTemplateModal(id){
 
   document.body.appendChild(m);
 
+  // Auto-preenche REF ao mudar área
   m.querySelector('#tplArea').addEventListener('change', e=>{
     m.querySelector('#tplRef').value = nextRefForArea(e.target.value);
   });
@@ -5140,6 +5224,19 @@ function renderHoje(){
         </div>
         <div id="sec-up"></div>
       </div>
+
+      ${session?.role==='admin' ? `
+      <!-- Seção admin: Solicitações de exclusão pendentes -->
+      <div class="hoje-section" id="sec-delreqs-wrap" style="${(state.deletionRequests||[]).length===0?'display:none':''}">
+        <div class="hoje-section-header">
+          <div class="h-icon" style="background:#fee2e2;color:#991b1b">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+          </div>
+          <span class="h-title">Exclusões pendentes de aprovação</span>
+          <span id="badge-delreqs" class="h-badge" style="background:#fee2e2;color:#991b1b">${(state.deletionRequests||[]).length}</span>
+        </div>
+        <div id="sec-delreqs"></div>
+      </div>` : ''}
     </div>
   `);
 
@@ -5153,6 +5250,82 @@ function renderHoje(){
 
   // Render inicial das seções
   refresh();
+
+  // ---- Seção admin: solicitações de exclusão pendentes ----
+  if(session?.role==='admin'){
+    const secDelReqs = node.querySelector('#sec-delreqs');
+    if(secDelReqs) renderDelReqsSection();
+
+    function renderDelReqsSection(){
+      const reqs = state.deletionRequests || [];
+      const wrap = node.querySelector('#sec-delreqs-wrap');
+      const badge = node.querySelector('#badge-delreqs');
+      if(badge) badge.textContent = reqs.length;
+      if(wrap) wrap.style.display = reqs.length===0 ? 'none' : '';
+
+      secDelReqs.innerHTML = reqs.length===0
+        ? `<div class="hoje-empty">Nenhuma solicitação de exclusão pendente.</div>`
+        : reqs.map(r=>`
+          <div class="hoje-row" data-delreq-id="${r.id}" style="align-items:flex-start">
+            <div class="hoje-row-left" style="flex:1;min-width:0">
+              <div class="hoje-row-task" style="font-weight:600">${r.task_ref?`<span style="font-family:monospace;font-size:.78rem;background:#f3f4f6;padding:.1rem .3rem;border-radius:.25rem;margin-right:.35rem">${escapeHtml(r.task_ref)}</span>`:''}${escapeHtml(r.task_name||'(sem nome)')}</div>
+              <div class="hoje-row-meta">
+                <span>${escapeHtml(r.company_name||'—')}</span><span class="sep">·</span>
+                <span>${escapeHtml(r.area||'—')}</span><span class="sep">·</span>
+                <span>Solicitado por <strong>${escapeHtml(r.requested_by_name||'?')}</strong></span><span class="sep">·</span>
+                <span>${r.requested_at ? fmtDate(new Date(r.requested_at)) : ''}</span>
+              </div>
+            </div>
+            <div class="hoje-row-right" style="gap:.5rem;flex-shrink:0">
+              <button class="btn btn-danger" style="font-size:.75rem;padding:.3rem .65rem" data-approve="${r.id}" data-task-id="${r.task_id}" data-company-id="${r.company_id}">✓ Aprovar</button>
+              <button class="btn btn-secondary" style="font-size:.75rem;padding:.3rem .65rem" data-reject="${r.id}">✕ Rejeitar</button>
+            </div>
+          </div>`).join('');
+
+      // Approve handler
+      secDelReqs.querySelectorAll('[data-approve]').forEach(btn=>{
+        btn.addEventListener('click', async ()=>{
+          const reqId = btn.dataset.approve;
+          const taskId = btn.dataset.taskId;
+          const req = reqs.find(r=>r.id===reqId);
+          const ok = await confirmDeleteModal({
+            title: 'Confirmar exclusão?',
+            ref: req?.task_ref||'',
+            description: req?.task_name||'',
+            warning: 'Você está aprovando a exclusão desta tarefa. A ação é <strong>irreversível</strong>.'
+          });
+          if(!ok) return;
+          try{
+            // delete the task
+            const { error: delErr } = await supa.from('tasks').delete().eq('id', taskId);
+            if(delErr) throw delErr;
+            // mark request as approved
+            await supa.from('deletion_requests').update({status:'approved'}).eq('id', reqId);
+            // update local state
+            state.deletionRequests = state.deletionRequests.filter(r=>r.id!==reqId);
+            // remove task from deal state
+            const companyId = btn.dataset.companyId;
+            if(state.deals[companyId]) state.deals[companyId].tasks = state.deals[companyId].tasks.filter(t=>t.id!==taskId);
+            renderDelReqsSection();
+          }catch(err){ alert('Erro: '+(err.message||err)); }
+        });
+      });
+
+      // Reject handler
+      secDelReqs.querySelectorAll('[data-reject]').forEach(btn=>{
+        btn.addEventListener('click', async ()=>{
+          const reqId = btn.dataset.reject;
+          if(!confirm('Rejeitar a solicitação de exclusão? A tarefa permanecerá inalterada.')) return;
+          try{
+            await supa.from('deletion_requests').update({status:'rejected'}).eq('id', reqId);
+            state.deletionRequests = state.deletionRequests.filter(r=>r.id!==reqId);
+            renderDelReqsSection();
+          }catch(err){ alert('Erro: '+(err.message||err)); }
+        });
+      });
+    }
+  }
+
   return node;
 }
 
