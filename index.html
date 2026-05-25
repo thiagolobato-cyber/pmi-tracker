@@ -4702,6 +4702,14 @@ function openTaskModal(company, taskId){
       showErr('Para marcar a tarefa como 100% concluída, informe a data real de conclusão.');
       return;
     }
+    // Validação: bloqueio = Sim exige Iniciativa vinculada
+    if(fd.get('bloqueio') === 'Sim' && !fd.get('raidId')){
+      showErr('Todo bloqueio precisa ter uma Iniciativa vinculada. Selecione ou crie uma Iniciativa antes de salvar.');
+      // Garante que o campo fique visível
+      const wrap = m.querySelector('#raidPickerWrap');
+      if(wrap) wrap.classList.remove('hidden');
+      return;
+    }
 
     const upd = {
       ref: fd.get('ref').trim(),
@@ -5366,11 +5374,12 @@ function renderHoje(){
   }
   function decisionRow(r){
     const sev = r.severity==='high'?'Alta':r.severity==='med'?'Média':'Baixa';
-    return `<div class="hoje-row" data-go="${r._deal.id}">
+    // data-raid-id → navega para Iniciativas e abre o modal de edição
+    return `<div class="hoje-row" data-raid-id="${r.id}" style="cursor:pointer">
       <div class="hoje-row-left">
         <div class="hoje-row-task" title="${escapeHtml(r.title)}">${escapeHtml(r.title)}</div>
         <div class="hoje-row-meta">
-          <span>${escapeHtml(r._deal.name)}</span><span class="sep">·</span>
+          <span>${escapeHtml(r._deal?.name||'')}</span><span class="sep">·</span>
           <span>${escapeHtml(r.area||'—')}</span>
           ${r.owner?`<span class="sep">·</span><span>Resp: ${escapeHtml(r.owner)}</span>`:''}
         </div>
@@ -5418,9 +5427,14 @@ function renderHoje(){
         if(company) openTaskModal(company, row.dataset.taskId);
       });
     });
-    // Decisões RAID: navega pro deal
-    container.querySelectorAll('[data-go]').forEach(row=>{
-      row.addEventListener('click',()=>{ view.tab='deal'; view.dealId=row.dataset.go; render(); });
+    // Iniciativas (Decisões): navega para página Iniciativas e abre modal de edição
+    container.querySelectorAll('[data-raid-id]').forEach(row=>{
+      row.addEventListener('click',()=>{
+        view.tab='raid';
+        render();
+        // Abre o modal de edição da iniciativa após o render
+        setTimeout(()=>openRaidModal(null, row.dataset.raidId), 50);
+      });
     });
     const moreBtn = container.querySelector('#more-'+limitKey);
     if(moreBtn) moreBtn.addEventListener('click',()=>{
