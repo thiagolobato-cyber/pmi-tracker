@@ -603,7 +603,8 @@ function taskFromDb(r){
     bloqueio: r.bloqueio || 'Não',
     bloqueioDescricao: r.bloqueio_descricao||'',
     phaseId: r.phase_id || '',
-    raidId: r.raid_id || null
+    raidId: r.raid_id || null,
+    pendingApproval: r.pending_approval || false
   };
 }
 function taskToDb(t, companyId){
@@ -620,7 +621,8 @@ function taskToDb(t, companyId){
     bloqueio: t.bloqueio || 'Não',
     bloqueio_descricao: t.bloqueioDescricao||'',
     phase_id: nullIfEmpty(t.phaseId),
-    raid_id: t.raidId || null
+    raid_id: t.raidId || null,
+    pending_approval: t.pendingApproval || false
   };
 }
 
@@ -3488,11 +3490,17 @@ function renderDealTasks(company, deal, tasks){
                 <th>REF</th><th class="min-w-[18rem]">TAREFA</th><th>FASE</th><th>STATUS</th><th>OWNER</th><th>PRAZO</th><th>PREVISTA</th><th>REAL</th><th>%</th><th>ATRASO</th><th>ÚLT.UPD</th><th>PRÓX.PASSO</th><th>BLOQ.</th>${canEdit()?'<th></th>':''}
               </tr></thead>
               <tbody>
-                ${grouped[a].map(t=>{
+                ${grouped[a].filter(t=> canAdmin() || !t.pendingApproval).map(t=>{
                   const hasPendingDel = state.deletionRequests.some(r=>r.task_id===t.id);
-                  return `<tr>
+                  const pendingBadge = t.pendingApproval
+                    ? ` <span title="Aguardando aprovação do admin" style="display:inline-block;font-size:.65rem;padding:.1rem .35rem;border-radius:.75rem;background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe;font-weight:600;white-space:nowrap">⏳ Aprox. pendente</span>`
+                    : '';
+                  const approveBtn = t.pendingApproval && canAdmin()
+                    ? ` <button data-approve-task="${t.id}" data-company-id="${company.id}" title="Aprovar tarefa" style="margin-left:.25rem;font-size:.65rem;padding:.1rem .4rem;border-radius:.5rem;background:#dcfce7;color:#166534;border:1px solid #bbf7d0;cursor:pointer;font-weight:600">✓ Aprovar</button><button data-reject-task="${t.id}" data-company-id="${company.id}" title="Rejeitar tarefa" style="font-size:.65rem;padding:.1rem .4rem;border-radius:.5rem;background:#fee2e2;color:#991b1b;border:1px solid #fecaca;cursor:pointer;font-weight:600">✕</button>`
+                    : '';
+                  return `<tr${t.pendingApproval?' style="opacity:.6"':''}>
                   <td class="text-xs">${t.ref||''}</td>
-                  <td>${t.task||''}${hasPendingDel?` <span title="Exclusão aguardando aprovação do admin" style="display:inline-block;font-size:.65rem;padding:.1rem .35rem;border-radius:.75rem;background:#fef3c7;color:#92400e;border:1px solid #fde68a;font-weight:600;white-space:nowrap">⏳ Excl. pendente</span>`:''}</td>
+                  <td>${t.task||''}${pendingBadge}${approveBtn}${hasPendingDel?` <span title="Exclusão aguardando aprovação do admin" style="display:inline-block;font-size:.65rem;padding:.1rem .35rem;border-radius:.75rem;background:#fef3c7;color:#92400e;border:1px solid #fde68a;font-weight:600;white-space:nowrap">⏳ Excl. pendente</span>`:''}</td>
                   <td>${phaseLabel(t)}</td>
                   <td><span class="pill ${statusClass(t._f.status)}">${statusLabel(t._f.status)}</span></td>
                   <td>${t.owner?`<span class="deal-link" data-owner="${escapeHtml(t.owner)}">${escapeHtml(t.owner)}</span>`:''}</td>
@@ -3522,6 +3530,33 @@ function renderDealTasks(company, deal, tasks){
   const addTask = node.querySelector('#addTask');
   if(addTask) addTask.onclick = ()=>openTaskModal(company);
   node.querySelectorAll('[data-edit]').forEach(b=>b.onclick = ()=>openTaskModal(company, b.dataset.edit));
+
+  // Approve / reject pending task creation
+  node.querySelectorAll('[data-approve-task]').forEach(btn=>btn.addEventListener('click', async ()=>{
+    const taskId = btn.dataset.approveTask;
+    const cid = btn.dataset.companyId;
+    if(!confirm('Aprovar a criação desta tarefa?')) return;
+    try{
+      const { error } = await supa.from('tasks').update({pending_approval: false}).eq('id', taskId);
+      if(error) throw error;
+      const d = state.deals[cid];
+      if(d){ const t = d.tasks.find(x=>x.id===taskId); if(t) t.pendingApproval = false; }
+      render();
+    }catch(err){ alert('Erro: '+(err.message||err)); }
+  }));
+  node.querySelectorAll('[data-reject-task]').forEach(btn=>btn.addEventListener('click', async ()=>{
+    const taskId = btn.dataset.rejectTask;
+    const cid = btn.dataset.companyId;
+    if(!confirm('Rejeitar e excluir esta tarefa?')) return;
+    try{
+      const { error } = await supa.from('tasks').delete().eq('id', taskId);
+      if(error) throw error;
+      const d = state.deals[cid];
+      if(d) d.tasks = d.tasks.filter(x=>x.id!==taskId);
+      render();
+    }catch(err){ alert('Erro: '+(err.message||err)); }
+  }));
+
   return node;
 }
 
@@ -4728,15 +4763,25 @@ function openTaskModal(company, taskId){
     };
     try{
       if(isNew){
-        const { data, error } = await supa.from('tasks').insert(taskToDb(upd, company.id)).select().single();
+        const needsApproval = !canAdmin();
+        const payload = { ...taskToDb(upd, company.id), pending_approval: needsApproval };
+        const { data, error } = await supa.from('tasks').insert(payload).select().single();
         if(error) throw error;
         deal.tasks.push(taskFromDb(data));
+        m.remove(); render();
+        if(needsApproval){
+          const toast = el(`<div style="position:fixed;bottom:1.5rem;right:1.5rem;background:#1e2d45;color:#fff;padding:.75rem 1.25rem;border-radius:.75rem;font-size:.85rem;z-index:999;box-shadow:0 8px 24px rgba(0,0,0,.3);max-width:320px">
+            ⏳ Tarefa enviada para aprovação do admin. Ficará visível após aprovação.
+            </div>`);
+          document.body.appendChild(toast);
+          setTimeout(()=>toast.remove(), 4000);
+        }
       }else{
         const { error } = await supa.from('tasks').update(taskToDb(upd, company.id)).eq('id', t.id);
         if(error) throw error;
         Object.assign(t, upd);
+        m.remove(); render();
       }
-      m.remove(); render();
     }catch(err){ alert('Erro ao salvar: '+(err.message||err)); }
   };
   const del = m.querySelector('#del');
@@ -5549,6 +5594,17 @@ function renderHoje(){
       </div>
 
       ${session?.role==='admin' ? `
+      <!-- Seção admin: Novas tarefas aguardando aprovação -->
+      <div class="hoje-section" id="sec-newtasks-wrap" style="${Object.values(state.deals).flatMap(d=>d.tasks||[]).filter(t=>t.pendingApproval).length===0?'display:none':''}">
+        <div class="hoje-section-header">
+          <div class="h-icon" style="background:#dbeafe;color:#1e40af">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </div>
+          <span class="h-title">Novas tarefas aguardando aprovação</span>
+          <span id="badge-newtasks" class="h-badge" style="background:#dbeafe;color:#1e40af">${Object.values(state.deals).flatMap(d=>d.tasks||[]).filter(t=>t.pendingApproval).length}</span>
+        </div>
+        <div id="sec-newtasks"></div>
+      </div>
       <!-- Seção admin: Solicitações de exclusão pendentes -->
       <div class="hoje-section" id="sec-delreqs-wrap" style="${(state.deletionRequests||[]).length===0?'display:none':''}">
         <div class="hoje-section-header">
@@ -5576,6 +5632,62 @@ function renderHoje(){
 
   // ---- Seção admin: solicitações de exclusão pendentes ----
   if(session?.role==='admin'){
+    const secNewTasks = node.querySelector('#sec-newtasks');
+    if(secNewTasks) renderNewTasksSection();
+
+    function renderNewTasksSection(){
+      const pending = Object.entries(state.deals).flatMap(([cid, d])=>
+        (d.tasks||[]).filter(t=>t.pendingApproval).map(t=>({...t, _companyId: cid, _companyName: state.companies.find(c=>c.id===cid)?.name||'—'}))
+      );
+      const wrap = node.querySelector('#sec-newtasks-wrap');
+      const badge = node.querySelector('#badge-newtasks');
+      if(badge) badge.textContent = pending.length;
+      if(wrap) wrap.style.display = pending.length===0 ? 'none' : '';
+      if(!secNewTasks) return;
+      secNewTasks.innerHTML = pending.length===0
+        ? `<div class="hoje-empty">Nenhuma tarefa aguardando aprovação.</div>`
+        : pending.map(t=>`
+          <div class="hoje-row" data-newtask-id="${t.id}" style="align-items:flex-start">
+            <div class="hoje-row-left" style="flex:1;min-width:0">
+              <div class="hoje-row-task" style="font-weight:600">${t.ref?`<span style="font-family:monospace;font-size:.78rem;background:#f3f4f6;padding:.1rem .3rem;border-radius:.25rem;margin-right:.35rem">${escapeHtml(t.ref)}</span>`:''}${escapeHtml(t.task||'(sem nome)')}</div>
+              <div class="hoje-row-meta">
+                <span>${escapeHtml(t._companyName)}</span><span class="sep">·</span>
+                <span>${escapeHtml(t.area||'—')}</span><span class="sep">·</span>
+                <span>Owner: <strong>${escapeHtml(t.owner||'—')}</strong></span>
+              </div>
+            </div>
+            <div class="hoje-row-right" style="gap:.5rem;flex-shrink:0">
+              <button class="btn btn-primary" style="font-size:.75rem;padding:.3rem .65rem;background:#16a34a" data-nt-approve="${t.id}" data-nt-cid="${t._companyId}">✓ Aprovar</button>
+              <button class="btn btn-secondary" style="font-size:.75rem;padding:.3rem .65rem" data-nt-reject="${t.id}" data-nt-cid="${t._companyId}">✕ Rejeitar</button>
+            </div>
+          </div>`).join('');
+
+      secNewTasks.querySelectorAll('[data-nt-approve]').forEach(btn=>btn.addEventListener('click', async ()=>{
+        const taskId = btn.dataset.ntApprove;
+        const cid = btn.dataset.ntCid;
+        if(!confirm('Aprovar a criação desta tarefa?')) return;
+        try{
+          const { error } = await supa.from('tasks').update({pending_approval: false}).eq('id', taskId);
+          if(error) throw error;
+          const d = state.deals[cid];
+          if(d){ const t2 = d.tasks.find(x=>x.id===taskId); if(t2) t2.pendingApproval = false; }
+          renderNewTasksSection(); render();
+        }catch(err){ alert('Erro: '+(err.message||err)); }
+      }));
+      secNewTasks.querySelectorAll('[data-nt-reject]').forEach(btn=>btn.addEventListener('click', async ()=>{
+        const taskId = btn.dataset.ntReject;
+        const cid = btn.dataset.ntCid;
+        if(!confirm('Rejeitar e excluir esta tarefa?')) return;
+        try{
+          const { error } = await supa.from('tasks').delete().eq('id', taskId);
+          if(error) throw error;
+          const d = state.deals[cid];
+          if(d) d.tasks = d.tasks.filter(x=>x.id!==taskId);
+          renderNewTasksSection(); render();
+        }catch(err){ alert('Erro: '+(err.message||err)); }
+      }));
+    }
+
     const secDelReqs = node.querySelector('#sec-delreqs');
     if(secDelReqs) renderDelReqsSection();
 
