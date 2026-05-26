@@ -559,9 +559,9 @@ let state = defaultState();
 let session = null; // { id, email, username, role }
 let view = { tab:'dashboard', dealId:null, dealTab:'tarefas', executiveArea:'todas', raidFilter:'all', raidPortfolioFilter:'all', synergyFilter:'all', dashFilters:{deals:[],areas:[],owners:[]}, empresasSearch:'', empresasSortCol:'date', empresasSortDir:'desc', sidebarCollapsed:false, executivaDealSearch:'', execPdfDeals:null };
 
-// Tooltip explicativo do acrônimo RAID dentro de Iniciativas
+// Tooltip explicativo do acrônimo RAID dentro de Ações de Mitigação
 function raidTooltipLabel(text){
-  return `<span class="raid-tip">${text}<span class="raid-tip-icon">?</span><span class="raid-tip-box" style="min-width:260px"><b style="color:#f9a8d4">Iniciativas</b> agrupam os 4 aspectos de uma situação crítica:<br><br><b>R</b> isco — o que pode acontecer e impactar o deal<br><b>A</b> ssunção — o que estamos assumindo como verdadeiro<br><b>I</b> mpedimento — o que já está bloqueando agora<br><b>D</b> ependência — o que precisamos de terceiros para avançar<br><br><span style="opacity:.75;font-size:.68rem">Preencha apenas os aspectos que se aplicam.</span></span></span>`;
+  return `<span class="raid-tip">${text}<span class="raid-tip-icon">?</span><span class="raid-tip-box" style="min-width:260px"><b style="color:#f9a8d4">Ações de Mitigação</b> agrupam os 4 aspectos de uma situação crítica:<br><br><b>R</b> isco — o que pode acontecer e impactar o deal<br><b>A</b> ssunção — o que estamos assumindo como verdadeiro<br><b>I</b> mpedimento — o que já está bloqueando agora<br><b>D</b> ependência — o que precisamos de terceiros para avançar<br><br><span style="opacity:.75;font-size:.68rem">Preencha apenas os aspectos que se aplicam.</span></span></span>`;
 }
 
 function defaultState(){
@@ -1763,9 +1763,9 @@ function renderRaidPortfolio(){
       <div class="page-header">
         <div>
           <h1>${raidTooltipLabel('Ação de Mitigação')}</h1>
-          <p class="subtitle">Iniciativa para resolver os bloqueios — visão consolidada de todos os deals</p>
+          <p class="subtitle">Ação de Mitigação para resolver os bloqueios — visão consolidada de todos os deals</p>
         </div>
-        ${canEdit()?`<button id="addRaidGlobal" class="btn btn-primary">+ Nova Iniciativa</button>`:''}
+        ${canEdit()?`<button id="addRaidGlobal" class="btn btn-primary">+ Nova Ação de Mitigação</button>`:''}
       </div>
 
       <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -1807,7 +1807,7 @@ function renderRaidPortfolio(){
       <div class="bhub-card p-10 text-center text-gray-400">
         <div style="font-size:2rem;margin-bottom:.5rem">🛡</div>
         <div class="font-medium">Nenhum item ${filter==='all'||filter==='closed'?'':kpiCards.find(k=>k.id===filter)?.label+' '||''}aberto</div>
-        ${canEdit()?'<div class="text-xs mt-1">Clique em "+ Nova Iniciativa" para começar.</div>':''}
+        ${canEdit()?'<div class="text-xs mt-1">Clique em "+ Nova Ação de Mitigação" para começar.</div>':''}
       </div>`}
     </div>
   `);
@@ -2022,9 +2022,8 @@ function renderDashboard(){
             <div class="kpi-sub">${total>0?Math.round(late/total*100):0}% do portfólio</div>
           </div>
           <div class="kpi">
-            <div class="kpi-head"><div class="kpi-label">Iniciativas abertas</div><div class="kpi-icon kpi-icon-rose"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="22" x2="4" y2="15"/><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/></svg></div></div>
+            <div class="kpi-label">Ações de Mitigação abertas</div>
             <div class="kpi-value">${openRaid.length}</div>
-            <div class="kpi-sub">${openRaid.filter(r=>r.riscoDesc&&r.severity==='high').length} risco(s) alto(s)</div>
           </div>
           <div class="kpi">
             <div class="kpi-head"><div class="kpi-label">Bloqueios</div><div class="kpi-icon kpi-icon-amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div></div>
@@ -2103,13 +2102,13 @@ function renderDashboard(){
           <div class="widget-header">
             <h3 class="widget-title">
               <span class="icon-wrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L3 6v6c0 5 4 9 9 10 5-1 9-5 9-10V6l-9-4z"/><path d="M12 8v4"/><circle cx="12" cy="16" r=".5" fill="currentColor"/></svg></span>
-              Top 10 ${raidTooltipLabel('Iniciativas')} abertas — maior nº de bloqueios (${openRaid.length} abertas)
+              Top 10 ${raidTooltipLabel('Ações de Mitigação')} abertas — maior nº de bloqueios (${openRaid.length} abertas)
             </h3>
           </div>
           ${topPortfolioRisks.length ? `
           <div class="scroll-x">
             <table class="w-full text-xs">
-              <thead><tr><th>INICIATIVA</th><th>ASPECTOS</th><th>DEAL</th><th>ÁREA</th><th>SEVERIDADE</th><th>OWNER</th><th class="text-center">BLOQUEIOS</th></tr></thead>
+              <thead><tr><th>AÇÃO DE MITIGAÇÃO</th><th>ASPECTOS</th><th>DEAL</th><th>ÁREA</th><th>SEVERIDADE</th><th>OWNER</th><th class="text-center">BLOQUEIOS</th></tr></thead>
               <tbody>
                 ${topPortfolioRisks.map(r=>`<tr>
                   <td class="font-medium">${escapeHtml(r.title)}</td>
@@ -2881,7 +2880,7 @@ function openCompanySummary(companyId){
           <div class="kpi"><div class="kpi-label">On Track</div><div class="kpi-value" style="color:var(--bhub-blue)">${ontrack}</div></div>
           <div class="kpi"><div class="kpi-label">Atrasadas</div><div class="kpi-value" style="color:var(--bhub-red)">${late}</div></div>
           <div class="kpi"><div class="kpi-label">Bloqueios</div><div class="kpi-value" style="color:#92400e">${blocked}</div></div>
-          <div class="kpi"><div class="kpi-label">Iniciativas abertas</div><div class="kpi-value">${openRaid.length}</div></div>
+          <div class="kpi"><div class="kpi-label">Ações de Mitigação abertas</div><div class="kpi-value">${openRaid.length}</div></div>
           <div class="kpi"><div class="kpi-label">Sinergia</div><div class="kpi-value">${synPct}%</div></div>
         </div>
 
@@ -3009,7 +3008,7 @@ function openAreaSummary(areaName){
           <div class="kpi"><div class="kpi-label">On Track</div><div class="kpi-value" style="color:var(--bhub-blue)">${ontrack}</div></div>
           <div class="kpi"><div class="kpi-label">Atrasadas</div><div class="kpi-value" style="color:var(--bhub-red)">${late}</div></div>
           <div class="kpi"><div class="kpi-label">Bloqueios</div><div class="kpi-value" style="color:#92400e">${blocked}</div></div>
-          <div class="kpi"><div class="kpi-label">Iniciativas abertas</div><div class="kpi-value">${openRaid.length}</div></div>
+          <div class="kpi"><div class="kpi-label">Ações de Mitigação abertas</div><div class="kpi-value">${openRaid.length}</div></div>
           <div class="kpi"><div class="kpi-label">Sinergia</div><div class="kpi-value">${synPct}%</div></div>
         </div>
 
@@ -3161,7 +3160,7 @@ function openOwnerSummary(ownerName){
           <div class="kpi"><div class="kpi-label">On Track</div><div class="kpi-value" style="color:var(--bhub-blue)">${ontrack}</div></div>
           <div class="kpi"><div class="kpi-label">Atrasadas</div><div class="kpi-value" style="color:var(--bhub-red)">${late}</div></div>
           <div class="kpi"><div class="kpi-label">Bloqueios</div><div class="kpi-value" style="color:#92400e">${blocked}</div></div>
-          <div class="kpi"><div class="kpi-label">Iniciativas abertas</div><div class="kpi-value">${openRaid.length}</div></div>
+          <div class="kpi"><div class="kpi-label">Ações de Mitigação abertas</div><div class="kpi-value">${openRaid.length}</div></div>
         </div>
 
         <div class="grid lg:grid-cols-2 gap-5">
@@ -3188,7 +3187,7 @@ function openOwnerSummary(ownerName){
 
         ${openRaid.length ? `
         <section class="bhub-card p-4">
-          <div class="text-sm font-semibold mb-2" style="color:var(--bhub-navy)">🛡️ Iniciativas abertas</div>
+          <div class="text-sm font-semibold mb-2" style="color:var(--bhub-navy)">🛡️ Ações de Mitigação abertas</div>
           <ul class="space-y-1.5 text-xs">${openRaid.slice(0,8).map(r=>`<li class="flex items-start gap-2">${raidAspectBadges(r)}<span><strong>${escapeHtml(r.title||'')}</strong> <span class="text-gray-500">— <span class="deal-link" data-summary="${r.companyId}">${escapeHtml(r.companyName)}</span>${r.area?` • <span class="deal-link" data-area="${escapeHtml(r.area)}">${escapeHtml(r.area)}</span>`:''}</span></span></li>`).join('')}</ul>
         </section>` : ''}
       </div>
@@ -3338,7 +3337,7 @@ function openCompareDealsView(ids){
             <tr><td class="font-medium">Bloqueios</td>${deals.map((d,i)=>metricCell(deals.map(x=>x.blocked),i,false)).join('')}</tr>
             <tr><td class="font-medium">Sem owner</td>${deals.map((d,i)=>metricCell(deals.map(x=>x.noowner),i,false)).join('')}</tr>
             <tr><td class="font-medium">Próximas (≤10 d.u.)</td>${metrics.map((m_,i)=>metricCell(metrics.map(x=>x.upcoming10),i,false)).join('')}</tr>
-            <tr><td class="font-medium">Iniciativas abertas</td>${metrics.map((m_,i)=>metricCell(metrics.map(x=>x.openRaid),i,false)).join('')}</tr>
+            <tr><td class="font-medium">Ações de Mitigação abertas</td>${metrics.map((m_,i)=>metricCell(metrics.map(x=>x.openRaid),i,false)).join('')}</tr>
             <tr><td class="font-medium">Sinergia plano</td>${metrics.map((m_,i)=>`<td class="text-center">${fmtBRL(metrics[i].synPlan)}</td>`).join('')}</tr>
             <tr><td class="font-medium">Sinergia realizada</td>${metrics.map((m_,i)=>`<td class="text-center">${fmtBRL(metrics[i].synReal)}</td>`).join('')}</tr>
             <tr><td class="font-medium">% sinergia</td>${metrics.map((m_,i)=>metricCell(metrics.map(x=>x.synPct),i,true,'%')).join('')}</tr>
@@ -3400,7 +3399,7 @@ function renderDeal(){
   const subtabs = [
     ['tarefas',   ICN.tarefas   + 'Tarefas',    total],
     ['gantt',     ICN.gantt     + 'Gantt',      null],
-    ['raid',      ICN.raid      + raidTooltipLabel('Iniciativas'), openRaid],
+    ['raid',      ICN.raid      + raidTooltipLabel('Ações de Mitigação'), openRaid],
     ['sinergias', ICN.sinergias + 'Sinergias',  (deal.synergies||[]).length],
     ['historico', ICN.historico + 'Histórico',  null],
     ['briefing',  ICN.briefing  + 'Briefing',   null],
@@ -3438,7 +3437,7 @@ function renderDeal(){
         <div class="mini-stat"><div class="lbl">Tasks Done</div><div class="val">${done}/${total}</div></div>
         <div class="mini-stat"><div class="lbl">Atrasadas</div><div class="val" style="color:var(--bhub-red)">${late}</div></div>
         <div class="mini-stat"><div class="lbl">Bloqueios</div><div class="val" style="color:#92400e">${blocked}</div></div>
-        <div class="mini-stat"><div class="lbl">Iniciativas abertas</div><div class="val">${openRaid}</div></div>
+        <div class="mini-stat"><div class="lbl">Ações de Mitigação abertas</div><div class="val">${openRaid}</div></div>
         <div class="mini-stat"><div class="lbl">Sinergia captura</div><div class="val">${synPct}%</div></div>
       </div>
 
@@ -3587,7 +3586,7 @@ function renderDealRaid(company, deal){
           ${kpiCards.map(k=>`<button class="btn ${filter===k.id?'btn-primary':'btn-secondary'}" data-rf="${k.id}">${k.icon} ${k.label} (${kpiCounts[k.id]})</button>`).join('')}
           <button class="btn ${filter==='closed'?'btn-primary':'btn-secondary'}" data-rf="closed">✓ Fechados (${closed.length})</button>
         </div>
-        ${canEdit() ? `<button id="addRaid" class="btn btn-primary">+ Nova Iniciativa</button>`:''}
+        ${canEdit() ? `<button id="addRaid" class="btn btn-primary">+ Nova Ação de Mitigação</button>`:''}
       </div>
 
       ${filtered.length ? `
@@ -3598,7 +3597,7 @@ function renderDealRaid(company, deal){
             <tbody id="dealRaidRows"></tbody>
           </table>
         </div>
-      </div>` : `<div class="bhub-card p-8 text-center text-gray-500 text-sm">Nenhuma Iniciativa${filter!=='all'?' deste aspecto':''}. ${canEdit()?'Clique em "+ Nova Iniciativa" para começar.':''}</div>`}
+      </div>` : `<div class="bhub-card p-8 text-center text-gray-500 text-sm">Nenhuma Ação de Mitigação${filter!=='all'?' deste aspecto':''}. ${canEdit()?'Clique em "+ Nova Ação de Mitigação" para começar.':''}</div>`}
     </div>
   `);
 
@@ -3645,11 +3644,11 @@ function openRaidModal(company, raidId){
   const m = el(`
     <div class="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-20">
       <div class="bg-white rounded-2xl p-5 w-full max-w-2xl border border-[color:var(--bhub-border)]" style="box-shadow:0 24px 60px rgba(15,23,39,.25);max-height:90vh;overflow-y:auto">
-        <div class="text-lg font-bold mb-1" style="color:var(--bhub-navy)">${existing?'Editar '+raidTooltipLabel('Iniciativa'):'Nova '+raidTooltipLabel('Iniciativa')}</div>
-        <p class="text-xs text-gray-500 mb-3">Owner e prazo são obrigatórios. Uma Iniciativa pode afetar múltiplos deals.</p>
+        <div class="text-lg font-bold mb-1" style="color:var(--bhub-navy)">${existing?'Editar '+raidTooltipLabel('Ação de Mitigação'):'Nova '+raidTooltipLabel('Ação de Mitigação')}</div>
+        <p class="text-xs text-gray-500 mb-3">Owner e prazo são obrigatórios. Uma Ação de Mitigação pode afetar múltiplos deals.</p>
         <form id="raidForm" class="grid grid-cols-2 gap-3 text-sm">
           <label class="block col-span-2">Título *
-            <input name="title" required value="${escapeHtml(existing?.title||'')}" placeholder="Nome da iniciativa (ex: Inclusão no Cockpit)" />
+            <input name="title" required value="${escapeHtml(existing?.title||'')}" placeholder="Nome da ação de mitigação (ex: Inclusão no Cockpit)" />
           </label>
           <label class="block">Área
             <select name="area">
@@ -3735,7 +3734,7 @@ function openRaidModal(company, raidId){
 
   const delBtn = m.querySelector('#del');
   if(delBtn) delBtn.onclick = async ()=>{
-    if(!confirm('Excluir esta Iniciativa? Isso removerá o vínculo com todos os deals.')) return;
+    if(!confirm('Excluir esta Ação de Mitigação? Isso removerá o vínculo com todos os deals.')) return;
     try{
       const { error } = await supa.from('raid_items').delete().eq('id', raidId);
       if(error) throw error;
@@ -4447,11 +4446,11 @@ function renderDealBriefing(company, deal, tasks){
 
         <div class="grid md:grid-cols-2 gap-4 mb-5">
           <div>
-            <div class="text-sm font-semibold mb-2" style="color:var(--bhub-navy);font-family:'Roboto'">⚠️ Iniciativas com Risco</div>
+            <div class="text-sm font-semibold mb-2" style="color:var(--bhub-navy);font-family:'Roboto'">⚠️ Ações de Mitigação com Risco</div>
             ${topRisks.length ? `<ul class="text-xs space-y-1">${topRisks.map(r=>`<li class="border-l-2 pl-2" style="border-color:#f97316"><span class="font-semibold">[${SEVERITIES.find(s=>s.id===r.severity)?.label||''}]</span> ${escapeHtml(r.title)} — <span class="text-gray-500">${escapeHtml(r.riscoDesc||'').slice(0,80)}</span></li>`).join('')}</ul>` : '<div class="text-xs text-gray-500">Nenhum risco aberto.</div>'}
           </div>
           <div>
-            <div class="text-sm font-semibold mb-2" style="color:var(--bhub-navy);font-family:'Roboto'">🔥 Iniciativas com Issue</div>
+            <div class="text-sm font-semibold mb-2" style="color:var(--bhub-navy);font-family:'Roboto'">🔥 Ações de Mitigação com Issue</div>
             ${topIssues.length ? `<ul class="text-xs space-y-1">${topIssues.map(r=>`<li class="border-l-2 pl-2" style="border-color:#ef4444"><span class="font-semibold">[${SEVERITIES.find(s=>s.id===r.severity)?.label||''}]</span> ${escapeHtml(r.title)} — <span class="text-gray-500">${escapeHtml(r.issueDesc||'').slice(0,80)}</span></li>`).join('')}</ul>` : '<div class="text-xs text-gray-500">Nenhum issue aberto.</div>'}
           </div>
         </div>
@@ -4656,13 +4655,13 @@ function openTaskModal(company, taskId){
           <select name="bloqueio" id="bloqueioSel"><option ${t.bloqueio!=='Sim'?'selected':''}>Não</option><option ${t.bloqueio==='Sim'?'selected':''}>Sim</option></select>
         </div>
         <div id="raidPickerWrap" class="${t.bloqueio==='Sim'?'':'hidden'} col-span-2">
-          <label class="text-xs font-medium">Iniciativa associada ao bloqueio *
+          <label class="text-xs font-medium">Ação de Mitigação associada ao bloqueio *
             <select name="raidId" id="raidIdSel">
-              <option value="">— Selecione ou crie uma Iniciativa —</option>
+              <option value="">— Selecione ou crie uma Ação de Mitigação —</option>
               ${state.raid.filter(r=>r.status!=='closed').map(r=>`<option value="${r.id}" ${t.raidId===r.id?'selected':''}>${escapeHtml(r.title)}</option>`).join('')}
             </select>
           </label>
-          <button type="button" id="createRaidInline" class="btn btn-secondary mt-1" style="font-size:.72rem;padding:.25rem .6rem">+ Nova Iniciativa para este bloqueio</button>
+          <button type="button" id="createRaidInline" class="btn btn-secondary mt-1" style="font-size:.72rem;padding:.25rem .6rem">+ Nova Ação de Mitigação para este bloqueio</button>
         </div>
         <div class="col-span-2"><label class="text-xs font-medium">Fase (auto se vazio)</label>
           <select name="phaseId">
@@ -4735,9 +4734,9 @@ function openTaskModal(company, taskId){
       showErr('Para marcar a tarefa como 100% concluída, informe a data real de conclusão.');
       return;
     }
-    // Validação: bloqueio = Sim exige Iniciativa vinculada
+    // Validação: bloqueio = Sim exige Ação de Mitigação vinculada
     if(fd.get('bloqueio') === 'Sim' && !fd.get('raidId')){
-      showErr('Todo bloqueio precisa ter uma Iniciativa vinculada. Selecione ou crie uma Iniciativa antes de salvar.');
+      showErr('Todo bloqueio precisa ter uma Ação de Mitigação vinculada. Selecione ou crie uma Ação de Mitigação antes de salvar.');
       // Garante que o campo fique visível
       const wrap = m.querySelector('#raidPickerWrap');
       if(wrap) wrap.classList.remove('hidden');
@@ -5497,7 +5496,7 @@ function renderHoje(){
   }
   function decisionRow(r){
     const sev = r.severity==='high'?'Alta':r.severity==='med'?'Média':'Baixa';
-    // data-raid-id → navega para Iniciativas e abre o modal de edição
+    // data-raid-id → navega para Ações de Mitigação e abre o modal de edição
     return `<div class="hoje-row" data-raid-id="${r.id}" style="cursor:pointer">
       <div class="hoje-row-left">
         <div class="hoje-row-task" title="${escapeHtml(r.title)}">${escapeHtml(r.title)}</div>
@@ -5550,18 +5549,18 @@ function renderHoje(){
         if(company) openTaskModal(company, row.dataset.taskId);
       });
     });
-    // Iniciativas (Decisões): navega para o subtab Iniciativas do deal e abre o modal
+    // Ações de Mitigação (Decisões): navega para o subtab Ações de Mitigação do deal e abre o modal
     container.querySelectorAll('[data-raid-id]').forEach(row=>{
       row.addEventListener('click',()=>{
         const raidId = row.dataset.raidId;
         const raidItem = decisions.find(x=>x.id===raidId);
         if(raidItem && raidItem._deal){
-          // Abre o deal correto já na aba Iniciativas
+          // Abre o deal correto já na aba Ações de Mitigação
           view.tab='deal';
           view.dealId=raidItem._deal.id;
           view.dealTab='raid';
         } else {
-          // Fallback: página global de Iniciativas
+          // Fallback: página global de Ações de Mitigação
           view.tab='raid';
         }
         render();
