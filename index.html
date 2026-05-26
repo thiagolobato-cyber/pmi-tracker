@@ -5051,14 +5051,7 @@ function renderHoje(){
     .map(t => ({...t, _diff: businessDaysBetween(today, t._f.dataPrevista)}))
     .sort((a,b) => a._diff - b._diff);
 
-  // Deals únicos que aparecem em qualquer seção (para o filtro)
-  const dealsInView = new Map();
-  [...myLate, ...myUpcoming].forEach(t => dealsInView.set(t._deal.id, t._deal.name));
-  decisions.forEach(r => dealsInView.set(r._deal.id, r._deal.name));
-  const dealList = [...dealsInView.entries()].sort((a,b)=>a[1].localeCompare(b[1]));
-
-  // Estado local: filtro de deal + limites de paginação por seção
-  let filterDeal = '';
+  // Limites de paginação por seção
   const limits = { late: PAGE, dec: PAGE, up: PAGE };
 
   const hour = new Date().getHours();
@@ -5112,14 +5105,9 @@ function renderHoje(){
     </div>`;
   }
 
-  // ---- Aplica filtro de deal a uma lista ----
-  function applyFilters(items){
-    return filterDeal ? items.filter(x=>x._deal.id===filterDeal) : items;
-  }
-
-  // ---- Renderiza uma seção (lista filtrada + paginação) ----
+  // ---- Renderiza uma seção (com paginação) ----
   function renderSec(containerId, badgeId, limitKey, items, rowFn, emptyMsg){
-    const visible = applyFilters(items);
+    const visible = items;
     const limit = limits[limitKey];
     const slice = visible.slice(0, limit);
     const rest = visible.length - slice.length;
@@ -5168,10 +5156,7 @@ function renderHoje(){
 
   // ---- Atualiza total + todas as seções ----
   function refresh(){
-    const totLate = applyFilters(myLate).length;
-    const totDec  = applyFilters(decisions).length;
-    const totUp   = applyFilters(myUpcoming).length;
-    const total   = totLate + totDec + totUp;
+    const total = myLate.length + decisions.length + myUpcoming.length;
     const totalEl = node.querySelector('#hoje-total');
     if(totalEl) totalEl.innerHTML = total===0
       ? 'Nenhuma ação pendente. Tudo em dia!'
@@ -5192,15 +5177,6 @@ function renderHoje(){
           ? 'Nenhuma ação pendente no momento. Tudo em dia!'
           : `Você tem <strong>${totalActions}</strong> item${totalActions!==1?'s':''} que precisam de atenção.`
         }</p>
-      </div>
-
-      <div class="hoje-filter-bar">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="color:var(--bhub-muted);flex-shrink:0"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
-        <span style="font-size:.78rem;color:var(--bhub-muted);font-weight:600;white-space:nowrap">Deal:</span>
-        <select id="dealFilter" style="min-width:160px">
-          <option value="">Todos os deals${dealList.length>0?` (${dealList.length})`:''}</option>
-          ${dealList.map(([id,name])=>`<option value="${id}">${escapeHtml(name)}</option>`).join('')}
-        </select>
       </div>
 
       <!-- Seção 1: Tarefas atrasadas -->
@@ -5275,14 +5251,6 @@ function renderHoje(){
       </div>` : ''}
     </div>
   `);
-
-  // Wiring: filtro de deal
-  const filterEl = node.querySelector('#dealFilter');
-  if(filterEl) filterEl.addEventListener('change', ()=>{
-    filterDeal = filterEl.value;
-    limits.late = PAGE; limits.dec = PAGE; limits.up = PAGE;
-    refresh();
-  });
 
   // Render inicial das seções
   refresh();
