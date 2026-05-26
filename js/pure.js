@@ -1,189 +1,281 @@
-// PMI Tracker - utilitarios puros (sem dependencias DOM/rede)
-// Modulo ES nativo, usado tanto pelo app (via import dinamico no script principal)
-// quanto pelos testes Node.
+/* ============================================================
+   js/pure.js  –  Funções e constantes puras do BHub PMI
+   Exportadas via ES Module e importadas pelo index.html
+   ============================================================ */
 
-/* ===== Constantes ===== */
+// ─── Constantes ──────────────────────────────────────────────
 
 export const DEFAULT_PHASES = [
-  {id:'preclose', name:'Pre-Close',  daysFromSign:-30, color:'#94a3b8'},
-  {id:'day1',     name:'Day 1',      daysFromSign:0,   color:'#0171E4'},
-  {id:'d30',      name:'D+30',       daysFromSign:30,  color:'#16a34a'},
-  {id:'d60',      name:'D+60',       daysFromSign:60,  color:'#15803d'},
-  {id:'d100',     name:'D+100',      daysFromSign:100, color:'#7c3aed'},
-  {id:'year1',    name:'Year 1',     daysFromSign:365, color:'#0F1727'},
+  { id: 'pre-close', name: 'Pré-fechamento', color: '#6366f1' },
+  { id: 'd0',        name: 'D0 (Fechamento)', color: '#0171E4' },
+  { id: '0-100',     name: '0–100 dias',      color: '#f59e0b' },
+  { id: '100-365',   name: '100–365 dias',    color: '#16a34a' },
+  { id: 'pos',       name: 'Pós-Integração',  color: '#64748b' },
 ];
 
 export const RAID_TYPES = [
-  {id:'risk',       label:'Risco',     icon:'\u26A0\uFE0F'},
-  {id:'issue',      label:'Issue',     icon:'\uD83D\uDD25'},
-  {id:'decision',   label:'Decis\u00E3o',   icon:'\u2696\uFE0F'},
-  {id:'assumption', label:'Premissa',  icon:'\uD83D\uDCA1'},
+  { id: 'risk',       label: 'Risco' },
+  { id: 'assumption', label: 'Premissa' },
+  { id: 'issue',      label: 'Issue' },
+  { id: 'dependency', label: 'Dependência' },
 ];
 
 export const SEVERITIES = [
-  {id:'high', label:'Alta'},
-  {id:'med',  label:'M\u00E9dia'},
-  {id:'low',  label:'Baixa'},
+  { id: 'high', label: 'Alta' },
+  { id: 'med',  label: 'Média' },
+  { id: 'low',  label: 'Baixa' },
 ];
 
 export const RAID_STATUSES = [
-  {id:'open',      label:'Aberto'},
-  {id:'mitigated', label:'Mitigado'},
-  {id:'closed',    label:'Fechado'},
+  { id: 'open',      label: 'Aberto' },
+  { id: 'mitigated', label: 'Mitigado' },
+  { id: 'closed',    label: 'Encerrado' },
 ];
 
 export const SYNERGY_TYPES = [
-  {id:'cost',    label:'Custo'},
-  {id:'revenue', label:'Receita'},
+  { id: 'cost',    label: '💸 Custo' },
+  { id: 'revenue', label: '📈 Receita' },
 ];
 
 export const SYNERGY_STATUSES = [
-  {id:'identified',  label:'Identificada'},
-  {id:'in_progress', label:'Em captura'},
-  {id:'realized',    label:'Realizada'},
-  {id:'at_risk',     label:'Em risco'},
+  { id: 'identified',  label: 'Identificada' },
+  { id: 'validated',   label: 'Validada' },
+  { id: 'in_progress', label: 'Em captura' },
+  { id: 'captured',    label: 'Capturada' },
 ];
 
 export const DEFAULT_AREAS = [
-  {n:'1.0', name:'Financeiro'},
-  {n:'2.0', name:'CExp'},
-  {n:'3.0', name:'P&C'},
-  {n:'4.0', name:'System Integration / TI / Digital Workplace'},
-  {n:'5.0', name:'Marketing & Comunica\u00E7\u00E3o'},
-  {n:'6.0', name:'Comercial'},
-  {n:'7.0', name:'Opera\u00E7\u00F5es'},
-  {n:'8.0', name:'Tech'},
-  {n:'9.0', name:'PMI / M&A'},
-  {n:'10.0', name:'Treinamentos para colaboradores'},
+  { name: 'Financeiro' },
+  { name: 'Jurídico' },
+  { name: 'Pessoas & Cultura' },
+  { name: 'Tecnologia' },
+  { name: 'Comercial' },
+  { name: 'Operações' },
+  { name: 'Marketing' },
+  { name: 'PMO' },
 ];
 
-/* ===== Utils ===== */
+// ─── Utilitários gerais ──────────────────────────────────────
 
-export const uid = () => Math.random().toString(36).slice(2,10);
+export function uid() {
+  return (typeof crypto !== 'undefined' && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
 
-export function parseDate(d){
-  if(!d) return null;
-  if(d instanceof Date) return d;
-  if(typeof d === 'number'){
-    const epoch = new Date(Date.UTC(1899,11,30));
-    return new Date(epoch.getTime() + d*86400000);
+export function escapeHtml(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// ─── Datas ───────────────────────────────────────────────────
+
+/**
+ * Parseia vários formatos de data → Date (meia-noite local) ou null.
+ * Suporta: YYYY-MM-DD, DD/MM/YYYY, DD-MM-YYYY, serial Excel (número), Date object.
+ */
+export function parseDate(val) {
+  if (!val) return null;
+  if (val instanceof Date) return isNaN(val.getTime()) ? null : val;
+
+  const s = String(val).trim();
+
+  // YYYY-MM-DD (ISO)
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) {
+    const d = new Date(+m[1], +m[2] - 1, +m[3]);
+    return isNaN(d.getTime()) ? null : d;
   }
-  if(typeof d === 'string'){
-    const s = d.trim();
-    if(!s) return null;
-    let m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
-    if(m){
-      let [_,dd,mm,yy] = m;
-      if(yy.length===2) yy = '20'+yy;
-      return new Date(parseInt(yy),parseInt(mm)-1,parseInt(dd));
+
+  // DD/MM/YYYY ou DD-MM-YYYY
+  m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  if (m) {
+    const d = new Date(+m[3], +m[2] - 1, +m[1]);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  // Serial numérico do Excel (ex.: 45000)
+  if (/^\d+(\.\d+)?$/.test(s)) {
+    const n = Number(s);
+    if (n > 40000 && n < 60000) {
+      const d = new Date(Date.UTC(1899, 11, 30) + n * 86400000);
+      return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
     }
-    m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-    if(m) return new Date(parseInt(m[1]),parseInt(m[2])-1,parseInt(m[3]));
-    const dt = new Date(s);
-    return isNaN(dt) ? null : dt;
   }
-  return null;
+
+  // Fallback genérico
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
-export function fmtDate(d){
-  d = parseDate(d);
-  if(!d) return '';
-  return d.toLocaleDateString('pt-BR');
+/** Formata Date (ou string de data) → "DD/MM/YYYY" */
+export function fmtDate(val) {
+  const d = val instanceof Date ? val : parseDate(val);
+  if (!d) return '';
+  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
-export function toIso(d){
-  d = parseDate(d);
-  if(!d) return '';
-  return d.toISOString().slice(0,10);
+/** Date (ou string) → "YYYY-MM-DD" */
+export function toIso(val) {
+  const d = val instanceof Date ? val : parseDate(val);
+  if (!d) return '';
+  const y   = d.getFullYear();
+  const mo  = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${mo}-${day}`;
 }
 
-export function emptyDate(d){ return (!d || d==='') ? null : d; }
-export function nullIfEmpty(s){ return (s==null || s==='') ? null : s; }
+/** Retorna null se val é vazio/falsy, senão retorna val (para colunas de data no DB) */
+export function emptyDate(val) {
+  if (!val || String(val).trim() === '') return null;
+  return val;
+}
 
-export function addBusinessDays(date, days){
-  if(!date) return null;
+/** Retorna null se val é vazio/falsy, senão retorna val */
+export function nullIfEmpty(val) {
+  if (val === null || val === undefined || String(val).trim() === '') return null;
+  return val;
+}
+
+/** Soma n dias úteis (Seg–Sex) a uma data */
+export function addBusinessDays(date, n) {
+  if (!date || n == null) return null;
   const d = new Date(date);
-  let added = 0;
-  const dir = days >= 0 ? 1 : -1;
-  const target = Math.abs(days);
-  while(added < target){
-    d.setDate(d.getDate()+dir);
-    const dow = d.getDay();
-    if(dow!==0 && dow!==6) added++;
+  d.setHours(0, 0, 0, 0);
+  let remaining = Math.abs(Math.round(Number(n)));
+  const dir = Number(n) >= 0 ? 1 : -1;
+  while (remaining > 0) {
+    d.setDate(d.getDate() + dir);
+    if (d.getDay() !== 0 && d.getDay() !== 6) remaining--;
   }
   return d;
 }
 
-export function businessDaysBetween(a,b){
-  a = parseDate(a); b = parseDate(b);
-  if(!a||!b) return null;
-  let start = new Date(a), end = new Date(b), sign = 1;
-  if(start>end){ [start,end]=[end,start]; sign=-1; }
+/**
+ * Conta dias úteis entre duas datas.
+ * Positivo se d2 > d1 (d2 é mais tarde), negativo se d2 < d1.
+ */
+export function businessDaysBetween(d1, d2) {
+  if (!d1 || !d2) return null;
+  const a = new Date(Math.min(+d1, +d2));
+  const b = new Date(Math.max(+d1, +d2));
+  a.setHours(0, 0, 0, 0);
+  b.setHours(0, 0, 0, 0);
   let count = 0;
-  const cur = new Date(start);
-  while(cur < end){
-    cur.setDate(cur.getDate()+1);
-    const dow = cur.getDay();
-    if(dow!==0 && dow!==6) count++;
+  const cur = new Date(a);
+  while (cur < b) {
+    cur.setDate(cur.getDate() + 1);
+    if (cur.getDay() !== 0 && cur.getDay() !== 6) count++;
   }
-  return count*sign;
+  return +d2 >= +d1 ? count : -count;
 }
 
-export function computeTaskFields(task, company){
-  const signDate = parseDate(company?.signDate);
-  const prazo = parseInt(task.prazo)||0;
-  const dataPrevista = signDate ? addBusinessDays(signDate, prazo) : null;
-  const dataReal = parseDate(task.dataRealConclusao);
-  const today = new Date(); today.setHours(0,0,0,0);
-  let status = 'empty';
-  if(dataReal){ status = 'done'; }
-  else if(dataPrevista){
-    status = today <= dataPrevista ? 'ontrack' : 'late';
+// ─── Semana ISO ──────────────────────────────────────────────
+
+/** Número da semana ISO de uma data */
+export function isoWeek(date) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7));
+  const week1 = new Date(d.getFullYear(), 0, 4);
+  return 1 + Math.round(((d - week1) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7);
+}
+
+/** Semana ISO da data atual */
+export function currentIsoWeek() {
+  return isoWeek(new Date());
+}
+
+// ─── Status ──────────────────────────────────────────────────
+
+export function statusLabel(status) {
+  switch (status) {
+    case 'done':    return 'Done';
+    case 'ontrack': return 'On track';
+    case 'late':    return 'Atrasado';
+    default:        return '—';
   }
-  const atraso = (dataPrevista && dataReal) ? businessDaysBetween(dataPrevista, dataReal) : null;
-  const diasReais = (signDate && dataReal) ? businessDaysBetween(signDate, dataReal) : null;
-  const diasAtraso = (status==='late' && dataPrevista) ? businessDaysBetween(dataPrevista, today) : null;
-  return { dataPrevista, dataReal, status, atraso, diasReais, diasAtraso };
 }
 
-export function statusLabel(s){
-  return {done:'Done', ontrack:'On track', late:'Atrasado', empty:'\u2014'}[s] || '\u2014';
+export function statusClass(status) {
+  switch (status) {
+    case 'done':    return 'status-done';
+    case 'ontrack': return 'status-ontrack';
+    case 'late':    return 'status-late';
+    default:        return 'status-empty';
+  }
 }
 
-export function statusClass(s){ return 'status-'+(s==='ontrack'?'ontrack':s); }
+// ─── Campos calculados da tarefa ─────────────────────────────
 
-export function fmtBRL(v){
-  const n = Number(v)||0;
-  return n.toLocaleString('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0});
+/**
+ * Calcula campos derivados de uma tarefa com base na empresa.
+ *
+ * Lógica (conforme README):
+ *   - Done    → dataRealConclusao preenchida OU completado === 100
+ *   - On track → não concluída e hoje ≤ dataPrevista
+ *   - Atrasado → não concluída e hoje > dataPrevista
+ *   - dataPrevista = signDate + prazo (dias úteis)
+ *
+ * Retorna: { status, dataPrevista, dataReal, diasAtraso, atraso }
+ */
+export function computeTaskFields(task, company) {
+  const signDate     = parseDate(company?.signDate);
+  const prazo        = parseInt(task?.prazo) || 0;
+  const dataPrevista = (signDate && prazo > 0) ? addBusinessDays(signDate, prazo) : null;
+  const dataReal     = task?.dataRealConclusao ? parseDate(task.dataRealConclusao) : null;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  let status     = 'empty';
+  let diasAtraso = null;
+  let atraso     = null;
+
+  if (dataReal || Number(task?.completado) >= 100) {
+    status = 'done';
+  } else if (dataPrevista) {
+    if (today > dataPrevista) {
+      status     = 'late';
+      diasAtraso = businessDaysBetween(dataPrevista, today);
+      atraso     = diasAtraso;
+    } else {
+      status = 'ontrack';
+      atraso = businessDaysBetween(today, dataPrevista); // dias restantes (positivo)
+    }
+  }
+
+  return { status, dataPrevista, dataReal, diasAtraso, atraso };
 }
 
-export function isoWeek(date){
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const dayNum = d.getUTCDay() || 7;
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
-  const weekNum = Math.ceil((((d - yearStart) / 86400000) + 1)/7);
-  return `${d.getUTCFullYear()}-W${String(weekNum).padStart(2,'0')}`;
+// ─── Fase ────────────────────────────────────────────────────
+
+/** Retorna o objeto de fase (de DEFAULT_PHASES) para uma tarefa, ou null */
+export function phaseFor(task, _company) {
+  if (!task?.phaseId) return null;
+  return DEFAULT_PHASES.find(p => p.id === task.phaseId) || null;
 }
 
-export function currentIsoWeek(){ return isoWeek(new Date()); }
+// ─── Severidade ──────────────────────────────────────────────
 
-export function phaseFor(task, company){
-  if(!task) return null;
-  if(task.phaseId) return DEFAULT_PHASES.find(p=>p.id===task.phaseId) || null;
-  if(!company || !company.signDate) return null;
-  const sd = parseDate(company.signDate);
-  if(!sd) return null;
-  const prev = (task._f && task._f.dataPrevista) || addBusinessDays(sd, task.prazo||0);
-  if(!prev) return null;
-  const diff = Math.round((prev - sd)/86400000);
-  let best = DEFAULT_PHASES[0];
-  for(const p of DEFAULT_PHASES){ if(diff >= p.daysFromSign) best = p; }
-  return best;
+/** Rank numérico de severidade (maior = mais grave, para ordenação) */
+export function sevRank(severity) {
+  switch (severity) {
+    case 'high': return 3;
+    case 'med':  return 2;
+    case 'low':  return 1;
+    default:     return 0;
+  }
 }
 
-export function sevRank(s){ return s==='high'?3:s==='med'?2:s==='low'?1:0; }
+// ─── Moeda ───────────────────────────────────────────────────
 
-export function escapeHtml(s){
-  return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+/** Formata número como Real Brasileiro (R$ 1.234,56) */
+export function fmtBRL(value) {
+  const n = Number(value) || 0;
+  return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
