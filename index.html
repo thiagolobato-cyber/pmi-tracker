@@ -3629,26 +3629,28 @@ function openRaidModal(company, raidId){
 
   const delBtn = m.querySelector('#del');
   if(delBtn) delBtn.onclick = async ()=>{
-    if(!confirm('Excluir esta Ação de Mitigação? Isso removerá o vínculo com todos os deals.')) return;
     try{
       if(canAdmin()){
-        // Admin: exclui diretamente
+        if(!confirm('Excluir esta Ação de Mitigação? Isso removerá o vínculo com todos os deals.')) return;
         const { error } = await supa.from('raid_items').delete().eq('id', raidId);
         if(error) throw error;
         state.raid = state.raid.filter(r=>r.id!==raidId);
         for(const d of Object.values(state.deals)) d.raid = (d.raid||[]).filter(r=>r.id!==raidId);
         close(); render();
       } else {
-        // Não-admin: cria solicitação de exclusão para aprovação
+        if(!confirm('Solicitar exclusão desta Ação de Mitigação? Um admin precisará aprovar.')) return;
         const { error } = await supa.from('deletion_requests').insert({
           entity_type: 'raid_item',
           entity_id: raidId,
+          task_name: existing?.title||'Ação de Mitigação',
+          area: existing?.area||'',
           requested_by_id: session.id,
           status: 'pending'
         });
         if(error) throw error;
-        alert('Solicitação de exclusão enviada para aprovação do administrador.');
-        close();
+        await reloadState();
+        alert('Solicitação enviada. O administrador será notificado para aprovar a exclusão.');
+        close(); render();
       }
     }catch(err){ alert('Erro: '+(err.message||err)); }
   };
@@ -5566,48 +5568,65 @@ function renderHoje(){
 
       secDelReqs.innerHTML = reqs.length===0
         ? `<div class="hoje-empty">Nenhuma solicitação de exclusão pendente.</div>`
-        : reqs.map(r=>`
+        : reqs.map(r=>{
+          const isRaid = r.entity_type === 'raid_item';
+          const typeBadge = isRaid
+            ? `<span style="font-size:.65rem;background:#fef3c7;color:#92400e;border-radius:.25rem;padding:.1rem .35rem;margin-right:.4rem;font-weight:600">RAID</span>`
+            : '';
+          return `
           <div class="hoje-row" data-delreq-id="${r.id}" style="align-items:flex-start">
             <div class="hoje-row-left" style="flex:1;min-width:0">
-              <div class="hoje-row-task" style="font-weight:600">${r.task_ref?`<span style="font-family:monospace;font-size:.78rem;background:#f3f4f6;padding:.1rem .3rem;border-radius:.25rem;margin-right:.35rem">${escapeHtml(r.task_ref)}</span>`:''}${escapeHtml(r.task_name||'(sem nome)')}</div>
+              <div class="hoje-row-task" style="font-weight:600">${typeBadge}${r.task_ref?`<span style="font-family:monospace;font-size:.78rem;background:#f3f4f6;padding:.1rem .3rem;border-radius:.25rem;margin-right:.35rem">${escapeHtml(r.task_ref)}</span>`:''}${escapeHtml(r.task_name||'(sem nome)')}</div>
               <div class="hoje-row-meta">
-                <span>${escapeHtml(r.company_name||'—')}</span><span class="sep">·</span>
+                ${!isRaid?`<span>${escapeHtml(r.company_name||'—')}</span><span class="sep">·</span>`:''}
                 <span>${escapeHtml(r.area||'—')}</span><span class="sep">·</span>
                 <span>Solicitado por <strong>${escapeHtml(r.requested_by_name||'?')}</strong></span><span class="sep">·</span>
                 <span>${r.requested_at ? fmtDate(new Date(r.requested_at)) : ''}</span>
               </div>
             </div>
             <div class="hoje-row-right" style="gap:.5rem;flex-shrink:0">
-              <button class="btn btn-danger" style="font-size:.75rem;padding:.3rem .65rem" data-approve="${r.id}" data-task-id="${r.task_id}" data-company-id="${r.company_id}">✓ Aprovar</button>
+              <button class="btn btn-danger" style="font-size:.75rem;padding:.3rem .65rem" data-approve="${r.id}" data-task-id="${r.task_id||''}" data-company-id="${r.company_id||''}" data-entity-type="${r.entity_type||'task'}" data-entity-id="${r.entity_id||''}">✓ Aprovar</button>
               <button class="btn btn-secondary" style="font-size:.75rem;padding:.3rem .65rem" data-reject="${r.id}">✕ Rejeitar</button>
             </div>
-          </div>`).join('');
+          </div>`;
+        }).join('');
 
       // Approve handler
       secDelReqs.querySelectorAll('[data-approve]').forEach(btn=>{
         btn.addEventListener('click', async ()=>{
           const reqId = btn.dataset.approve;
-          const taskId = btn.dataset.taskId;
           const req = reqs.find(r=>r.id===reqId);
+          const isRaid = btn.dataset.entityType === 'raid_item';
           const ok = await confirmDeleteModal({
             title: 'Confirmar exclusão?',
             ref: req?.task_ref||'',
             description: req?.task_name||'',
-            warning: 'Você está aprovando a exclusão desta tarefa. A ação é <strong>irreversível</strong>.'
+            warning: isRaid
+              ? 'Você está aprovando a exclusão desta Ação de Mitigação. A ação é <strong>irreversível</strong>.'
+              : 'Você está aprovando a exclusão desta tarefa. A ação é <strong>irreversível</strong>.'
           });
           if(!ok) return;
           try{
-            // delete the task
-            const { error: delErr } = await supa.from('tasks').delete().eq('id', taskId);
-            if(delErr) throw delErr;
-            // mark request as approved
-            await supa.from('deletion_requests').update({status:'approved'}).eq('id', reqId);
-            // update local state
-            state.deletionRequests = state.deletionRequests.filter(r=>r.id!==reqId);
-            // remove task from deal state
-            const companyId = btn.dataset.companyId;
-            if(state.deals[companyId]) state.deals[companyId].tasks = state.deals[companyId].tasks.filter(t=>t.id!==taskId);
-            renderDelReqsSection();
+            if(isRaid){
+              // RAID item deletion
+              const entityId = btn.dataset.entityId;
+              const { error: delErr } = await supa.from('raid_items').delete().eq('id', entityId);
+              if(delErr) throw delErr;
+              await supa.from('deletion_requests').update({status:'approved'}).eq('id', reqId);
+              state.deletionRequests = state.deletionRequests.filter(r=>r.id!==reqId);
+              state.raid = state.raid.filter(r=>r.id!==entityId);
+              for(const d of Object.values(state.deals)) d.raid = (d.raid||[]).filter(r=>r.id!==entityId);
+            } else {
+              // Task deletion
+              const taskId = btn.dataset.taskId;
+              const { error: delErr } = await supa.from('tasks').delete().eq('id', taskId);
+              if(delErr) throw delErr;
+              await supa.from('deletion_requests').update({status:'approved'}).eq('id', reqId);
+              state.deletionRequests = state.deletionRequests.filter(r=>r.id!==reqId);
+              const companyId = btn.dataset.companyId;
+              if(state.deals[companyId]) state.deals[companyId].tasks = state.deals[companyId].tasks.filter(t=>t.id!==taskId);
+            }
+            renderDelReqsSection(); render();
           }catch(err){ alert('Erro: '+(err.message||err)); }
         });
       });
