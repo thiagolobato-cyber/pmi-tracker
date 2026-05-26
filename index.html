@@ -5244,8 +5244,10 @@ function renderHoje(){
     .filter(t => t._f.status==='late' && isMe(t.owner))
     .sort((a,b) => (b._f.diasAtraso||0) - (a._f.diasAtraso||0));
 
+  // Só mostra decisões ao owner ou participantes do item
   const decisions = allRaid
-    .filter(r => r.decisaoDesc && r.status==='open')
+    .filter(r => r.decisaoDesc && r.status==='open'
+      && (isMe(r.owner) || (r.participants||[]).some(p => isMe(p))))
     .sort((a,b) => (b.severity==='high'?2:b.severity==='med'?1:0) - (a.severity==='high'?2:a.severity==='med'?1:0));
 
   const myUpcoming = allTasks
