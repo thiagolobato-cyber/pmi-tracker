@@ -636,6 +636,7 @@ function raidFromDb(r){
     decisaoDesc: r.decisao_desc||'', premissaDesc: r.premissa_desc||'',
     severity: r.severity||'med', status: r.status||'open',
     owner: r.owner||'', dueDate: r.due_date||'', mitigation: r.mitigation||'',
+    participants: Array.isArray(r.participants) ? r.participants : [],
     createdAt: r.created_at,
     dealIds: []  // populated after loading raid_deal_links
   };
@@ -649,7 +650,8 @@ function raidToDb(r){
     risco_desc: r.riscoDesc||'', issue_desc: r.issueDesc||'',
     decisao_desc: r.decisaoDesc||'', premissa_desc: r.premissaDesc||'',
     severity: r.severity||'med', status: r.status||'open',
-    owner: r.owner||'', due_date: emptyDate(r.dueDate), mitigation: r.mitigation||''
+    owner: r.owner||'', due_date: emptyDate(r.dueDate), mitigation: r.mitigation||'',
+    participants: Array.isArray(r.participants) ? r.participants : []
   };
 }
 
@@ -3481,7 +3483,7 @@ function renderDealRaid(company, deal){
       <div class="bhub-card overflow-hidden">
         <div class="scroll-x">
           <table class="w-full">
-            <thead><tr><th class="min-w-[16rem]">TÍTULO</th><th>ASPECTOS</th><th>ÁREA</th><th>SEVERIDADE</th><th>STATUS</th><th>OWNER</th><th>PRAZO</th><th class="min-w-[14rem]">MITIGAÇÃO</th>${canEdit()?'<th></th>':''}</tr></thead>
+            <thead><tr><th class="min-w-[16rem]">TÍTULO</th><th>ASPECTOS</th><th>ÁREA</th><th>SEVERIDADE</th><th>STATUS</th><th>OWNER</th><th>PARTICIPANTES</th><th>PRAZO</th><th class="min-w-[14rem]">MITIGAÇÃO</th>${canEdit()?'<th></th>':''}</tr></thead>
             <tbody id="dealRaidRows"></tbody>
           </table>
         </div>
@@ -3502,6 +3504,7 @@ function renderDealRaid(company, deal){
         +'<td>'+(sev?'<span class="pill sev-'+r.severity+'">'+sev.label+'</span>':'')+'</td>'
         +'<td>'+(st?'<span class="pill">'+st.label+'</span>':'')+'</td>'
         +'<td class="text-xs">'+(r.owner?'<span class="deal-link" data-owner="'+escapeHtml(r.owner)+'">'+escapeHtml(r.owner)+'</span>':'')+'</td>'
+        +'<td class="text-xs">'+(r.participants&&r.participants.length?r.participants.map(p=>'<span class="pill" style="font-size:.65rem;padding:.1rem .4rem;margin:.1rem">'+escapeHtml(p)+'</span>').join(''):'<span class="text-gray-400">—</span>')+'</td>'
         +'<td class="text-xs">'+(r.dueDate?fmtDate(parseDate(r.dueDate)):'')+'</td>'
         +'<td class="text-xs">'+escapeHtml(r.mitigation||'')+'</td>'
         +(canEdit()?'<td><button class="btn btn-secondary" data-raid-edit="'+r.id+'">✎</button></td>':'');
@@ -3559,6 +3562,16 @@ function openRaidModal(company, raidId){
             <select name="status">
               ${RAID_STATUSES.map(s=>`<option value="${s.id}" ${(existing?.status||'open')===s.id?'selected':''}>${s.label}</option>`).join('')}
             </select>
+          </label>
+          <label class="block col-span-2">👥 Participantes / Envolvidos
+            <div class="text-xs text-gray-400 mb-1">Selecione todos os usuários envolvidos nesta ação</div>
+            <div id="participantCheckboxes" class="grid grid-cols-2 gap-1 p-2 border rounded-lg bg-gray-50 max-h-36 overflow-y-auto">
+              ${(state.users||[]).map(u=>`
+                <label class="flex items-center gap-1.5 text-xs cursor-pointer">
+                  <input type="checkbox" name="participants" value="${escapeHtml(u.username)}" ${(existing?.participants||[]).includes(u.username)?'checked':''}>
+                  ${escapeHtml(u.username)}
+                </label>`).join('')}
+            </div>
           </label>
           <div class="col-span-2 mt-1">
             <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Aspectos RAID — preencha os que se aplicam</div>
@@ -3659,6 +3672,7 @@ function openRaidModal(company, raidId){
     e.preventDefault();
     const fd = new FormData(e.target);
     const selectedDeals = Array.from(m.querySelectorAll('input[name="dealIds"]:checked')).map(cb=>cb.value);
+    const selectedParticipants = Array.from(m.querySelectorAll('input[name="participants"]:checked')).map(cb=>cb.value);
     if(!fd.get('owner')) return showErr('Owner é obrigatório.');
     if(!fd.get('dueDate')) return showErr('Prazo é obrigatório.');
     if(selectedDeals.length === 0) return showErr('Selecione ao menos um deal afetado.');
@@ -3672,6 +3686,7 @@ function openRaidModal(company, raidId){
       severity: fd.get('severity')||'med', status: fd.get('status')||'open',
       owner: fd.get('owner')||'', dueDate: fd.get('dueDate')||'',
       mitigation: fd.get('mitigation')||'',
+      participants: selectedParticipants,
     };
     try{
       if(existing){
