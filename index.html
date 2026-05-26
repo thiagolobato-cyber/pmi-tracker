@@ -1884,7 +1884,7 @@ function renderDashboard(){
 
   // Listas pra popular os selects de filtro
   const allDeals = state.companies.map(c=>({id:c.id, name:c.name})).sort((a,b)=>a.name.localeCompare(b.name));
-  const allAreasD = DEFAULT_AREAS.map(a=>a.name);
+  const allAreasD = Array.from(new Set([...state.template.map(t=>t.area),...Object.values(state.deals).flatMap(d=>d.tasks.map(t=>t.area))].filter(Boolean))).sort();
   const allOwnersD = Array.from(new Set(Object.values(state.deals).flatMap(d=>d.tasks.map(t=>t.owner)).filter(Boolean))).sort();
   const f = view.dashFilters || {deals:[],areas:[],owners:[]};
 
@@ -1934,13 +1934,17 @@ function renderDashboard(){
   }));
   top.sort((a,b)=>b.dias-a.dias);
 
-  // Heatmap: area x deal — usa apenas as DEFAULT_AREAS para manter o visual limpo
-  const areas = DEFAULT_AREAS.map(a=>a.name);
+  // Heatmap: area x deal — usa as mesmas áreas da Visão Executiva (áreas reais do banco)
+  const areas = Array.from(new Set([
+    ...state.template.map(t=>t.area),
+    ...Object.values(state.deals).flatMap(d=>d.tasks.map(t=>t.area))
+  ].filter(Boolean)));
+  // Consolidação: late > ontrack > done (qualquer atrasado = bloco atrasado)
   function cellStatus(deal, area){
     const ts = deal.tasks.filter(t=>t.area===area);
     if(!ts.length) return 'empty';
-    if(ts.every(t=>t._f.status==='done')) return 'done';
     if(ts.some(t=>t._f.status==='late')) return 'late';
+    if(ts.every(t=>t._f.status==='done')) return 'done';
     if(ts.some(t=>t._f.status==='ontrack')) return 'ontrack';
     return 'empty';
   }
