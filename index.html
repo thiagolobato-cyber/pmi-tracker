@@ -3504,7 +3504,17 @@ function renderDealRaid(company, deal){
         +'<td>'+(sev?'<span class="pill sev-'+r.severity+'">'+sev.label+'</span>':'')+'</td>'
         +'<td>'+(st?'<span class="pill">'+st.label+'</span>':'')+'</td>'
         +'<td class="text-xs">'+(r.owner?'<span class="deal-link" data-owner="'+escapeHtml(r.owner)+'">'+escapeHtml(r.owner)+'</span>':'')+'</td>'
-        +'<td class="text-xs">'+(r.participants&&r.participants.length?r.participants.map(p=>'<span class="pill" style="font-size:.65rem;padding:.1rem .4rem;margin:.1rem">'+escapeHtml(p)+'</span>').join(''):'<span class="text-gray-400">—</span>')+'</td>'
+        +(()=>{
+          const pts = r.participants||[];
+          if(!pts.length) return '<td class="text-xs"><span class="text-gray-400">—</span></td>';
+          const MAX=5, uid='pp-'+r.id;
+          const visible = pts.slice(0,MAX).map(p=>'<span class="pill" style="font-size:.65rem;padding:.1rem .4rem;margin:.1rem">'+escapeHtml(p)+'</span>').join('');
+          const extra = pts.slice(MAX).map(p=>'<span class="pill" style="font-size:.65rem;padding:.1rem .4rem;margin:.1rem">'+escapeHtml(p)+'</span>').join('');
+          const toggle = pts.length>MAX?'<span id="'+uid+'" style="cursor:pointer;font-size:.65rem;padding:.1rem .4rem;border-radius:.75rem;background:#f3f4f6;color:#374151;border:1px solid #d1d5db;font-weight:600;white-space:nowrap;margin:.1rem" data-expanded="0">+' +(pts.length-MAX)+'</span>':'';
+          const extraDiv = pts.length>MAX?'<span id="'+uid+'-extra" style="display:none">'+extra+'</span>':'';
+          return '<td class="text-xs">'+visible+extraDiv+toggle+'</td>';
+        })()
+
         +'<td class="text-xs">'+(r.dueDate?fmtDate(parseDate(r.dueDate)):'')+'</td>'
         +'<td class="text-xs">'+escapeHtml(r.mitigation||'')+'</td>'
         +(canEdit()?'<td><button class="btn btn-secondary" data-raid-edit="'+r.id+'">✎</button></td>':'');
@@ -3513,6 +3523,19 @@ function renderDealRaid(company, deal){
     node.querySelectorAll('[data-raid-edit]').forEach(b=>b.onclick = ()=>openRaidModal(company, b.dataset.raidEdit));
     node.querySelectorAll('[data-area]').forEach(b=>b.addEventListener('click',()=>{ view.tab='dashboard'; view.dashFilters={...view.dashFilters||{},areas:[b.dataset.area]}; render(); }));
     node.querySelectorAll('[data-owner]').forEach(b=>b.addEventListener('click',()=>{ view.tab='dashboard'; view.dashFilters={...view.dashFilters||{},owners:[b.dataset.owner]}; render(); }));
+    // Toggle "+N" participantes
+    tbody.querySelectorAll('[id^="pp-"]:not([id$="-extra"])').forEach(btn=>{
+      btn.addEventListener('click', e=>{
+        e.stopPropagation();
+        const uid = btn.id;
+        const extraEl = document.getElementById(uid+'-extra');
+        const expanded = btn.dataset.expanded==='1';
+        if(extraEl) extraEl.style.display = expanded?'none':'inline';
+        const base = parseInt(btn.textContent)||0;
+        btn.textContent = expanded ? '+'+base : '▲';
+        btn.dataset.expanded = expanded?'0':'1';
+      });
+    });
   }
 
   node.querySelectorAll('[data-rf]').forEach(b=>b.onclick = ()=>{ view.raidFilter=b.dataset.rf; render(); });
