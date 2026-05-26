@@ -1934,11 +1934,8 @@ function renderDashboard(){
   }));
   top.sort((a,b)=>b.dias-a.dias);
 
-  // Heatmap: area x deal — usa as mesmas áreas da Visão Executiva (áreas reais do banco)
-  const areas = Array.from(new Set([
-    ...state.template.map(t=>t.area),
-    ...Object.values(state.deals).flatMap(d=>d.tasks.map(t=>t.area))
-  ].filter(Boolean)));
+  // Heatmap: area x deal — usa rawData (já computado acima) para garantir consistência
+  const areas = Array.from(new Set(rawData.flatMap(d=>d.tasks.map(t=>t.area)).filter(Boolean)));
   // Consolidação: late > ontrack > done (qualquer atrasado = bloco atrasado)
   function cellStatus(deal, area){
     const ts = deal.tasks.filter(t=>t.area===area);
