@@ -1934,8 +1934,11 @@ function renderDashboard(){
   }));
   top.sort((a,b)=>b.dias-a.dias);
 
-  // Heatmap: area x deal — usa rawData (já computado acima) para garantir consistência
-  const areas = Array.from(new Set(rawData.flatMap(d=>d.tasks.map(t=>t.area)).filter(Boolean)));
+  // Heatmap: area x deal — inclui áreas do template + áreas reais dos deals (mesmo critério da Visão Executiva e do filtro de áreas)
+  const areas = Array.from(new Set([
+    ...state.template.map(t=>t.area),
+    ...rawData.flatMap(d=>d.tasks.map(t=>t.area))
+  ].filter(Boolean))).sort();
   // Consolidação: late > ontrack > done (qualquer atrasado = bloco atrasado)
   function cellStatus(deal, area){
     const ts = deal.tasks.filter(t=>t.area===area);
@@ -3605,13 +3608,19 @@ function openRaidModal(company, raidId){
     </div>
   `);
   document.body.appendChild(m);
-  const close = () => m.remove();
+  const close = () => { try{ m.remove(); }catch(e){} };
+  // Fechar ao clicar no backdrop (fora do card branco)
+  m.addEventListener('click', (e) => { if(e.target === m) close(); });
+  // Fechar com ESC
+  const escHandler = (e) => { if(e.key === 'Escape'){ close(); document.removeEventListener('keydown', escHandler); } };
+  document.addEventListener('keydown', escHandler);
   // renderCommentsPanel pode não existir — guarda para não quebrar os outros listeners
   if(existing){
     const raidPanel = m.querySelector('#raidCommentPanel');
     if(raidPanel && typeof renderCommentsPanel === 'function') renderCommentsPanel(raidPanel, 'raid', existing.id, null);
   }
-  m.querySelector('#cancel').onclick = close;
+  const cancelBtn = m.querySelector('#cancel');
+  if(cancelBtn){ cancelBtn.addEventListener('click', close); cancelBtn.onclick = close; }
 
   const showErr = (msg) => {
     const el2 = m.querySelector('#raidFormErr');
