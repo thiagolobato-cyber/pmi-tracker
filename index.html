@@ -4226,40 +4226,68 @@ function renderDealGantt(company, deal, tasks){
 function renderDealBriefing(company, deal, tasks){
   const total = tasks.length;
   const done = tasks.filter(t=>t._f.status==='done').length;
+  const ontrack = tasks.filter(t=>t._f.status==='ontrack').length;
   const late = tasks.filter(t=>t._f.status==='late').length;
+  const blocked = tasks.filter(t=>t.bloqueio==='Sim').length;
+  const noowner = tasks.filter(t=>!t.owner).length;
   const pct = total?Math.round(done/total*100):0;
-  const raid = (deal.raid||[]).filter(r=>r.status!=='closed').sort((a,b)=>sevRank(b.severity)-sevRank(a.severity));
-  const topRisks = raid.filter(r=>r.riscoDesc).slice(0,5);
-  const topIssues = raid.filter(r=>r.issueDesc).slice(0,5);
+
+  const raid = deal.raid||[];
+  const openRaid = raid.filter(r=>r.status!=='closed');
+  const topRisks = openRaid.filter(r=>r.riscoDesc).sort((a,b)=>sevRank(b.severity)-sevRank(a.severity)).slice(0,3);
+  const openIssues = openRaid.filter(r=>r.issueDesc).length;
+
   const syns = deal.synergies||[];
   const synPlan = syns.reduce((s,x)=>s+(Number(x.plannedValue)||0),0);
   const synReal = syns.reduce((s,x)=>s+(Number(x.realizedValue)||0),0);
   const synPct = synPlan>0 ? Math.round(synReal/synPlan*100) : 0;
 
-  // Health: status atual por área
-  const currentWeek = currentIsoWeek();
+  // Tarefas mais atrasadas (top 5)
+  const topLate = tasks.filter(t=>t._f.status==='late' && t._f.diasAtraso)
+    .sort((a,b)=>b._f.diasAtraso-a._f.diasAtraso).slice(0,5);
+
+  // Próximos vencimentos (até 14 d.u.)
+  const today = new Date(); today.setHours(0,0,0,0);
+  const upcoming = [];
+  tasks.forEach(t=>{
+    if(t._f.status==='ontrack' && t._f.dataPrevista){
+      const diff = businessDaysBetween(today, t._f.dataPrevista);
+      if(diff!==null && diff>=0 && diff<=14){
+        upcoming.push({task:t.task, area:t.area, owner:t.owner, due:t._f.dataPrevista, diff});
+      }
+    }
+  });
+  upcoming.sort((a,b)=>a.diff-b.diff);
+
+  // Bloqueios ativos
+  const blocks = tasks.filter(t=>t.bloqueio==='Sim').map(t=>({area:t.area, task:t.task, owner:t.owner, desc:t.bloqueioDescricao}));
+
+  // Status por área (último RAG)
   const allAreas = Array.from(new Set([
     ...DEFAULT_AREAS.map(a=>a.name),
-    ...deal.tasks.map(t=>t.area),
+    ...tasks.map(t=>t.area),
+    ...(deal.health||[]).map(h=>h.area)
   ].filter(Boolean)));
-  const healthNow = allAreas.map(a=>{
-    const h = (deal.health||[]).filter(x=>x.area===a).sort((x,y)=>y.weekIso.localeCompare(x.weekIso))[0];
-    return {area:a, rag:h?.rag||'na', comment:h?.comment||''};
-  });
-  const overallRag = (function(){
-    const r = healthNow.filter(h=>h.rag==='r').length;
-    const a = healthNow.filter(h=>h.rag==='a').length;
-    if(r>0) return 'r';
-    if(a>0) return 'a';
-    return 'g';
-  })();
+  function lastRagFor(area){
+    const arr = (deal.health||[]).filter(h=>h.area===area).sort((a,b)=>b.weekIso.localeCompare(a.weekIso));
+    return arr[0]?.rag || 'na';
+  }
+  const areaRags = allAreas.map(a=>({area:a, rag:lastRagFor(a)}));
 
-  // Próximos marcos (por fase)
-  const phaseTasks = DEFAULT_PHASES.map(p=>{
-    const ts = tasks.filter(t=>phaseFor(t,company)?.id===p.id);
-    const d = ts.filter(t=>t._f.status==='done').length;
-    return {phase:p, total:ts.length, done:d, pct: ts.length?Math.round(d/ts.length*100):0};
-  });
+  // Dias desde a assinatura
+  let daysSinceSign = null;
+  if(company.signDate){
+    const d = parseDate(company.signDate);
+    if(d){
+      const diffMs = today.getTime() - d.getTime();
+      daysSinceSign = Math.floor(diffMs/86400000);
+    }
+  }
+
+  // Status overall
+  let overall = 'g', overallLabel = 'Saudável';
+  if(late>0 || blocked>0 || topRisks.some(r=>r.severity==='high')){ overall='r'; overallLabel='Atenção crítica'; }
+  else if(noowner>0 || openIssues>0 || pct<25){ overall='a'; overallLabel='Atenção'; }
 
   const node = el(`
     <div class="briefing-page space-y-4">
@@ -4267,42 +4295,84 @@ function renderDealBriefing(company, deal, tasks){
         <button id="downloadPdf" class="btn btn-primary">📥 Baixar PDF</button>
         <button id="print" class="btn btn-secondary">🖨 Imprimir</button>
       </div>
-      <div class="bhub-card p-6">
-        <div class="flex items-start justify-between mb-4">
+      <div class="bhub-card p-6 space-y-5">
+        <!-- Cabeçalho -->
+        <div class="flex items-center justify-between flex-wrap gap-3">
           <div>
             <div class="text-xs uppercase tracking-wider" style="color:var(--bhub-muted)">Executive Briefing</div>
             <h2 class="text-2xl font-bold" style="color:var(--bhub-navy);font-family:'Roboto'">${escapeHtml(company.name)}</h2>
-            <div class="text-sm text-gray-500">Assinatura: ${company.signDate?fmtDate(parseDate(company.signDate)):'—'} • Gerado em ${fmtDate(new Date())}</div>
+            <div class="text-sm text-gray-500">
+              Assinatura: ${company.signDate?fmtDate(parseDate(company.signDate)):'—'}${daysSinceSign!==null?` (D+${daysSinceSign})`:''} • Gerado em ${fmtDate(new Date())}
+            </div>
           </div>
-          <div class="text-right">
-            <div class="text-xs uppercase tracking-wider mb-1" style="color:var(--bhub-muted)">Status geral</div>
-            <div class="rag rag-${overallRag}" style="font-size:.9rem;padding:.4rem .8rem"><span class="rag-dot"></span>${overallRag==='g'?'On track':overallRag==='a'?'Atenção':'Em risco'}</div>
-          </div>
+          <span class="rag rag-${overall}" style="font-size:.8rem;padding:.3rem .7rem"><span class="rag-dot"></span>${overallLabel}</span>
         </div>
 
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
-          <div class="mini-stat"><div class="lbl">Progresso</div><div class="val">${pct}%</div></div>
-          <div class="mini-stat"><div class="lbl">Tarefas done</div><div class="val">${done}/${total}</div></div>
-          <div class="mini-stat"><div class="lbl">Tarefas atrasadas</div><div class="val" style="color:var(--bhub-red)">${late}</div></div>
-          <div class="mini-stat"><div class="lbl">Sinergia captura</div><div class="val">${synPct}% (${fmtBRL(synReal)}/${fmtBRL(synPlan)})</div></div>
+        <!-- KPIs -->
+        <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+          <div class="kpi"><div class="kpi-label">% Concluído</div><div class="kpi-value">${pct}%</div></div>
+          <div class="kpi"><div class="kpi-label">Done / Total</div><div class="kpi-value">${done} / ${total}</div></div>
+          <div class="kpi"><div class="kpi-label">On Track</div><div class="kpi-value" style="color:var(--bhub-blue)">${ontrack}</div></div>
+          <div class="kpi"><div class="kpi-label">Atrasadas</div><div class="kpi-value" style="color:var(--bhub-red)">${late}</div></div>
+          <div class="kpi"><div class="kpi-label">Bloqueios</div><div class="kpi-value" style="color:#92400e">${blocked}</div></div>
+          <div class="kpi"><div class="kpi-label">Ações de Mitigação abertas</div><div class="kpi-value">${openRaid.length}</div></div>
+          <div class="kpi"><div class="kpi-label">Sinergia</div><div class="kpi-value">${synPct}%</div></div>
         </div>
 
+        <!-- Status por área -->
+        <section>
+          <div class="text-sm font-semibold mb-2" style="color:var(--bhub-navy)">Status por área (último RAG)</div>
+          <div class="flex flex-wrap gap-2">
+            ${areaRags.map(a=>`<div class="flex items-center gap-2 px-2.5 py-1 rounded-md border" style="border-color:var(--bhub-border)"><span class="text-xs">${escapeHtml(a.area)}</span><span class="rag rag-${a.rag}" style="font-size:.6rem;padding:.1rem .35rem"><span class="rag-dot"></span>${a.rag==='g'?'G':a.rag==='a'?'A':a.rag==='r'?'R':'—'}</span></div>`).join('') || `<div class="text-xs text-gray-500">Sem registros de health.</div>`}
+          </div>
+        </section>
 
-        <div class="grid md:grid-cols-2 gap-4 mb-5">
-          <div>
-            <div class="text-sm font-semibold mb-2" style="color:var(--bhub-navy);font-family:'Roboto'">⚠️ Ações de Mitigação com Risco</div>
-            ${topRisks.length ? `<ul class="text-xs space-y-1">${topRisks.map(r=>`<li class="border-l-2 pl-2" style="border-color:#f97316"><span class="font-semibold">[${SEVERITIES.find(s=>s.id===r.severity)?.label||''}]</span> ${escapeHtml(r.title)} — <span class="text-gray-500">${escapeHtml(r.riscoDesc||'').slice(0,80)}</span></li>`).join('')}</ul>` : '<div class="text-xs text-gray-500">Nenhum risco aberto.</div>'}
-          </div>
-          <div>
-            <div class="text-sm font-semibold mb-2" style="color:var(--bhub-navy);font-family:'Roboto'">🔥 Ações de Mitigação com Issue</div>
-            ${topIssues.length ? `<ul class="text-xs space-y-1">${topIssues.map(r=>`<li class="border-l-2 pl-2" style="border-color:#ef4444"><span class="font-semibold">[${SEVERITIES.find(s=>s.id===r.severity)?.label||''}]</span> ${escapeHtml(r.title)} — <span class="text-gray-500">${escapeHtml(r.issueDesc||'').slice(0,80)}</span></li>`).join('')}</ul>` : '<div class="text-xs text-gray-500">Nenhum issue aberto.</div>'}
-          </div>
+        <div class="grid lg:grid-cols-2 gap-5">
+          <!-- Top atrasadas -->
+          <section class="bhub-card p-4">
+            <div class="text-sm font-semibold mb-2" style="color:var(--bhub-navy)">⚠️ Top tarefas atrasadas</div>
+            ${topLate.length ? `<table class="w-full text-xs"><thead><tr><th class="text-left">TAREFA</th><th class="text-left">ÁREA</th><th>OWNER</th><th>DIAS</th></tr></thead><tbody>${topLate.map(t=>`<tr><td>${escapeHtml(t.task||'')}</td><td>${escapeHtml(t.area||'')}</td><td>${escapeHtml(t.owner||'—')}</td><td class="text-center text-red-700 font-semibold">${t._f.diasAtraso}</td></tr>`).join('')}</tbody></table>` : `<div class="text-xs text-gray-500">Nenhuma tarefa atrasada. 🎉</div>`}
+          </section>
+
+          <!-- Próximos vencimentos -->
+          <section class="bhub-card p-4">
+            <div class="text-sm font-semibold mb-2" style="color:var(--bhub-navy)">📅 Próximos vencimentos (≤14 d.u.)</div>
+            ${upcoming.length ? `<table class="w-full text-xs"><thead><tr><th class="text-left">TAREFA</th><th class="text-left">ÁREA</th><th>OWNER</th><th>EM</th></tr></thead><tbody>${upcoming.slice(0,8).map(t=>`<tr><td>${escapeHtml(t.task||'')}</td><td>${escapeHtml(t.area||'')}</td><td>${escapeHtml(t.owner||'—')}</td><td class="text-center">${t.diff}d</td></tr>`).join('')}</tbody></table>` : `<div class="text-xs text-gray-500">Nada vencendo em 14 d.u.</div>`}
+          </section>
+
+          <!-- Top riscos -->
+          <section class="bhub-card p-4">
+            <div class="text-sm font-semibold mb-2" style="color:var(--bhub-navy)">🛡️ Top riscos abertos</div>
+            ${topRisks.length ? `<ul class="space-y-1.5 text-xs">${topRisks.map(r=>`<li class="flex items-start gap-2"><span class="pill" style="background:${r.severity==='high'?'#fee2e2':r.severity==='med'?'#fef3c7':'#dbeafe'};color:${r.severity==='high'?'#991b1b':r.severity==='med'?'#92400e':'#1e3a8a'}">${(r.severity||'').toUpperCase()}</span><span><strong>${escapeHtml(r.title||'')}</strong> <span class="text-gray-500">— ${escapeHtml(r.area||'')}</span></span></li>`).join('')}</ul>` : `<div class="text-xs text-gray-500">Sem riscos abertos.</div>`}
+          </section>
+
+          <!-- Bloqueios -->
+          <section class="bhub-card p-4">
+            <div class="text-sm font-semibold mb-2" style="color:var(--bhub-navy)">🚧 Bloqueios ativos</div>
+            ${blocks.length ? `<ul class="space-y-1.5 text-xs">${blocks.slice(0,5).map(b=>`<li><strong>${escapeHtml(b.task||'')}</strong> <span class="text-gray-500">— ${escapeHtml(b.area||'')}${b.owner?` • ${escapeHtml(b.owner)}`:''}</span>${b.desc?`<div class="text-gray-600 mt-0.5">${escapeHtml(b.desc)}</div>`:''}</li>`).join('')}</ul>` : `<div class="text-xs text-gray-500">Nenhum bloqueio ativo.</div>`}
+          </section>
         </div>
+
+        <!-- Sinergias -->
+        <section class="bhub-card p-4">
+          <div class="flex items-center justify-between mb-2">
+            <div class="text-sm font-semibold" style="color:var(--bhub-navy)">💰 Sinergias</div>
+            <div class="text-xs" style="color:var(--bhub-muted)">${syns.length} item(ns)</div>
+          </div>
+          <div class="grid grid-cols-3 gap-3 text-xs">
+            <div><div class="text-gray-500">Planejado</div><div class="text-base font-semibold">${fmtBRL(synPlan)}</div></div>
+            <div><div class="text-gray-500">Realizado</div><div class="text-base font-semibold">${fmtBRL(synReal)}</div></div>
+            <div><div class="text-gray-500">Captura</div><div class="text-base font-semibold">${synPct}%</div></div>
+          </div>
+        </section>
+
+        ${noowner>0 ? `<div class="text-xs px-3 py-2 rounded-md" style="background:#fef3c7;color:#92400e">⚠️ ${noowner} tarefa(s) sem responsável definido.</div>` : ''}
 
         <div class="text-xs text-gray-400 border-t pt-3" style="border-color:var(--bhub-border)">Documento gerado pelo BHub PMI Tracker — confidencial.</div>
       </div>
     </div>
   `);
+
   const btn = node.querySelector('#print');
   if(btn) btn.onclick = ()=>window.print();
   const dlBtn = node.querySelector('#downloadPdf');
@@ -4324,358 +4394,14 @@ function renderDealBriefing(company, deal, tasks){
         jsPDF: { unit:'mm', format:'a4', orientation:'portrait' },
         pagebreak: { mode:['avoid-all','css','legacy'] }
       }).from(target).save();
-    }catch(e){
-      console.error(e);
-      alert('Erro ao gerar PDF: '+(e.message||e));
-    }finally{
+    }catch(err){
+      alert('Erro: '+(err.message||err));
+    } finally {
       dlBtn.disabled = false;
       dlBtn.textContent = orig;
     }
   };
   return node;
-}
-
-/* ===== Painéis: comentários, anexos, dependências ===== */
-async function renderCommentsPanel(panel, entityType, entityId, companyId){
-  panel.innerHTML = `<div class="space-y-2">${Array(3).fill('<div class="skel" style="width:100%;height:42px"></div>').join('')}</div>`;
-  const { data, error } = await supa.from('comments').select('*').eq('entity_type', entityType).eq('entity_id', entityId).order('created_at',{ascending:true});
-  if(error){ panel.innerHTML = `<div class="text-xs text-red-600">Erro: ${escapeHtml(error.message)}</div>`; return; }
-  const list = data || [];
-  panel.innerHTML = `
-    <div class="space-y-2 max-h-64 overflow-y-auto pr-1" id="cmList">
-      ${list.length ? list.map(c=>{
-        const when = new Date(c.created_at).toLocaleString('pt-BR');
-        const mine = session && c.author_id === session.id;
-        return `<div class="border rounded-lg p-2.5" style="border-color:var(--bhub-border);background:#fafbfd">
-          <div class="flex justify-between items-baseline gap-3">
-            <div class="text-xs"><b>${escapeHtml(c.author_name||c.author_email||'anônimo')}</b> <span class="text-gray-500">${escapeHtml(when)}${c.edited?' • editado':''}</span></div>
-            ${mine || (session && session.role==='admin') ? `<button class="text-xs text-red-600 hover:underline" data-cmdel="${c.id}">excluir</button>`:''}
-          </div>
-          <div class="text-sm mt-1" style="white-space:pre-wrap">${escapeHtml(c.body)}</div>
-        </div>`;
-      }).join('') : '<div class="text-xs text-gray-500 py-2">Sem comentários ainda.</div>'}
-    </div>
-    <form id="cmForm" class="flex gap-2 mt-3">
-      <textarea name="body" rows="2" placeholder="Adicionar comentário ou cole aqui o link do Drive / SharePoint…" class="text-sm flex-1" required></textarea>
-      <button class="btn btn-primary" style="padding:.4rem .9rem">Postar</button>
-    </form>
-  `;
-  panel.querySelectorAll('[data-cmdel]').forEach(b=>b.addEventListener('click', async ()=>{
-    if(!confirm('Excluir este comentário?')) return;
-    await supa.from('comments').delete().eq('id', b.dataset.cmdel);
-    renderCommentsPanel(panel, entityType, entityId, companyId);
-  }));
-  panel.querySelector('#cmForm').onsubmit = async e=>{
-    e.preventDefault();
-    const body = e.target.body.value.trim();
-    if(!body) return;
-    const { error } = await supa.from('comments').insert({
-      entity_type: entityType, entity_id: entityId, company_id: companyId,
-      body, author_id: session.id, author_email: session.email||null, author_name: session.username||null
-    });
-    if(error){ alert('Erro ao postar: '+error.message); return; }
-    renderCommentsPanel(panel, entityType, entityId, companyId);
-  };
-}
-
-
-async function renderDependenciesPanel(panel, task, company, deal){
-  panel.innerHTML = `<div class="space-y-2">${Array(2).fill('<div class="skel" style="width:100%;height:36px"></div>').join('')}</div>`;
-  const { data: deps, error } = await supa.from('task_dependencies').select('*').or(`predecessor_id.eq.${task.id},successor_id.eq.${task.id}`);
-  if(error){ panel.innerHTML = `<div class="text-xs text-red-600">Erro: ${escapeHtml(error.message)}</div>`; return; }
-  const taskMap = new Map(deal.tasks.map(t=>[t.id, t]));
-  const predecessors = (deps||[]).filter(d=>d.successor_id===task.id);
-  const successors = (deps||[]).filter(d=>d.predecessor_id===task.id);
-  const others = deal.tasks.filter(t=>t.id!==task.id);
-  const linkedIds = new Set([...predecessors.map(d=>d.predecessor_id), ...successors.map(d=>d.successor_id)]);
-
-  function renderDep(d, role){
-    const otherId = role==='pred' ? d.predecessor_id : d.successor_id;
-    const ot = taskMap.get(otherId);
-    return `<div class="flex items-center gap-2 border rounded-lg p-2 text-xs" style="border-color:var(--bhub-border)">
-      <span>${role==='pred'?'⬅️':'➡️'}</span>
-      <div class="flex-1 min-w-0">
-        <div class="font-medium truncate">${escapeHtml(ot?.task||'(tarefa removida)')}</div>
-        <div class="text-gray-500 text-[11px]">${escapeHtml(ot?.area||'')} • ${escapeHtml(ot?.owner||'')}</div>
-      </div>
-      <button class="text-red-600 hover:underline" data-depdel="${d.id}">remover</button>
-    </div>`;
-  }
-
-  panel.innerHTML = `
-    <div class="grid md:grid-cols-2 gap-3">
-      <div>
-        <div class="text-xs font-semibold mb-2">⬅️ Predecessoras (precisam acontecer antes)</div>
-        <div class="space-y-1.5">${predecessors.length?predecessors.map(d=>renderDep(d,'pred')).join(''):'<div class="text-xs text-gray-500">Nenhuma</div>'}</div>
-      </div>
-      <div>
-        <div class="text-xs font-semibold mb-2">➡️ Sucessoras (dependem desta)</div>
-        <div class="space-y-1.5">${successors.length?successors.map(d=>renderDep(d,'succ')).join(''):'<div class="text-xs text-gray-500">Nenhuma</div>'}</div>
-      </div>
-    </div>
-    <div class="mt-4 pt-3 border-t">
-      <div class="text-xs font-semibold mb-2">Adicionar dependência</div>
-      <div class="flex gap-2 flex-wrap items-center mb-2">
-        <select id="depRole" class="text-xs" style="width:160px">
-          <option value="pred">Tarefa precede esta</option>
-          <option value="succ">Tarefa sucede esta</option>
-        </select>
-        <select id="depArea" class="text-xs" style="width:200px">
-          <option value="">— filtrar por área —</option>
-          ${sortAreaNames(Array.from(new Set(others.filter(t=>!linkedIds.has(t.id)).map(t=>t.area||'').filter(Boolean)))).map(a=>`<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('')}
-        </select>
-      </div>
-      <div class="flex gap-2 flex-wrap items-center">
-        <select id="depTask" class="text-xs flex-1" style="min-width:200px">
-          <option value="">— escolher tarefa —</option>
-        </select>
-        <button id="depAdd" class="btn btn-primary" style="padding:.4rem .9rem">+ Adicionar</button>
-      </div>
-    </div>
-  `;
-
-  // Pool de tarefas disponíveis (sem as já vinculadas e sem a própria tarefa)
-  const available = others.filter(t=>!linkedIds.has(t.id));
-
-  function populateTaskSelect(areaFilter=''){
-    const sel = panel.querySelector('#depTask');
-    const filtered = (areaFilter ? available.filter(t=>t.area===areaFilter) : available).sort(sortByRef);
-    sel.innerHTML = `<option value="">— escolher tarefa —</option>`
-      + filtered.map(t=>`<option value="${t.id}">[${escapeHtml(t.ref||'?')}] ${escapeHtml(t.task||'(sem nome)')}</option>`).join('');
-  }
-
-  panel.querySelector('#depArea').addEventListener('change', e=>populateTaskSelect(e.target.value));
-
-  panel.querySelectorAll('[data-depdel]').forEach(b=>b.addEventListener('click', async ()=>{
-    await supa.from('task_dependencies').delete().eq('id', b.dataset.depdel);
-    renderDependenciesPanel(panel, task, company, deal);
-  }));
-  panel.querySelector('#depAdd').addEventListener('click', async ()=>{
-    const role = panel.querySelector('#depRole').value;
-    const other = panel.querySelector('#depTask').value;
-    if(!other) return;
-    const payload = role==='pred'
-      ? { predecessor_id: other, successor_id: task.id }
-      : { predecessor_id: task.id, successor_id: other };
-    const { error } = await supa.from('task_dependencies').insert(payload);
-    if(error){ alert('Erro: '+error.message); return; }
-    renderDependenciesPanel(panel, task, company, deal);
-  });
-}
-
-function openTaskModal(company, taskId){
-  const deal = dealOf(company.id);
-  const t = taskId ? deal.tasks.find(x=>x.id===taskId) : {
-    id:uid(), ref:'', area:'', task:'', owner:'', ferramenta:'',
-    prazo:0, dataRealConclusao:'', completado:0, evidencia:'',
-    ultimoUpdate:'', proximoPasso:'', bloqueio:'Não', bloqueioDescricao:''
-  };
-  const isNew = !taskId;
-  const allAreas = Array.from(new Set([
-    ...DEFAULT_AREAS.map(a=>a.name),
-    ...state.template.map(x=>x.area),
-    ...deal.tasks.map(x=>x.area)
-  ].filter(Boolean)));
-
-  const m = el(`
-  <div class="fixed inset-0 bg-black/40 z-20 flex items-center justify-center p-4">
-    <div class="bg-white rounded-xl w-full max-w-3xl p-6 shadow-xl max-h-[90vh] overflow-y-auto">
-      <div class="text-lg font-semibold mb-4">${isNew?'Nova tarefa':'Editar tarefa'} — ${company.name}</div>
-      <form id="taskForm" class="grid grid-cols-2 gap-3 text-sm">
-        <div><label class="text-xs font-medium">REF #</label><input name="ref" value="${t.ref}"/></div>
-        <div><label class="text-xs font-medium">Área</label>
-          <input name="area" list="areaList" value="${t.area||''}"/>
-          <datalist id="areaList">${allAreas.map(a=>`<option value="${a}">`).join('')}</datalist>
-        </div>
-        <div class="col-span-2"><label class="text-xs font-medium">Tarefa *</label><textarea name="task" rows="2" required>${t.task||''}</textarea></div>
-        <div><label class="text-xs font-medium">Owner</label>${ownerSelectHtml(t.owner||'', true)}</div>
-        <div><label class="text-xs font-medium">Ferramenta</label><input name="ferramenta" value="${t.ferramenta||''}"/></div>
-        <div><label class="text-xs font-medium">Prazo (dias úteis)</label><input name="prazo" type="number" min="0" value="${t.prazo||0}"/></div>
-        <div><label class="text-xs font-medium">Data real de conclusão</label><input name="dataRealConclusao" type="date" value="${t.dataRealConclusao||''}"/></div>
-        <div><label class="text-xs font-medium">% Completado</label><input name="completado" type="number" min="0" max="100" value="${t.completado||0}"/></div>
-        <div><label class="text-xs font-medium">Evidência (link)</label><input name="evidencia" value="${t.evidencia||''}"/></div>
-        <div><label class="text-xs font-medium">Último update</label><input name="ultimoUpdate" type="date" value="${t.ultimoUpdate||''}"/></div>
-        <div><label class="text-xs font-medium">Bloqueio</label>
-          <select name="bloqueio" id="bloqueioSel"><option ${t.bloqueio!=='Sim'?'selected':''}>Não</option><option ${t.bloqueio==='Sim'?'selected':''}>Sim</option></select>
-        </div>
-        <div id="raidPickerWrap" class="${t.bloqueio==='Sim'?'':'hidden'} col-span-2">
-          <label class="text-xs font-medium">Ação de Mitigação associada ao bloqueio *
-            <select name="raidId" id="raidIdSel">
-              <option value="">— Selecione ou crie uma Ação de Mitigação —</option>
-              ${state.raid.filter(r=>r.status!=='closed').map(r=>`<option value="${r.id}" ${t.raidId===r.id?'selected':''}>${escapeHtml(r.title)}</option>`).join('')}
-            </select>
-          </label>
-          <button type="button" id="createRaidInline" class="btn btn-secondary mt-1" style="font-size:.72rem;padding:.25rem .6rem">+ Nova Ação de Mitigação para este bloqueio</button>
-        </div>
-        <div class="col-span-2"><label class="text-xs font-medium">Próximo passo</label><textarea name="proximoPasso" rows="2">${t.proximoPasso||''}</textarea></div>
-        <div class="col-span-2"><label class="text-xs font-medium">Descrição do bloqueio</label><textarea name="bloqueioDescricao" rows="2">${t.bloqueioDescricao||''}</textarea></div>
-
-        <div id="taskFormErr" class="col-span-2 text-xs rounded-lg p-2 hidden" style="color:#991b1b;background:#fee2e2"></div>
-        <div class="col-span-2 flex justify-end gap-2 pt-3 border-t">
-          ${!isNew?`<button type="button" id="del" class="btn btn-danger mr-auto">Excluir</button>`:''}
-          <button type="button" id="cancel" class="btn btn-secondary">Cancelar</button>
-          <button class="btn btn-primary">Salvar</button>
-        </div>
-      </form>
-      ${!isNew ? `
-      <div class="mt-6 pt-4 border-t">
-        <div class="text-sm font-semibold mb-3" style="color:var(--bhub-navy)">💬 Comentários</div>
-        <div id="taskSubPanel"></div>
-      </div>` : ''}
-    </div>
-  </div>`);
-  document.body.appendChild(m);
-  m.querySelector('#cancel').onclick = ()=>m.remove();
-
-  // Bloqueio ↔ RAID picker toggle
-  const bloqueioSel = m.querySelector('#bloqueioSel');
-  const raidWrap = m.querySelector('#raidPickerWrap');
-  if(bloqueioSel && raidWrap){
-    bloqueioSel.addEventListener('change', ()=>{
-      raidWrap.classList.toggle('hidden', bloqueioSel.value !== 'Sim');
-    });
-    m.querySelector('#createRaidInline').addEventListener('click', ()=>{
-      m.remove();
-      openRaidModal(company);
-    });
-  }
-
-  // Painéis de comentários / anexos / dependências
-  if(!isNew){
-    const panel = m.querySelector('#taskSubPanel');
-    renderCommentsPanel(panel, 'task', t.id, company.id);
-  }
-  m.querySelector('#taskForm').onsubmit = async (e)=>{
-    e.preventDefault();
-    const fd = new FormData(e.target);
-    const errEl = m.querySelector('#taskFormErr');
-    const showErr = (msg) => {
-      if(errEl){ errEl.textContent = msg; errEl.classList.remove('hidden'); errEl.scrollIntoView({block:'nearest'}); }
-      else { alert(msg); }
-    };
-    if(errEl) errEl.classList.add('hidden');
-
-    const completado = parseFloat(fd.get('completado'))||0;
-    const dataRealConclusao = fd.get('dataRealConclusao');
-
-    // Validação: data real de conclusão não pode ser futura
-    if(dataRealConclusao){
-      const today = new Date(); today.setHours(0,0,0,0);
-      const dataConclusao = new Date(dataRealConclusao + 'T00:00:00');
-      if(dataConclusao > today){
-        showErr('A data real de conclusão não pode ser uma data futura. Uma tarefa só pode ser marcada como concluída após ser finalizada.');
-        return;
-      }
-    }
-    // Validação: se marcou 100% concluído, exige data real de conclusão
-    if(completado >= 100 && !dataRealConclusao){
-      showErr('Para marcar a tarefa como 100% concluída, informe a data real de conclusão.');
-      return;
-    }
-    // Validação: bloqueio = Sim exige Ação de Mitigação vinculada
-    if(fd.get('bloqueio') === 'Sim' && !fd.get('raidId')){
-      showErr('Todo bloqueio precisa ter uma Ação de Mitigação vinculada. Selecione ou crie uma Ação de Mitigação antes de salvar.');
-      // Garante que o campo fique visível
-      const wrap = m.querySelector('#raidPickerWrap');
-      if(wrap) wrap.classList.remove('hidden');
-      return;
-    }
-
-    const upd = {
-      ref: fd.get('ref').trim(),
-      area: fd.get('area').trim(),
-      task: fd.get('task').trim(),
-      owner: fd.get('owner').trim(),
-      ferramenta: fd.get('ferramenta').trim(),
-      prazo: parseInt(fd.get('prazo'))||0,
-      dataRealConclusao,
-      completado,
-      evidencia: fd.get('evidencia').trim(),
-      ultimoUpdate: fd.get('ultimoUpdate'),
-      proximoPasso: fd.get('proximoPasso').trim(),
-      bloqueio: fd.get('bloqueio'),
-      bloqueioDescricao: fd.get('bloqueioDescricao').trim(),
-      phaseId: fd.get('phaseId')||'',
-      raidId: fd.get('raidId')||null
-    };
-    try{
-      if(isNew){
-        const needsApproval = !canAdmin();
-        const payload = { ...taskToDb(upd, company.id), pending_approval: needsApproval };
-        const { data, error } = await supa.from('tasks').insert(payload).select().single();
-        if(error) throw error;
-        deal.tasks.push(taskFromDb(data));
-        m.remove(); render();
-        if(needsApproval){
-          const toast = el(`<div style="position:fixed;bottom:1.5rem;right:1.5rem;background:#1e2d45;color:#fff;padding:.75rem 1.25rem;border-radius:.75rem;font-size:.85rem;z-index:999;box-shadow:0 8px 24px rgba(0,0,0,.3);max-width:320px">
-            ⏳ Tarefa enviada para aprovação do admin. Ficará visível após aprovação.
-            </div>`);
-          document.body.appendChild(toast);
-          setTimeout(()=>toast.remove(), 4000);
-        }
-      }else{
-        const { error } = await supa.from('tasks').update(taskToDb(upd, company.id)).eq('id', t.id);
-        if(error) throw error;
-        Object.assign(t, upd);
-        m.remove(); render();
-      }
-    }catch(err){ alert('Erro ao salvar: '+(err.message||err)); }
-  };
-  const del = m.querySelector('#del');
-  if(del) del.onclick = async ()=>{
-    if(session?.role === 'admin'){
-      // Admin: confirm e deleta diretamente
-      const ok = await confirmDeleteModal({
-        title: 'Excluir esta tarefa?',
-        ref: t.ref || '',
-        description: t.task || '',
-        warning: 'Esta ação é <strong>irreversível</strong>. A tarefa e seu histórico serão removidos permanentemente.'
-      });
-      if(!ok) return;
-      try{
-        const { error } = await supa.from('tasks').delete().eq('id', t.id);
-        if(error) throw error;
-        // também remove eventuais solicitações pendentes para essa tarefa
-        await supa.from('deletion_requests').delete().eq('task_id', t.id);
-        state.deletionRequests = state.deletionRequests.filter(r=>r.task_id!==t.id);
-        deal.tasks = deal.tasks.filter(x=>x.id!==t.id);
-        m.remove(); render();
-      }catch(err){ alert('Erro: '+(err.message||err)); }
-    } else {
-      // Não-admin: cria solicitação de exclusão (aguarda aprovação do admin)
-      const alreadyPending = state.deletionRequests.some(r=>r.task_id===t.id);
-      if(alreadyPending){
-        showInfoModal('Solicitação já enviada', `A exclusão da tarefa <strong>${escapeHtml(t.ref||'')} – ${escapeHtml(t.task||'')}</strong> já está aguardando aprovação do admin.`);
-        return;
-      }
-      const ok = await confirmDeleteModal({
-        title: 'Solicitar exclusão?',
-        ref: t.ref || '',
-        description: t.task || '',
-        warning: 'Sua solicitação será enviada ao admin para aprovação. A tarefa só será removida após o ok dele.',
-        confirmLabel: 'Sim, solicitar'
-      });
-      if(!ok) return;
-      try{
-        const reqData = {
-          task_id: t.id,
-          task_ref: t.ref || '',
-          task_name: t.task || '',
-          area: t.area || '',
-          company_id: company.id,
-          company_name: company.name,
-          requested_by_id: session.id,
-          requested_by_name: session.username || session.email || '',
-          status: 'pending'
-        };
-        const { data: inserted, error } = await supa.from('deletion_requests').insert(reqData).select().single();
-        if(error) throw error;
-        state.deletionRequests.push(inserted);
-        m.remove(); render();
-        showInfoModal('Solicitação enviada ✓', `A exclusão de <strong>${escapeHtml(t.ref||'')} – ${escapeHtml(t.task||'')}</strong> foi solicitada e aguarda aprovação do admin.`);
-      }catch(err){ alert('Erro: '+(err.message||err)); }
-    }
-  };
 }
 
 /* ---------- Helper: modal informativo (sem ação) ---------- */
