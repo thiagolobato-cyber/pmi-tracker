@@ -2333,10 +2333,7 @@ function renderDashboard(){
 function renderDashboardRagMatrix(data){
   if(!data.length) return '<div class="text-xs text-gray-500">Sem deals.</div>';
   const currentWeek = currentIsoWeek();
-  const allAreas = Array.from(new Set([
-    ...DEFAULT_AREAS.map(a=>a.name),
-    ...Object.values(state.deals).flatMap(d=>d.tasks.map(t=>t.area))
-  ].filter(Boolean)));
+  const allAreas = DEFAULT_AREAS.map(a=>a.name);
   function lastRagFor(dealId, area){
     const arr = (state.deals[dealId]?.health||[]).filter(h=>h.area===area).sort((a,b)=>b.weekIso.localeCompare(a.weekIso));
     return arr[0]?.rag || 'na';
@@ -2406,12 +2403,8 @@ function openExecPdfDealModal(deals, onDone){
 }
 
 function renderExecutiva(){
-  // Collect all areas
-  const allAreas = Array.from(new Set([
-    ...state.template.map(t=>t.area),
-    ...Object.values(state.deals).flatMap(d=>d.tasks.map(t=>t.area))
-  ].filter(Boolean)));
-  if(!allAreas.length) allAreas.push(...DEFAULT_AREAS.map(a=>a.name));
+  // Collect all areas — limited to DEFAULT_AREAS only
+  const allAreas = DEFAULT_AREAS.map(a=>a.name);
   if(view.executiveArea !== 'todas' && !allAreas.includes(view.executiveArea)) view.executiveArea = 'todas';
   if(!view.executivaDealSearch) view.executivaDealSearch = '';
 
