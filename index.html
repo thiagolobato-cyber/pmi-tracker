@@ -1798,6 +1798,7 @@ function renderRaidPortfolio(){
               <th>SEVERIDADE</th>
               <th>STATUS</th>
               <th>OWNER</th>
+              <th>PARTICIPANTES</th>
               <th>PRAZO</th>
               <th>BLOQUEIOS</th>
               ${canEdit()?'<th></th>':''}
@@ -1835,12 +1836,34 @@ function renderRaidPortfolio(){
         +'<td>'+(sev?'<span class="pill sev-'+r.severity+'">'+sev.label+'</span>':'')+'</td>'
         +'<td>'+(st?'<span class="pill">'+st.label+'</span>':'')+'</td>'
         +'<td class="text-xs">'+(r.owner?'<span class="deal-link" data-owner="'+escapeHtml(r.owner)+'">'+escapeHtml(r.owner)+'</span>':'<span class="text-red-500 font-semibold">sem owner</span>')+'</td>'
+        +(()=>{
+          const pts = r.participants||[];
+          if(!pts.length) return '<td class="text-xs"><span class="text-gray-400">—</span></td>';
+          const MAX=5, uid='gpp-'+r.id;
+          const visible = pts.slice(0,MAX).map(p=>'<span class="pill" style="font-size:.65rem;padding:.1rem .4rem;margin:.1rem">'+escapeHtml(p)+'</span>').join('');
+          const extra = pts.slice(MAX).map(p=>'<span class="pill" style="font-size:.65rem;padding:.1rem .4rem;margin:.1rem">'+escapeHtml(p)+'</span>').join('');
+          const toggle = pts.length>MAX?'<span id="'+uid+'" style="cursor:pointer;font-size:.65rem;padding:.1rem .4rem;border-radius:.75rem;background:#f3f4f6;color:#374151;border:1px solid #d1d5db;font-weight:600;white-space:nowrap;margin:.1rem" data-expanded="0">+'+(pts.length-MAX)+'</span>':'';
+          const extraDiv = pts.length>MAX?'<span id="'+uid+'-extra" style="display:none">'+extra+'</span>':'';
+          return '<td class="text-xs">'+visible+extraDiv+toggle+'</td>';
+        })()
         +'<td class="text-xs">'+(r.dueDate?fmtDate(parseDate(r.dueDate)):'<span class="text-red-500 font-semibold">sem prazo</span>')+'</td>'
         +'<td class="text-center">'+(blockCount>0?'<span style="background:#fee2e2;color:#991b1b;padding:.1rem .45rem;border-radius:9999px;font-weight:700;font-size:.75rem">'+blockCount+'</span>':'<span class="text-gray-400 text-xs">0</span>')+'</td>'
         +(canEdit()?'<td><button class="btn btn-secondary" data-raid-edit="'+r.id+'">✎</button></td>':'');
       tbody.appendChild(tr);
     });
     node.querySelectorAll('[data-raid-edit]').forEach(b=>b.onclick=()=>openRaidModal(null, b.dataset.raidEdit));
+    // Toggle "+N" participantes na tabela global
+    tbody.querySelectorAll('[id^="gpp-"]:not([id$="-extra"])').forEach(btn=>{
+      btn.addEventListener('click', e=>{
+        e.stopPropagation();
+        const extraEl = document.getElementById(btn.id+'-extra');
+        const expanded = btn.dataset.expanded==='1';
+        if(extraEl) extraEl.style.display = expanded?'none':'inline';
+        const base = parseInt(btn.textContent)||0;
+        btn.textContent = expanded?'+'+base:'▲';
+        btn.dataset.expanded = expanded?'0':'1';
+      });
+    });
   }
 
   node.querySelectorAll('[data-rf]').forEach(b=>b.addEventListener('click',()=>{ view.raidPortfolioFilter=b.dataset.rf; render(); }));
