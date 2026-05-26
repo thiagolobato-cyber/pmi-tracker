@@ -5268,12 +5268,17 @@ function renderHoje(){
   }
   function decisionRow(r){
     const sev = r.severity==='high'?'Alta':r.severity==='med'?'Média':'Baixa';
+    // Mostra todos os deals afetados, não só o primeiro
+    const dealNames = (r.dealIds||[])
+      .map(did => state.companies.find(c=>c.id===did)?.name)
+      .filter(Boolean);
+    const dealsLabel = dealNames.length ? dealNames.join(', ') : (r._deal?.name||'—');
     // data-raid-id → navega para Ações de Mitigação e abre o modal de edição
     return `<div class="hoje-row" data-raid-id="${r.id}" style="cursor:pointer">
       <div class="hoje-row-left">
         <div class="hoje-row-task" title="${escapeHtml(r.title)}">${escapeHtml(r.title)}</div>
         <div class="hoje-row-meta">
-          <span>${escapeHtml(r._deal?.name||'')}</span><span class="sep">·</span>
+          <span title="${escapeHtml(dealsLabel)}">${escapeHtml(dealsLabel)}</span><span class="sep">·</span>
           <span>${escapeHtml(r.area||'—')}</span>
           ${r.owner?`<span class="sep">·</span><span>Resp: ${escapeHtml(r.owner)}</span>`:''}
         </div>
