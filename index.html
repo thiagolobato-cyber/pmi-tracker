@@ -3679,6 +3679,175 @@ function openRaidModal(company, raidId){
   };
 }
 
+/* ===== Modal de Tarefa ===== */
+function openTaskModal(company, taskId){
+  const deal = dealOf(company.id);
+  const existing = taskId ? (deal?.tasks||[]).find(t=>t.id===taskId) : null;
+  const isNew = !existing;
+
+  const allAreas = Array.from(new Set([
+    ...DEFAULT_AREAS.map(a=>a.name),
+    ...state.template.map(t=>t.area),
+    ...(deal?.tasks||[]).map(t=>t.area)
+  ].filter(Boolean)));
+
+  const m = el(`
+    <div class="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-20" data-modal="task">
+      <div class="bg-white rounded-2xl p-5 w-full max-w-2xl border border-[color:var(--bhub-border)]" style="box-shadow:0 24px 60px rgba(15,23,39,.25);max-height:90vh;overflow-y:auto">
+        <div class="text-lg font-bold mb-3" style="color:var(--bhub-navy)">${isNew?'Nova Tarefa':'Editar Tarefa'}</div>
+        <form id="taskForm" class="grid grid-cols-2 gap-3 text-sm">
+
+          <label class="block">REF
+            <input name="ref" value="${escapeHtml(existing?.ref||'')}" placeholder="ex: 1.1" />
+          </label>
+          <label class="block">Área
+            <select name="area">
+              <option value="">—</option>
+              ${allAreas.map(a=>`<option value="${escapeHtml(a)}" ${existing?.area===a?'selected':''}>${escapeHtml(a)}</option>`).join('')}
+            </select>
+          </label>
+
+          <label class="block col-span-2">Tarefa *
+            <input name="task" required value="${escapeHtml(existing?.task||'')}" placeholder="Descrição da tarefa" />
+          </label>
+
+          <label class="block">Owner
+            ${ownerSelectHtml(existing?.owner||'')}
+          </label>
+          <label class="block">Prazo (dias úteis)
+            <input name="prazo" type="number" min="0" value="${existing?.prazo||0}" />
+          </label>
+
+          <label class="block">Fase
+            <select name="phaseId">
+              <option value="">—</option>
+              ${DEFAULT_PHASES.map(p=>`<option value="${p.id}" ${existing?.phaseId===p.id?'selected':''}>${escapeHtml(p.name)}</option>`).join('')}
+            </select>
+          </label>
+          <label class="block">% Concluído
+            <input name="completado" type="number" min="0" max="100" value="${existing?.completado||0}" />
+          </label>
+
+          <label class="block">Data Real de Conclusão
+            <input name="dataRealConclusao" type="date" value="${existing?.dataRealConclusao?toIso(parseDate(existing.dataRealConclusao)):''}" />
+          </label>
+          <label class="block">Último Update
+            <input name="ultimoUpdate" type="date" value="${existing?.ultimoUpdate?toIso(parseDate(existing.ultimoUpdate)):''}" />
+          </label>
+
+          <label class="block col-span-2">Próximo Passo
+            <input name="proximoPasso" value="${escapeHtml(existing?.proximoPasso||'')}" placeholder="Próxima ação necessária" />
+          </label>
+
+          <label class="block">Bloqueio?
+            <select name="bloqueio">
+              <option value="Não" ${(existing?.bloqueio||'Não')==='Não'?'selected':''}>Não</option>
+              <option value="Sim" ${existing?.bloqueio==='Sim'?'selected':''}>Sim</option>
+            </select>
+          </label>
+          <label class="block" id="bloqDescWrap" style="${existing?.bloqueio==='Sim'?'':'display:none'}">Descrição do bloqueio
+            <input name="bloqueioDescricao" value="${escapeHtml(existing?.bloqueioDescricao||'')}" placeholder="Descreva o bloqueio" />
+          </label>
+
+          <div id="taskFormErr" class="col-span-2 text-xs rounded-lg p-2 hidden" style="color:#991b1b;background:#fee2e2"></div>
+
+          <div class="col-span-2 flex justify-between mt-2 pt-3 border-t" style="border-color:var(--bhub-border)">
+            <div>
+              ${!isNew && canEdit() ? `<button type="button" id="delTask" class="btn" style="background:var(--bhub-red);color:#fff">🗑 Excluir</button>` : ''}
+            </div>
+            <div class="flex gap-2">
+              <button type="button" id="cancelTask" class="btn btn-secondary">Cancelar</button>
+              <button type="submit" class="btn btn-primary">${isNew?'Criar':'Salvar'}</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  `);
+  document.body.appendChild(m);
+  const close = () => m.remove();
+
+  // Mostrar/ocultar campo de descrição de bloqueio
+  m.querySelector('[name="bloqueio"]').addEventListener('change', e=>{
+    m.querySelector('#bloqDescWrap').style.display = e.target.value==='Sim' ? '' : 'none';
+  });
+
+  m.querySelector('#cancelTask').onclick = close;
+
+  // Excluir
+  const delBtn = m.querySelector('#delTask');
+  if(delBtn) delBtn.onclick = async ()=>{
+    if(canAdmin()){
+      if(!confirm('Excluir esta tarefa permanentemente?')) return;
+      try{
+        const { error } = await supa.from('tasks').delete().eq('id', taskId);
+        if(error) throw error;
+        if(deal) deal.tasks = deal.tasks.filter(t=>t.id!==taskId);
+        close(); render();
+      }catch(err){ alert('Erro: '+(err.message||err)); }
+    } else {
+      if(!confirm('Solicitar exclusão desta tarefa? Um admin precisará aprovar.')) return;
+      try{
+        const { error } = await supa.from('deletion_requests').insert({
+          task_id: taskId,
+          task_name: existing?.task||'',
+          task_ref: existing?.ref||'',
+          company_id: company.id,
+          requested_by_id: session.id,
+          status: 'pending'
+        });
+        if(error) throw error;
+        await reloadState(); close(); render();
+        alert('Solicitação de exclusão enviada para o admin.');
+      }catch(err){ alert('Erro: '+(err.message||err)); }
+    }
+  };
+
+  // Salvar
+  m.querySelector('#taskForm').onsubmit = async (e)=>{
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const showErr = (msg)=>{ const el2=m.querySelector('#taskFormErr'); el2.textContent=msg; el2.classList.remove('hidden'); };
+    if(!fd.get('task')?.trim()) return showErr('Nome da tarefa é obrigatório.');
+
+    const payload = {
+      ref:              fd.get('ref')?.trim()||'',
+      area:             fd.get('area')||'',
+      task:             fd.get('task')?.trim()||'',
+      owner:            fd.get('owner')||'',
+      prazo:            parseInt(fd.get('prazo'))||0,
+      phaseId:          fd.get('phaseId')||'',
+      completado:       Number(fd.get('completado'))||0,
+      dataRealConclusao:fd.get('dataRealConclusao')||'',
+      ultimoUpdate:     fd.get('ultimoUpdate')||'',
+      proximoPasso:     fd.get('proximoPasso')||'',
+      bloqueio:         fd.get('bloqueio')||'Não',
+      bloqueioDescricao:fd.get('bloqueioDescricao')||'',
+      ferramenta:       existing?.ferramenta||'',
+      evidencia:        existing?.evidencia||'',
+      raidId:           existing?.raidId||null,
+    };
+
+    const needsApproval = !canAdmin() && !canEdit();
+    try{
+      if(isNew){
+        const row = { ...taskToDb(payload, company.id), pending_approval: !canAdmin() ? true : false };
+        const { data, error } = await supa.from('tasks').insert(row).select().single();
+        if(error) throw error;
+        if(!deal) state.deals[company.id] = { tasks:[], raid:[], synergies:[], health:[] };
+        state.deals[company.id].tasks.push(taskFromDb(data));
+      } else {
+        const row = taskToDb(payload, company.id);
+        const { error } = await supa.from('tasks').update(row).eq('id', taskId);
+        if(error) throw error;
+        Object.assign(existing, payload);
+        existing._f = computeTaskFields(existing, company);
+      }
+      close(); render();
+    }catch(err){ alert('Erro ao salvar: '+(err.message||err)); }
+  };
+}
+
 /* ===== Synergy Tracker ===== */
 function renderDealSynergies(company, deal){
   const syns = (deal.synergies||[]);
