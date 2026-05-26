@@ -2787,160 +2787,28 @@ function openCompanySummary(companyId){
   if(!company) return;
   const deal = dealOf(company.id);
   const tasks = (deal.tasks||[]).map(t=>({...t, _f: computeTaskFields(t, company)}));
-  const total = tasks.length;
-  const done = tasks.filter(t=>t._f.status==='done').length;
-  const ontrack = tasks.filter(t=>t._f.status==='ontrack').length;
-  const late = tasks.filter(t=>t._f.status==='late').length;
-  const blocked = tasks.filter(t=>t.bloqueio==='Sim').length;
-  const noowner = tasks.filter(t=>!t.owner).length;
-  const pct = total?Math.round(done/total*100):0;
-
-  const raid = deal.raid||[];
-  const openRaid = raid.filter(r=>r.status!=='closed');
-  const topRisks = openRaid.filter(r=>r.riscoDesc).sort((a,b)=>sevRank(b.severity)-sevRank(a.severity)).slice(0,3);
-  const openIssues = openRaid.filter(r=>r.issueDesc).length;
-
-  const syns = deal.synergies||[];
-  const synPlan = syns.reduce((s,x)=>s+(Number(x.plannedValue)||0),0);
-  const synReal = syns.reduce((s,x)=>s+(Number(x.realizedValue)||0),0);
-  const synPct = synPlan>0 ? Math.round(synReal/synPlan*100) : 0;
-
-  // Tarefas mais atrasadas (top 5)
-  const topLate = tasks.filter(t=>t._f.status==='late' && t._f.diasAtraso)
-    .sort((a,b)=>b._f.diasAtraso-a._f.diasAtraso).slice(0,5);
-
-  // Próximos vencimentos (até 14 d.u.)
-  const today = new Date(); today.setHours(0,0,0,0);
-  const upcoming = [];
-  tasks.forEach(t=>{
-    if(t._f.status==='ontrack' && t._f.dataPrevista){
-      const diff = businessDaysBetween(today, t._f.dataPrevista);
-      if(diff!==null && diff>=0 && diff<=14){
-        upcoming.push({task:t.task, area:t.area, owner:t.owner, due:t._f.dataPrevista, diff});
-      }
-    }
-  });
-  upcoming.sort((a,b)=>a.diff-b.diff);
-
-  // Bloqueios ativos
-  const blocks = tasks.filter(t=>t.bloqueio==='Sim').map(t=>({area:t.area, task:t.task, owner:t.owner, desc:t.bloqueioDescricao}));
-
-  // Status por área (último RAG)
-  const allAreas = Array.from(new Set([
-    ...DEFAULT_AREAS.map(a=>a.name),
-    ...tasks.map(t=>t.area),
-    ...(deal.health||[]).map(h=>h.area)
-  ].filter(Boolean)));
-  function lastRagFor(area){
-    const arr = (deal.health||[]).filter(h=>h.area===area).sort((a,b)=>b.weekIso.localeCompare(a.weekIso));
-    return arr[0]?.rag || 'na';
-  }
-  const areaRags = allAreas.map(a=>({area:a, rag:lastRagFor(a)}));
-
-  // Dias desde a assinatura
-  let daysSinceSign = null;
-  if(company.signDate){
-    const d = parseDate(company.signDate);
-    if(d){
-      const diffMs = today.getTime() - d.getTime();
-      daysSinceSign = Math.floor(diffMs/86400000);
-    }
-  }
-
-  // Status overall
-  let overall = 'g', overallLabel = 'Saudável';
-  if(late>0 || blocked>0 || topRisks.some(r=>r.severity==='high')){ overall='r'; overallLabel='Atenção crítica'; }
-  else if(noowner>0 || openIssues>0 || pct<25){ overall='a'; overallLabel='Atenção'; }
 
   const m = el(`
-  <div class="fixed inset-0 bg-black/40 z-30 flex items-center justify-center p-4">
-    <div class="bg-white rounded-xl w-full max-w-4xl max-h-[92vh] overflow-y-auto shadow-2xl">
-      <div class="sticky top-0 bg-white border-b px-6 py-4 flex items-start justify-between" style="border-color:var(--bhub-border)">
-        <div>
-          <div class="flex items-center gap-3">
-            <h2 class="text-xl font-bold" style="color:var(--bhub-navy)">${escapeHtml(company.name)}</h2>
-            <span class="rag rag-${overall}" style="font-size:.7rem"><span class="rag-dot"></span>${overallLabel}</span>
-          </div>
-          <div class="text-xs mt-1" style="color:var(--bhub-muted)">
-            Resumo Executivo PMI
-            ${company.signDate ? ` • Assinatura: ${fmtDate(company.signDate)}${daysSinceSign!==null?` (D+${daysSinceSign})`:''}` : ''}
-          </div>
-        </div>
+  <div class="fixed inset-0 bg-black/40 z-30 flex items-start justify-center p-4 overflow-y-auto">
+    <div class="bg-white rounded-xl w-full max-w-4xl shadow-2xl my-4">
+      <div class="sticky top-0 bg-white border-b px-6 py-3 flex items-center justify-between rounded-t-xl z-10" style="border-color:var(--bhub-border)">
+        <div class="text-sm font-semibold" style="color:var(--bhub-muted)">Executive Briefing — ${escapeHtml(company.name)}</div>
         <div class="flex items-center gap-2">
           <button id="goDeal" class="btn btn-primary">Abrir deal →</button>
           <button id="closeSum" class="btn btn-secondary">Fechar</button>
         </div>
       </div>
-
-      <div class="p-6 space-y-5">
-        <!-- KPIs -->
-        <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
-          <div class="kpi"><div class="kpi-label">% Concluído</div><div class="kpi-value">${pct}%</div></div>
-          <div class="kpi"><div class="kpi-label">Done / Total</div><div class="kpi-value">${done} / ${total}</div></div>
-          <div class="kpi"><div class="kpi-label">On Track</div><div class="kpi-value" style="color:var(--bhub-blue)">${ontrack}</div></div>
-          <div class="kpi"><div class="kpi-label">Atrasadas</div><div class="kpi-value" style="color:var(--bhub-red)">${late}</div></div>
-          <div class="kpi"><div class="kpi-label">Bloqueios</div><div class="kpi-value" style="color:#92400e">${blocked}</div></div>
-          <div class="kpi"><div class="kpi-label">Ações de Mitigação abertas</div><div class="kpi-value">${openRaid.length}</div></div>
-          <div class="kpi"><div class="kpi-label">Sinergia</div><div class="kpi-value">${synPct}%</div></div>
-        </div>
-
-        <!-- Status por área -->
-        <section>
-          <div class="text-sm font-semibold mb-2" style="color:var(--bhub-navy)">Status por área (último RAG)</div>
-          <div class="flex flex-wrap gap-2">
-            ${areaRags.map(a=>`<div class="flex items-center gap-2 px-2.5 py-1 rounded-md border" style="border-color:var(--bhub-border)"><span class="text-xs deal-link" data-area="${escapeHtml(a.area)}">${escapeHtml(a.area)}</span><span class="rag rag-${a.rag}" style="font-size:.6rem;padding:.1rem .35rem"><span class="rag-dot"></span>${a.rag==='g'?'G':a.rag==='a'?'A':a.rag==='r'?'R':'—'}</span></div>`).join('') || `<div class="text-xs text-gray-500">Sem registros de health.</div>`}
-          </div>
-        </section>
-
-        <div class="grid lg:grid-cols-2 gap-5">
-          <!-- Top atrasadas -->
-          <section class="bhub-card p-4">
-            <div class="text-sm font-semibold mb-2" style="color:var(--bhub-navy)">⚠️ Top tarefas atrasadas</div>
-            ${topLate.length ? `<table class="w-full text-xs"><thead><tr><th class="text-left">TAREFA</th><th class="text-left">ÁREA</th><th>OWNER</th><th>DIAS</th></tr></thead><tbody>${topLate.map(t=>`<tr><td>${escapeHtml(t.task||'')}</td><td>${t.area?`<span class="deal-link" data-area="${escapeHtml(t.area)}">${escapeHtml(t.area)}</span>`:''}</td><td>${t.owner?`<span class="deal-link" data-owner="${escapeHtml(t.owner)}">${escapeHtml(t.owner)}</span>`:'—'}</td><td class="text-center text-red-700 font-semibold">${t._f.diasAtraso}</td></tr>`).join('')}</tbody></table>` : `<div class="text-xs text-gray-500">Nenhuma tarefa atrasada. 🎉</div>`}
-          </section>
-
-          <!-- Próximos vencimentos -->
-          <section class="bhub-card p-4">
-            <div class="text-sm font-semibold mb-2" style="color:var(--bhub-navy)">📅 Próximos vencimentos (≤14 d.u.)</div>
-            ${upcoming.length ? `<table class="w-full text-xs"><thead><tr><th class="text-left">TAREFA</th><th class="text-left">ÁREA</th><th>OWNER</th><th>EM</th></tr></thead><tbody>${upcoming.slice(0,8).map(t=>`<tr><td>${escapeHtml(t.task||'')}</td><td>${t.area?`<span class="deal-link" data-area="${escapeHtml(t.area)}">${escapeHtml(t.area)}</span>`:''}</td><td>${t.owner?`<span class="deal-link" data-owner="${escapeHtml(t.owner)}">${escapeHtml(t.owner)}</span>`:'—'}</td><td class="text-center">${t.diff}d</td></tr>`).join('')}</tbody></table>` : `<div class="text-xs text-gray-500">Nada vencendo em 14 d.u.</div>`}
-          </section>
-
-          <!-- Top riscos -->
-          <section class="bhub-card p-4">
-            <div class="text-sm font-semibold mb-2" style="color:var(--bhub-navy)">🛡️ Top riscos abertos</div>
-            ${topRisks.length ? `<ul class="space-y-1.5 text-xs">${topRisks.map(r=>`<li class="flex items-start gap-2"><span class="pill" style="background:${r.severity==='high'?'#fee2e2':r.severity==='med'?'#fef3c7':'#dbeafe'};color:${r.severity==='high'?'#991b1b':r.severity==='med'?'#92400e':'#1e3a8a'}">${(r.severity||'').toUpperCase()}</span><span><strong>${escapeHtml(r.title||'')}</strong> <span class="text-gray-500">— ${r.area?`<span class="deal-link" data-area="${escapeHtml(r.area)}">${escapeHtml(r.area)}</span>`:''}${r.owner?` • <span class="deal-link" data-owner="${escapeHtml(r.owner)}">${escapeHtml(r.owner)}</span>`:''}</span></span></li>`).join('')}</ul>` : `<div class="text-xs text-gray-500">Sem riscos abertos.</div>`}
-          </section>
-
-          <!-- Bloqueios -->
-          <section class="bhub-card p-4">
-            <div class="text-sm font-semibold mb-2" style="color:var(--bhub-navy)">🚧 Bloqueios ativos</div>
-            ${blocks.length ? `<ul class="space-y-1.5 text-xs">${blocks.slice(0,5).map(b=>`<li><strong>${escapeHtml(b.task||'')}</strong> <span class="text-gray-500">— ${b.area?`<span class="deal-link" data-area="${escapeHtml(b.area)}">${escapeHtml(b.area)}</span>`:''}${b.owner?` • <span class="deal-link" data-owner="${escapeHtml(b.owner)}">${escapeHtml(b.owner)}</span>`:''}</span>${b.desc?`<div class="text-gray-600 mt-0.5">${escapeHtml(b.desc)}</div>`:''}</li>`).join('')}</ul>` : `<div class="text-xs text-gray-500">Nenhum bloqueio ativo.</div>`}
-          </section>
-        </div>
-
-        <!-- Sinergias -->
-        <section class="bhub-card p-4">
-          <div class="flex items-center justify-between mb-2">
-            <div class="text-sm font-semibold" style="color:var(--bhub-navy)">💰 Sinergias</div>
-            <div class="text-xs" style="color:var(--bhub-muted)">${syns.length} item(ns)</div>
-          </div>
-          <div class="grid grid-cols-3 gap-3 text-xs">
-            <div><div class="text-gray-500">Planejado</div><div class="text-base font-semibold">${fmtBRL(synPlan)}</div></div>
-            <div><div class="text-gray-500">Realizado</div><div class="text-base font-semibold">${fmtBRL(synReal)}</div></div>
-            <div><div class="text-gray-500">Captura</div><div class="text-base font-semibold">${synPct}%</div></div>
-          </div>
-        </section>
-
-        ${noowner>0 ? `<div class="text-xs px-3 py-2 rounded-md" style="background:#fef3c7;color:#92400e">⚠️ ${noowner} tarefa(s) sem responsável definido.</div>` : ''}
-      </div>
+      <div id="briefingContent" class="p-4"></div>
     </div>
-  </div>`);
+  </div>\`);
+
+  const briefingNode = renderDealBriefing(company, deal, tasks);
+  m.querySelector('#briefingContent').appendChild(briefingNode);
+
   document.body.appendChild(m);
   m.querySelector('#closeSum').onclick = ()=>m.remove();
-  m.querySelector('#goDeal').onclick = ()=>{ m.remove(); view.tab='deal'; view.dealId=company.id; render(); };
+  m.querySelector('#goDeal').onclick = ()=>{ m.remove(); view.tab='deal'; view.dealId=company.id; view.dealTab='briefing'; render(); };
   m.addEventListener('click', (e)=>{ if(e.target===m) m.remove(); });
-  m.querySelectorAll('[data-area]').forEach(el=>el.addEventListener('click', e=>{ e.stopPropagation(); if(el.dataset.area){ m.remove(); openAreaSummary(el.dataset.area); } }));
-  m.querySelectorAll('[data-owner]').forEach(el=>el.addEventListener('click', e=>{ e.stopPropagation(); if(el.dataset.owner){ m.remove(); openOwnerSummary(el.dataset.owner); } }));
 }
 
 /* ---------- Area Summary (Snapshot por área cross-deal) ---------- */
@@ -4419,15 +4287,6 @@ function renderDealBriefing(company, deal, tasks){
           <div class="mini-stat"><div class="lbl">Sinergia captura</div><div class="val">${synPct}% (${fmtBRL(synReal)}/${fmtBRL(synPlan)})</div></div>
         </div>
 
-        <div class="mb-5">
-          <div class="text-sm font-semibold mb-2" style="color:var(--bhub-navy);font-family:'Roboto'">Health por workstream (semana ${currentWeek})</div>
-          <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
-            ${healthNow.map(h=>`<div class="flex items-center gap-2 text-xs border rounded-lg p-2" style="border-color:var(--bhub-border)">
-              <div class="rag rag-${h.rag}"><span class="rag-dot"></span>${h.rag==='g'?'G':h.rag==='a'?'A':h.rag==='r'?'R':'—'}</div>
-              <div class="flex-1 truncate font-medium"><span class="deal-link" data-area="${escapeHtml(h.area)}">${escapeHtml(h.area)}</span></div>
-            </div>`).join('')}
-          </div>
-        </div>
 
         <div class="grid md:grid-cols-2 gap-4 mb-5">
           <div>
