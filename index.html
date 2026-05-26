@@ -1884,7 +1884,7 @@ function renderDashboard(){
 
   // Listas pra popular os selects de filtro
   const allDeals = state.companies.map(c=>({id:c.id, name:c.name})).sort((a,b)=>a.name.localeCompare(b.name));
-  const allAreasD = Array.from(new Set([...DEFAULT_AREAS.map(a=>a.name), ...state.template.map(t=>t.area), ...Object.values(state.deals).flatMap(d=>d.tasks.map(t=>t.area))].filter(Boolean))).sort();
+  const allAreasD = DEFAULT_AREAS.map(a=>a.name);
   const allOwnersD = Array.from(new Set(Object.values(state.deals).flatMap(d=>d.tasks.map(t=>t.owner)).filter(Boolean))).sort();
   const f = view.dashFilters || {deals:[],areas:[],owners:[]};
 
@@ -2403,8 +2403,12 @@ function openExecPdfDealModal(deals, onDone){
 }
 
 function renderExecutiva(){
-  // Collect all areas — limited to DEFAULT_AREAS only
-  const allAreas = DEFAULT_AREAS.map(a=>a.name);
+  // Collect all areas from actual deal tasks (preserva as áreas reais do banco)
+  const allAreas = Array.from(new Set([
+    ...state.template.map(t=>t.area),
+    ...Object.values(state.deals).flatMap(d=>d.tasks.map(t=>t.area))
+  ].filter(Boolean)));
+  if(!allAreas.length) allAreas.push(...DEFAULT_AREAS.map(a=>a.name));
   if(view.executiveArea !== 'todas' && !allAreas.includes(view.executiveArea)) view.executiveArea = 'todas';
   if(!view.executivaDealSearch) view.executivaDealSearch = '';
 
