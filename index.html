@@ -1934,8 +1934,8 @@ function renderDashboard(){
   }));
   top.sort((a,b)=>b.dias-a.dias);
 
-  // Heatmap: area x deal
-  const areas = Array.from(new Set([...DEFAULT_AREAS.map(a=>a.name), ...state.template.map(t=>t.area), ...Object.values(state.deals).flatMap(d=>d.tasks.map(t=>t.area))].filter(Boolean)));
+  // Heatmap: area x deal — usa apenas as DEFAULT_AREAS para manter o visual limpo
+  const areas = DEFAULT_AREAS.map(a=>a.name);
   function cellStatus(deal, area){
     const ts = deal.tasks.filter(t=>t.area===area);
     if(!ts.length) return 'empty';
