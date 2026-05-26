@@ -5032,9 +5032,9 @@ function renderHoje(){
     return {...r, _deal};
   });
 
-  // ---- Listas base (sem filtro de deal/pessoa) ----
+  // ---- Listas base (filtradas pelo usuário logado) ----
   const myLate = allTasks
-    .filter(t => t._f.status==='late')
+    .filter(t => t._f.status==='late' && isMe(t.owner))
     .sort((a,b) => (b._f.diasAtraso||0) - (a._f.diasAtraso||0));
 
   const decisions = allRaid
@@ -5043,6 +5043,7 @@ function renderHoje(){
 
   const myUpcoming = allTasks
     .filter(t => {
+      if(!isMe(t.owner)) return false;
       if(t._f.status!=='ontrack' || !t._f.dataPrevista) return false;
       const diff = businessDaysBetween(today, t._f.dataPrevista);
       return diff>=0 && diff<=10;
@@ -5050,18 +5051,14 @@ function renderHoje(){
     .map(t => ({...t, _diff: businessDaysBetween(today, t._f.dataPrevista)}))
     .sort((a,b) => a._diff - b._diff);
 
-  // Todos os owners únicos (para o filtro de pessoa)
-  const allOwners = [...new Set(allTasks.map(t=>t.owner).filter(Boolean))].sort();
-
   // Deals únicos que aparecem em qualquer seção (para o filtro)
   const dealsInView = new Map();
   [...myLate, ...myUpcoming].forEach(t => dealsInView.set(t._deal.id, t._deal.name));
   decisions.forEach(r => dealsInView.set(r._deal.id, r._deal.name));
   const dealList = [...dealsInView.entries()].sort((a,b)=>a[1].localeCompare(b[1]));
 
-  // Estado local: filtro de deal + filtro de pessoa + limites de paginação por seção
+  // Estado local: filtro de deal + limites de paginação por seção
   let filterDeal = '';
-  let filterOwner = '';
   const limits = { late: PAGE, dec: PAGE, up: PAGE };
 
   const hour = new Date().getHours();
@@ -5115,19 +5112,14 @@ function renderHoje(){
     </div>`;
   }
 
-  // ---- Aplica filtros de deal e pessoa a uma lista ----
-  function applyFilters(items, skipOwner){
-    let v = filterDeal ? items.filter(x=>x._deal.id===filterDeal) : items;
-    if(!skipOwner){
-      if(filterOwner==='__me__') v = v.filter(x=>isMe(x.owner));
-      else if(filterOwner) v = v.filter(x=>x.owner===filterOwner);
-    }
-    return v;
+  // ---- Aplica filtro de deal a uma lista ----
+  function applyFilters(items){
+    return filterDeal ? items.filter(x=>x._deal.id===filterDeal) : items;
   }
 
   // ---- Renderiza uma seção (lista filtrada + paginação) ----
-  function renderSec(containerId, badgeId, limitKey, items, rowFn, emptyMsg, skipOwner){
-    const visible = applyFilters(items, skipOwner);
+  function renderSec(containerId, badgeId, limitKey, items, rowFn, emptyMsg){
+    const visible = applyFilters(items);
     const limit = limits[limitKey];
     const slice = visible.slice(0, limit);
     const rest = visible.length - slice.length;
@@ -5177,17 +5169,16 @@ function renderHoje(){
   // ---- Atualiza total + todas as seções ----
   function refresh(){
     const totLate = applyFilters(myLate).length;
-    const totDec  = applyFilters(decisions, true).length; // decisões: sem filtro de pessoa
+    const totDec  = applyFilters(decisions).length;
     const totUp   = applyFilters(myUpcoming).length;
     const total   = totLate + totDec + totUp;
     const totalEl = node.querySelector('#hoje-total');
-    const ownerLabel = filterOwner==='__me__' ? ` (${[...meTokens][0]||'eu'})` : filterOwner ? ` (${filterOwner})` : '';
     if(totalEl) totalEl.innerHTML = total===0
       ? 'Nenhuma ação pendente. Tudo em dia!'
-      : `<strong>${total}</strong> item${total!==1?'s':''}${ownerLabel} que precisam de atenção.`;
+      : `<strong>${total}</strong> item${total!==1?'s':''} que precisam de atenção.`;
 
     renderSec('sec-late', 'badge-late', 'late', myLate, taskRow, 'Nenhuma tarefa atrasada. ✓');
-    renderSec('sec-dec', 'badge-dec', 'dec', decisions, decisionRow, 'Nenhuma decisão aberta no portfólio.', true);
+    renderSec('sec-dec', 'badge-dec', 'dec', decisions, decisionRow, 'Nenhuma decisão aberta no portfólio.');
     renderSec('sec-up', 'badge-up', 'up', myUpcoming, upcomingRow, 'Nenhuma tarefa vence nos próximos 10 dias úteis.');
   }
 
@@ -5201,9 +5192,6 @@ function renderHoje(){
           ? 'Nenhuma ação pendente no momento. Tudo em dia!'
           : `Você tem <strong>${totalActions}</strong> item${totalActions!==1?'s':''} que precisam de atenção.`
         }</p>
-        <p style="font-size:.72rem;color:var(--bhub-muted);margin-top:.3rem">
-          Buscando por owner: <strong>${[...meTokens].join(' · ')}</strong>
-        </p>
       </div>
 
       <div class="hoje-filter-bar">
@@ -5212,12 +5200,6 @@ function renderHoje(){
         <select id="dealFilter" style="min-width:160px">
           <option value="">Todos os deals${dealList.length>0?` (${dealList.length})`:''}</option>
           ${dealList.map(([id,name])=>`<option value="${id}">${escapeHtml(name)}</option>`).join('')}
-        </select>
-        <span style="font-size:.78rem;color:var(--bhub-muted);font-weight:600;white-space:nowrap;margin-left:.25rem">Pessoa:</span>
-        <select id="ownerFilter" style="min-width:160px">
-          <option value="">Todo mundo</option>
-          <option value="__me__">⭐ Meu nome (${escapeHtml([...meTokens][0]||'eu')})</option>
-          ${allOwners.filter(o=>!isMe(o)).map(o=>`<option value="${escapeHtml(o)}">${escapeHtml(o)}</option>`).join('')}
         </select>
       </div>
 
@@ -5298,14 +5280,6 @@ function renderHoje(){
   const filterEl = node.querySelector('#dealFilter');
   if(filterEl) filterEl.addEventListener('change', ()=>{
     filterDeal = filterEl.value;
-    limits.late = PAGE; limits.dec = PAGE; limits.up = PAGE;
-    refresh();
-  });
-
-  // Wiring: filtro de pessoa
-  const ownerFilterEl = node.querySelector('#ownerFilter');
-  if(ownerFilterEl) ownerFilterEl.addEventListener('change', ()=>{
-    filterOwner = ownerFilterEl.value;
     limits.late = PAGE; limits.dec = PAGE; limits.up = PAGE;
     refresh();
   });
