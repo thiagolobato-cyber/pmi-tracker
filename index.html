@@ -3606,9 +3606,10 @@ function openRaidModal(company, raidId){
   `);
   document.body.appendChild(m);
   const close = () => m.remove();
+  // renderCommentsPanel pode não existir — guarda para não quebrar os outros listeners
   if(existing){
     const raidPanel = m.querySelector('#raidCommentPanel');
-    if(raidPanel) renderCommentsPanel(raidPanel, 'raid', existing.id, null);
+    if(raidPanel && typeof renderCommentsPanel === 'function') renderCommentsPanel(raidPanel, 'raid', existing.id, null);
   }
   m.querySelector('#cancel').onclick = close;
 
@@ -3621,12 +3622,25 @@ function openRaidModal(company, raidId){
   if(delBtn) delBtn.onclick = async ()=>{
     if(!confirm('Excluir esta Ação de Mitigação? Isso removerá o vínculo com todos os deals.')) return;
     try{
-      const { error } = await supa.from('raid_items').delete().eq('id', raidId);
-      if(error) throw error;
-      state.raid = state.raid.filter(r=>r.id!==raidId);
-      // Remove from all per-deal arrays
-      for(const d of Object.values(state.deals)) d.raid = (d.raid||[]).filter(r=>r.id!==raidId);
-      close(); render();
+      if(canAdmin()){
+        // Admin: exclui diretamente
+        const { error } = await supa.from('raid_items').delete().eq('id', raidId);
+        if(error) throw error;
+        state.raid = state.raid.filter(r=>r.id!==raidId);
+        for(const d of Object.values(state.deals)) d.raid = (d.raid||[]).filter(r=>r.id!==raidId);
+        close(); render();
+      } else {
+        // Não-admin: cria solicitação de exclusão para aprovação
+        const { error } = await supa.from('deletion_requests').insert({
+          entity_type: 'raid_item',
+          entity_id: raidId,
+          requested_by_id: session.id,
+          status: 'pending'
+        });
+        if(error) throw error;
+        alert('Solicitação de exclusão enviada para aprovação do administrador.');
+        close();
+      }
     }catch(err){ alert('Erro: '+(err.message||err)); }
   };
 
