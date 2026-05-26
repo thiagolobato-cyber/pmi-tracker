@@ -3398,7 +3398,6 @@ function renderDeal(){
   };
   const subtabs = [
     ['tarefas',   ICN.tarefas   + 'Tarefas',    total],
-    ['gantt',     ICN.gantt     + 'Gantt',      null],
     ['raid',      ICN.raid      + raidTooltipLabel('Ações de Mitigação'), openRaid],
     ['sinergias', ICN.sinergias + 'Sinergias',  (deal.synergies||[]).length],
     ['historico', ICN.historico + 'Histórico',  null],
@@ -3407,7 +3406,6 @@ function renderDeal(){
 
   const subView = (function(){
     switch(view.dealTab){
-      case 'gantt':     return renderDealGantt(company, deal, tasks);
       case 'raid':      return renderDealRaid(company, deal);
       case 'sinergias': return renderDealSynergies(company, deal);
       case 'historico': return renderDealHistorico(company);
