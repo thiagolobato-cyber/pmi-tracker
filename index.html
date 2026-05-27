@@ -4897,11 +4897,25 @@ function openTemplateModal(id){
 
   // Auto-gera REF com base na área selecionada
   function nextRefForArea(areaName){
+    const areaTasks = state.template.filter(x=>x.area===areaName && x.id!==t.id);
+    let prefix;
     const entry = DEFAULT_AREAS.find(a=>a.name===areaName);
-    if(!entry) return '';
-    const prefix = entry.n.split('.')[0]; // "1.0" → "1"
-    const nums = state.template
-      .filter(x=>x.area===areaName && x.id!==t.id)
+    if(entry){
+      prefix = entry.n.split('.')[0]; // área padrão → usa o prefixo fixo
+    } else if(areaTasks.length>0){
+      // área customizada com tarefas existentes → reutiliza o prefixo já em uso
+      prefix = (areaTasks[0].ref||'').split('.')[0] || '';
+    } else {
+      // área nova sem tarefas → calcula o próximo prefixo disponível
+      const usedPrefixes = new Set(
+        state.template.map(x=>(x.ref||'').split('.')[0]).filter(Boolean).map(Number).filter(n=>!isNaN(n))
+      );
+      let next = 1;
+      while(usedPrefixes.has(next)) next++;
+      prefix = String(next);
+    }
+    if(!prefix) return '';
+    const nums = areaTasks
       .map(x=>{ const p=(x.ref||'').split('.'); return p.length>=2?parseInt(p[1]):0; })
       .filter(n=>!isNaN(n)&&n>0);
     return `${prefix}.${nums.length?Math.max(...nums)+1:1}`;
