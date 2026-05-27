@@ -4960,9 +4960,12 @@ function openTemplateModal(id){
   const t = id ? state.template.find(x=>x.id===id) : {id:uid(), ref:'', area:'', task:'', defaultOwner:'', defaultPrazo:0};
   const isNew = !id;
 
-  // Areas: DEFAULT_AREAS + quaisquer áreas customizadas já no template
-  const allAreas = [...DEFAULT_AREAS.map(a=>a.name)];
-  state.template.forEach(x=>{ if(x.area && !allAreas.includes(x.area)) allAreas.push(x.area); });
+  // Areas: apenas as que já existem no template (= as mesmas da Visão Executiva)
+  // Se estiver editando uma tarefa com área que não está mais no template, inclui ela também
+  const allAreas = Array.from(new Set(
+    state.template.map(x=>x.area).filter(Boolean)
+  )).sort();
+  if(t.area && !allAreas.includes(t.area)) allAreas.unshift(t.area);
 
   // Usuários com login para o select de owner
   const users = [...(state.users||[])].sort((a,b)=>a.username.localeCompare(b.username));
