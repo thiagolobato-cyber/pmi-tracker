@@ -3895,15 +3895,16 @@ function openTaskModal(company, taskId){
 
           <div class="col-span-2" id="bloqRaidWrap" style="${existing?.bloqueio==='Sim'?'':'display:none'}">
             ${(()=>{
-              const openRaids = (deal?.raid||[]).filter(r=>r.status!=='closed');
+              // usa global state.raid como fonte principal (deal.raid pode estar vazio)
+              const openRaids = (state.raid||[]).filter(r=>r.status!=='closed' && (r.dealIds||[]).includes(company.id));
               if(!openRaids.length) return `
                 <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:.5rem;padding:.6rem .9rem;font-size:.82rem;color:#92400e">
                   ⚠️ Não há Ações de Mitigação abertas neste deal.<br>
                   <strong>Crie uma Ação de Mitigação antes de registrar um bloqueio.</strong>
                 </div>
-                <input type="hidden" name="raidId" value="">`;
-              return `<label class="block">🎯 Vincular à Ação de Mitigação <span style="color:#dc2626">*</span>
-                <select name="raidId" id="raidIdSelect" required>
+                <input type="hidden" name="raidId" value="__no_raid__">`;
+              return `<label class="block" style="margin-top:.25rem">🎯 Vincular à Ação de Mitigação <span style="color:#dc2626">*</span>
+                <select name="raidId" id="raidIdSelect">
                   <option value="">— Selecione —</option>
                   ${openRaids.map(r=>`
                     <option value="${escapeHtml(r.id)}" ${existing?.raidId===r.id?'selected':''}>${escapeHtml(r.title||'(sem título)')}</option>
@@ -3988,8 +3989,8 @@ function openTaskModal(company, taskId){
     const fd = new FormData(e.target);
     const showErr = (msg)=>{ const el2=m.querySelector('#taskFormErr'); el2.textContent=msg; el2.classList.remove('hidden'); };
     if(!fd.get('task')?.trim()) return showErr('Nome da tarefa é obrigatório.');
-    if(fd.get('bloqueio')==='Sim' && !fd.get('raidId')){
-      const openRaids = (deal?.raid||[]).filter(r=>r.status!=='closed');
+    if(fd.get('bloqueio')==='Sim' && (!fd.get('raidId') || fd.get('raidId')==='__no_raid__')){
+      const openRaids = (state.raid||[]).filter(r=>r.status!=='closed' && (r.dealIds||[]).includes(company.id));
       if(!openRaids.length) return showErr('Crie uma Ação de Mitigação neste deal antes de registrar um bloqueio.');
       return showErr('Selecione a Ação de Mitigação vinculada ao bloqueio.');
     }
