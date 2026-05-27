@@ -4899,18 +4899,19 @@ function openTemplateModal(id){
   function nextRefForArea(areaName){
     const areaTasks = state.template.filter(x=>x.area===areaName && x.id!==t.id);
     let prefix;
-    const entry = DEFAULT_AREAS.find(a=>a.name===areaName);
-    if(entry){
-      prefix = entry.n.split('.')[0]; // área padrão → usa o prefixo fixo
+    // 1) Se a área tem tarefas com ref válida, reutiliza o prefixo existente
+    const existingPrefix = areaTasks
+      .map(x=>(x.ref||'').split('.')[0])
+      .find(p => p && !isNaN(Number(p)) && Number(p) > 0);
+    if(existingPrefix){
+      prefix = existingPrefix;
     } else {
-      // área customizada: busca prefixo de tarefas existentes com ref válida (ex: "7.3" → "7")
-      const existingPrefix = areaTasks
-        .map(x=>(x.ref||'').split('.')[0])
-        .find(p => p && !isNaN(Number(p)) && Number(p) > 0);
-      if(existingPrefix){
-        prefix = existingPrefix;
+      // 2) Área padrão sem tarefas ainda → usa posição no DEFAULT_AREAS (1-based)
+      const entryIdx = DEFAULT_AREAS.findIndex(a=>a.name===areaName);
+      if(entryIdx >= 0){
+        prefix = String(entryIdx + 1);
       } else {
-        // sem refs válidas → calcula próximo prefixo livre
+        // 3) Área completamente nova → próximo prefixo numérico livre
         const usedPrefixes = new Set(
           state.template.map(x=>(x.ref||'').split('.')[0]).filter(Boolean).map(Number).filter(n=>!isNaN(n) && n>0)
         );
