@@ -3893,6 +3893,16 @@ function openTaskModal(company, taskId){
             <input name="bloqueioDescricao" value="${escapeHtml(existing?.bloqueioDescricao||'')}" placeholder="Descreva o bloqueio" />
           </label>
 
+          <label class="block col-span-2" id="bloqRaidWrap" style="${existing?.bloqueio==='Sim'?'':'display:none'}">
+            🎯 Vincular à Ação de Mitigação
+            <select name="raidId">
+              <option value="">— Nenhuma —</option>
+              ${(deal?.raid||[]).filter(r=>r.status!=='closed').map(r=>`
+                <option value="${escapeHtml(r.id)}" ${existing?.raidId===r.id?'selected':''}>${escapeHtml(r.title||'(sem título)')}</option>
+              `).join('')}
+            </select>
+          </label>
+
           <div id="taskFormErr" class="col-span-2 text-xs rounded-lg p-2 hidden" style="color:#991b1b;background:#fee2e2"></div>
 
           <div class="col-span-2 flex justify-between mt-2 pt-3 border-t" style="border-color:var(--bhub-border)">
@@ -3923,9 +3933,12 @@ function openTaskModal(company, taskId){
     if(taskPanel) renderCommentsPanel(taskPanel, 'task', taskId);
   }
 
-  // Mostrar/ocultar campo de descrição de bloqueio
+  // Mostrar/ocultar campos de bloqueio
   m.querySelector('[name="bloqueio"]').addEventListener('change', e=>{
-    m.querySelector('#bloqDescWrap').style.display = e.target.value==='Sim' ? '' : 'none';
+    const isSim = e.target.value === 'Sim';
+    m.querySelector('#bloqDescWrap').style.display = isSim ? '' : 'none';
+    m.querySelector('#bloqRaidWrap').style.display = isSim ? '' : 'none';
+    if(!isSim) m.querySelector('[name="raidId"]').value = '';
   });
 
   m.querySelector('#cancelTask').onclick = close;
@@ -3981,7 +3994,7 @@ function openTaskModal(company, taskId){
       bloqueioDescricao:fd.get('bloqueioDescricao')||'',
       ferramenta:       existing?.ferramenta||'',
       evidencia:        existing?.evidencia||'',
-      raidId:           existing?.raidId||null,
+      raidId:           fd.get('raidId')||null,
     };
 
     const needsApproval = !canAdmin() && !canEdit();
