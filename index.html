@@ -4347,10 +4347,10 @@ function describeAuditChanges(row){
   }).join('<br>');
 }
 function entityIcon(t){
-  return {task:'📋', companies:'🏢', raid_items:'🛡️', synergies:'💰', health_entries:'🚦', template_tasks:'📐', comments:'💬', attachments:'📎', task_dependencies:'🔗'}[t]||'•';
+  return {tasks:'📋', task:'📋', companies:'🏢', raid_items:'🎯', raid:'🎯', synergies:'💰', health_entries:'🚦', template_tasks:'📐', comments:'💬', attachments:'📎', task_dependencies:'🔗'}[t]||'•';
 }
 function entityLabel(t){
-  return {tasks:'Tarefa', companies:'Empresa', raid_items:'Ação de Mitigação', synergies:'Sinergia', health_entries:'Health', template_tasks:'Template', comments:'Comentário', attachments:'Anexo', task_dependencies:'Dependência'}[t]||t;
+  return {tasks:'Tarefa', task:'Tarefa', companies:'Empresa', raid_items:'Ação de Mitigação', raid:'Ação de Mitigação', synergies:'Sinergia', health_entries:'Health', template_tasks:'Template', comments:'Comentário', attachments:'Anexo', task_dependencies:'Dependência'}[t]||t;
 }
 function renderDealHistorico(company){
   const wrap = el(`
