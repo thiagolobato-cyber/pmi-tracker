@@ -4902,17 +4902,22 @@ function openTemplateModal(id){
     const entry = DEFAULT_AREAS.find(a=>a.name===areaName);
     if(entry){
       prefix = entry.n.split('.')[0]; // área padrão → usa o prefixo fixo
-    } else if(areaTasks.length>0){
-      // área customizada com tarefas existentes → reutiliza o prefixo já em uso
-      prefix = (areaTasks[0].ref||'').split('.')[0] || '';
     } else {
-      // área nova sem tarefas → calcula o próximo prefixo disponível
-      const usedPrefixes = new Set(
-        state.template.map(x=>(x.ref||'').split('.')[0]).filter(Boolean).map(Number).filter(n=>!isNaN(n))
-      );
-      let next = 1;
-      while(usedPrefixes.has(next)) next++;
-      prefix = String(next);
+      // área customizada: busca prefixo de tarefas existentes com ref válida (ex: "7.3" → "7")
+      const existingPrefix = areaTasks
+        .map(x=>(x.ref||'').split('.')[0])
+        .find(p => p && !isNaN(Number(p)) && Number(p) > 0);
+      if(existingPrefix){
+        prefix = existingPrefix;
+      } else {
+        // sem refs válidas → calcula próximo prefixo livre
+        const usedPrefixes = new Set(
+          state.template.map(x=>(x.ref||'').split('.')[0]).filter(Boolean).map(Number).filter(n=>!isNaN(n) && n>0)
+        );
+        let next = 1;
+        while(usedPrefixes.has(next)) next++;
+        prefix = String(next);
+      }
     }
     if(!prefix) return '';
     const nums = areaTasks
