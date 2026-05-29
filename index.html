@@ -4865,6 +4865,7 @@ function renderTemplate(){
         </div>
         <div class="flex gap-2">
           ${canEdit() ? `<button id="addRow" class="btn btn-primary">+ Tarefa no template</button>` : ''}
+          ${canAdmin() ? `<button id="fixRefs" class="btn" style="background:#f0fdf4;border:1px solid #86efac;color:#166534">🔧 Corrigir REFs</button>` : ''}
           ${canAdmin() ? `<button id="clearTpl" class="btn btn-danger" style="opacity:.7">Limpar template</button>` : ''}
         </div>
       </div>
@@ -4909,6 +4910,28 @@ function renderTemplate(){
   if(add) add.onclick = ()=>openTemplateModal();
   const emptyAdd = node.querySelector('#emptyAddTpl');
   if(emptyAdd) emptyAdd.onclick = ()=>openTemplateModal();
+
+  const fixRefsBtn = node.querySelector('#fixRefs');
+  if(fixRefsBtn) fixRefsBtn.onclick = async ()=>{
+    fixRefsBtn.disabled = true;
+    fixRefsBtn.textContent = '⏳ Corrigindo...';
+    try{
+      // Pega todos os prefixos distintos presentes no template
+      const prefixes = [...new Set(
+        state.template.map(x=>(x.ref||'').split('.')[0]).filter(p=>p && !isNaN(Number(p)) && Number(p)>0)
+      )];
+      for(const prefix of prefixes){
+        await renumberAreaRefs(prefix + '.0'); // passa qualquer ref com esse prefixo
+      }
+      render();
+      fixRefsBtn.textContent = '✅ Corrigido!';
+      setTimeout(()=>{ fixRefsBtn.disabled=false; fixRefsBtn.textContent='🔧 Corrigir REFs'; }, 2000);
+    }catch(err){
+      alert('Erro ao corrigir REFs: '+(err.message||err));
+      fixRefsBtn.disabled=false; fixRefsBtn.textContent='🔧 Corrigir REFs';
+    }
+  };
+
   const clr = node.querySelector('#clearTpl');
   if(clr) clr.onclick = ()=>{
     // Double-confirmation modal — admin only
