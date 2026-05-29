@@ -3464,7 +3464,9 @@ function renderDealTasks(company, deal, tasks){
       const { error } = await supa.from('tasks').delete().eq('id', taskId);
       if(error) throw error;
       const d = state.deals[cid];
+      const deletedRef = d?.tasks?.find(x=>x.id===taskId)?.ref;
       if(d) d.tasks = d.tasks.filter(x=>x.id!==taskId);
+      await renumberDealTaskRefs(cid, deletedRef);
       render();
     }catch(err){ alert('Erro: '+(err.message||err)); }
   }));
@@ -3960,9 +3962,11 @@ function openTaskModal(company, taskId){
     if(canAdmin()){
       if(!confirm('Excluir esta tarefa permanentemente?')) return;
       try{
+        const deletedRef = existing?.ref;
         const { error } = await supa.from('tasks').delete().eq('id', taskId);
         if(error) throw error;
         if(deal) deal.tasks = deal.tasks.filter(t=>t.id!==taskId);
+        await renumberDealTaskRefs(company.id, deletedRef);
         close(); render();
       }catch(err){ alert('Erro: '+(err.message||err)); }
     } else {
@@ -4978,13 +4982,75 @@ function renderTemplate(){
   node.querySelectorAll('[data-reject-tpl]').forEach(b=>b.onclick=async()=>{
     const tid = b.dataset.rejectTpl;
     if(!confirm('Rejeitar e excluir esta tarefa do template?')) return;
+    const tplTask = state.template.find(x=>x.id===tid);
     const { error } = await supa.from('template_tasks').delete().eq('id', tid);
     if(error){ alert('Erro: '+error.message); return; }
     state.template = state.template.filter(x=>x.id!==tid);
+    await renumberAreaRefs(tplTask?.ref);
     render();
   });
   return node;
 }
+// Após deletar uma tarefa de um deal, renumera sequencialmente as demais do mesmo prefixo (área)
+async function renumberDealTaskRefs(companyId, deletedRef){
+  const prefix = (deletedRef||'').split('.')[0];
+  if(!prefix || isNaN(Number(prefix)) || Number(prefix) <= 0) return;
+
+  const deal = state.deals[companyId];
+  if(!deal) return;
+
+  const tasksInArea = (deal.tasks||[])
+    .filter(x => (x.ref||'').split('.')[0] === prefix)
+    .sort((a,b) => {
+      const aN = parseInt((a.ref||'').split('.')[1]) || 0;
+      const bN = parseInt((b.ref||'').split('.')[1]) || 0;
+      return aN - bN;
+    });
+
+  const batch = [];
+  tasksInArea.forEach((task, idx) => {
+    const newRef = `${prefix}.${idx + 1}`;
+    if(task.ref !== newRef){
+      batch.push({ id: task.id, newRef });
+      task.ref = newRef; // atualiza state em memória
+    }
+  });
+
+  // Envia updates ao DB em paralelo
+  await Promise.all(batch.map(u =>
+    supa.from('tasks').update({ ref: u.newRef }).eq('id', u.id)
+  ));
+}
+
+// Após deletar uma tarefa do template, renumera sequencialmente as demais da mesma área
+async function renumberAreaRefs(deletedRef){
+  const prefix = (deletedRef||'').split('.')[0];
+  if(!prefix || isNaN(Number(prefix)) || Number(prefix) <= 0) return;
+
+  // Tarefas restantes com o mesmo prefixo numérico, ordenadas pelo sufixo atual
+  const tasksInArea = state.template
+    .filter(x => (x.ref||'').split('.')[0] === prefix)
+    .sort((a,b) => {
+      const aN = parseInt((a.ref||'').split('.')[1]) || 0;
+      const bN = parseInt((b.ref||'').split('.')[1]) || 0;
+      return aN - bN;
+    });
+
+  const batch = [];
+  tasksInArea.forEach((task, idx) => {
+    const newRef = `${prefix}.${idx + 1}`;
+    if(task.ref !== newRef){
+      batch.push({ id: task.id, newRef });
+      task.ref = newRef; // atualiza state em memória
+    }
+  });
+
+  // Envia updates ao DB em paralelo
+  await Promise.all(batch.map(u =>
+    supa.from('template_tasks').update({ ref: u.newRef }).eq('id', u.id)
+  ));
+}
+
 function openTemplateModal(id){
   const t = id ? state.template.find(x=>x.id===id) : {id:uid(), ref:'', area:'', task:'', defaultOwner:'', defaultPrazo:0};
   const isNew = !id;
@@ -5178,9 +5244,11 @@ function openTemplateModal(id){
     if(!canAdmin() && !t.pendingApproval){ alert('Apenas admins podem excluir tarefas aprovadas do template.'); return; }
     if(!confirm('Excluir?')) return;
     try{
+      const deletedRef = t.ref;
       const { error } = await supa.from('template_tasks').delete().eq('id', t.id);
       if(error) throw error;
       state.template = state.template.filter(x=>x.id!==t.id);
+      await renumberAreaRefs(deletedRef);
       m.remove(); render();
     }catch(err){ alert('Erro: '+(err.message||err)); }
   };
@@ -5695,7 +5763,9 @@ function renderHoje(){
           const { error } = await supa.from('tasks').delete().eq('id', taskId);
           if(error) throw error;
           const d = state.deals[cid];
+          const deletedRef = d?.tasks?.find(x=>x.id===taskId)?.ref;
           if(d) d.tasks = d.tasks.filter(x=>x.id!==taskId);
+          await renumberDealTaskRefs(cid, deletedRef);
           renderNewTasksSection(); render();
         }catch(err){ alert('Erro: '+(err.message||err)); }
       }));
@@ -5820,12 +5890,14 @@ function renderHoje(){
               for(const d of Object.values(state.deals)) d.raid = (d.raid||[]).filter(r=>r.id!==raidId);
             } else {
               const taskId = btn.dataset.taskId;
+              const companyId = btn.dataset.companyId;
+              const deletedRef = state.deals[companyId]?.tasks?.find(t=>t.id===taskId)?.ref;
               const { error: delErr } = await supa.from('tasks').delete().eq('id', taskId);
               if(delErr) throw delErr;
               await supa.from('deletion_requests').update({status:'approved'}).eq('id', reqId);
               state.deletionRequests = state.deletionRequests.filter(r=>r.id!==reqId);
-              const companyId = btn.dataset.companyId;
               if(state.deals[companyId]) state.deals[companyId].tasks = state.deals[companyId].tasks.filter(t=>t.id!==taskId);
+              await renumberDealTaskRefs(companyId, deletedRef);
             }
             renderDelReqsSection(); render();
           }catch(err){ alert('Erro: '+(err.message||err)); }
