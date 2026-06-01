@@ -557,7 +557,7 @@ const BHUB_LOGO_ICON = `<svg viewBox="0 0 40 40" fill="currentColor" xmlns="http
 /* ---------- State ---------- */
 let state = defaultState();
 let session = null; // { id, email, username, role }
-let view = { tab:'dashboard', dealId:null, dealTab:'tarefas', executiveArea:'todas', raidFilter:'all', raidPortfolioFilter:'all', synergyFilter:'all', dashFilters:{deals:[],areas:[],owners:[]}, empresasSearch:'', empresasSortCol:'date', empresasSortDir:'desc', sidebarCollapsed:false, executivaDealSearch:'', execPdfDeals:null, dealTaskOwnerFilter:'' };
+let view = { tab:'dashboard', dealId:null, dealTab:'tarefas', executiveArea:'todas', raidFilter:'all', raidPortfolioFilter:'all', synergyFilter:'all', dashFilters:{deals:[],areas:[],owners:[]}, empresasSearch:'', empresasSortCol:'date', empresasSortDir:'desc', sidebarCollapsed:false, executivaDealSearch:'', execPdfDeals:null, dealTaskOwnerFilter:'', dealTaskBloqueioFilter:'' };
 
 // Tooltip explicativo do acrônimo RAID dentro de Ações de Mitigação
 function raidTooltipLabel(text){
@@ -1847,11 +1847,31 @@ function renderRaidPortfolio(){
           return '<td class="text-xs">'+visible+extraDiv+toggle+'</td>';
         })()
         +'<td class="text-xs">'+(r.dueDate?fmtDate(parseDate(r.dueDate)):'<span class="text-red-500 font-semibold">sem prazo</span>')+'</td>'
-        +'<td class="text-center">'+(blockCount>0?'<span style="background:#fee2e2;color:#991b1b;padding:.1rem .45rem;border-radius:9999px;font-weight:700;font-size:.75rem">'+blockCount+'</span>':'<span class="text-gray-400 text-xs">0</span>')+'</td>'
+        +(()=>{
+          if(blockCount===0) return '<td class="text-center"><span class="text-gray-400 text-xs">0</span></td>';
+          // Coleta as tarefas bloqueadas associadas
+          const blockedTasks = (r.dealIds||[]).flatMap(cid=>{
+            const c = state.companies.find(x=>x.id===cid);
+            return (state.deals[cid]?.tasks||[])
+              .filter(t=>t.bloqueio==='Sim' && t.raidId===r.id)
+              .map(t=>({...t, dealName: c?.name||''}));
+          });
+          const uid2 = 'blk-'+r.id;
+          const tooltip = blockedTasks.map(t=>`<div style="padding:.2rem 0;border-bottom:1px solid #fee2e2;white-space:nowrap"><span style="opacity:.6;font-size:.65rem">${escapeHtml(t.ref||'')} ${escapeHtml(t.dealName)}</span><br>${escapeHtml(t.task||'')}</div>`).join('');
+          return `<td class="text-center"><span id="${uid2}" style="background:#fee2e2;color:#991b1b;padding:.1rem .45rem;border-radius:9999px;font-weight:700;font-size:.75rem;cursor:pointer" title="Ver bloqueios">${blockCount}</span><div id="${uid2}-list" style="display:none;text-align:left;margin-top:.3rem;font-size:.72rem;background:#fff5f5;border:1px solid #fecaca;border-radius:.4rem;padding:.3rem .5rem;min-width:200px">${tooltip}</div></td>`;
+        })()
         +(canEdit()?'<td><button class="btn btn-secondary" data-raid-edit="'+r.id+'">✎</button></td>':'');
       tbody.appendChild(tr);
     });
     node.querySelectorAll('[data-raid-edit]').forEach(b=>b.onclick=()=>openRaidModal(null, b.dataset.raidEdit));
+    // Toggle lista de bloqueios associados
+    tbody.querySelectorAll('[id^="blk-"]:not([id$="-list"])').forEach(btn=>{
+      btn.addEventListener('click', e=>{
+        e.stopPropagation();
+        const list = document.getElementById(btn.id+'-list');
+        if(list) list.style.display = list.style.display==='none' ? 'block' : 'none';
+      });
+    });
     // Toggle "+N" participantes na tabela global
     tbody.querySelectorAll('[id^="gpp-"]:not([id$="-extra"])').forEach(btn=>{
       btn.addEventListener('click', e=>{
@@ -3354,9 +3374,10 @@ function renderDealTasks(company, deal, tasks){
   // Owner filter
   const allOwners = [...new Set(tasks.map(t=>t.owner).filter(Boolean))].sort();
   const activeOwnerFilter = view.dealTaskOwnerFilter || '';
-  const filteredTasks = activeOwnerFilter
-    ? tasks.filter(t => t.owner === activeOwnerFilter)
-    : tasks;
+  const activeBloqueioFilter = view.dealTaskBloqueioFilter || '';
+  const filteredTasks = tasks
+    .filter(t => !activeOwnerFilter || t.owner === activeOwnerFilter)
+    .filter(t => !activeBloqueioFilter || t.bloqueio === activeBloqueioFilter);
   // group by area, sorted by ref within each group, areas in canonical order
   const grouped = {};
   filteredTasks.forEach(t => {
@@ -3380,7 +3401,10 @@ function renderDealTasks(company, deal, tasks){
             <option value="">Todos (${total})</option>
             ${allOwners.map(o=>`<option value="${escapeHtml(o)}"${activeOwnerFilter===o?' selected':''}>${escapeHtml(o)}</option>`).join('')}
           </select>
-          ${activeOwnerFilter ? `<span style="font-size:.75rem;color:var(--bhub-muted)">${filteredTasks.length} de ${total} tarefas</span>` : ''}
+          <button id="bloqueioFilterBtn" style="padding:.3rem .75rem;font-size:.78rem;border-radius:.5rem;border:1px solid ${activeBloqueioFilter?'#dc2626':'var(--bhub-border)'};background:${activeBloqueioFilter?'#fee2e2':'#fff'};color:${activeBloqueioFilter?'#991b1b':'var(--bhub-muted)'};font-weight:600;cursor:pointer;white-space:nowrap">
+            🚨 ${activeBloqueioFilter ? 'Só bloqueios ✕' : 'Ver bloqueios'}
+          </button>
+          ${(activeOwnerFilter||activeBloqueioFilter) ? `<span style="font-size:.75rem;color:var(--bhub-muted)">${filteredTasks.length} de ${total} tarefas</span>` : ''}
         </div>
         <div class="flex items-center gap-2">
           ${canEdit() && total===0 ? `<button id="seed" class="btn btn-primary">Criar a partir do Template</button>`:''}
@@ -3431,6 +3455,11 @@ function renderDealTasks(company, deal, tasks){
   const dealOwnerFilterEl = node.querySelector('#dealOwnerFilter');
   if(dealOwnerFilterEl) dealOwnerFilterEl.addEventListener('change', ()=>{
     view.dealTaskOwnerFilter = dealOwnerFilterEl.value;
+    render();
+  });
+  const bloqueioFilterBtn = node.querySelector('#bloqueioFilterBtn');
+  if(bloqueioFilterBtn) bloqueioFilterBtn.addEventListener('click', ()=>{
+    view.dealTaskBloqueioFilter = view.dealTaskBloqueioFilter ? '' : 'Sim';
     render();
   });
   const seed = node.querySelector('#seed');
