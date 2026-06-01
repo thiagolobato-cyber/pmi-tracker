@@ -3840,8 +3840,10 @@ function openTaskModal(company, taskId){
   const m = el(`
     <div class="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-20" data-modal="task">
       <div class="bg-white rounded-2xl p-4 w-full max-w-2xl border border-[color:var(--bhub-border)]" style="box-shadow:0 24px 60px rgba(15,23,39,.25);max-height:90vh;overflow-y:auto">
-        <div class="text-base font-bold" style="color:var(--bhub-navy)">${isNew?'Nova Tarefa':'Editar Tarefa'}</div>
-        <div class="text-xs mb-2" style="color:var(--bhub-blue)">🏢 ${escapeHtml(company.name)}</div>
+        <div class="flex items-center justify-between mb-2">
+          <div class="text-base font-bold" style="color:var(--bhub-navy)">${isNew?'Nova Tarefa':'Editar Tarefa'}</div>
+          <div class="text-xs font-semibold px-2 py-1 rounded-full" style="background:#e0f0ff;color:var(--bhub-blue)">🏢 ${escapeHtml(company?.name||'')}</div>
+        </div>
         <form id="taskForm" class="grid grid-cols-2 gap-2 text-sm">
 
           <label class="block">REF
