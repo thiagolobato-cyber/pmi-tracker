@@ -76,7 +76,7 @@
   .search-result-item:last-child{border-bottom:none}
   .search-result-item:hover{background:#f3f6fb}
   input[type=text],input[type=email],input[type=number],input[type=date],input[type=password],input:not([type]),select,textarea{
-    border:1px solid var(--bhub-border);border-radius:.625rem;padding:.45rem .7rem;font-size:.875rem;width:100%;background:#fff;
+    border:1px solid var(--bhub-border);border-radius:.5rem;padding:.35rem .6rem;font-size:.85rem;width:100%;background:#fff;
     font-family:inherit;color:var(--bhub-text);transition:border-color .2s,box-shadow .2s
   }
   input:focus,select:focus,textarea:focus{outline:none;border-color:var(--bhub-blue);box-shadow:0 0 0 3px rgba(1,113,228,.15)}
@@ -3839,9 +3839,9 @@ function openTaskModal(company, taskId){
 
   const m = el(`
     <div class="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-20" data-modal="task">
-      <div class="bg-white rounded-2xl p-5 w-full max-w-2xl border border-[color:var(--bhub-border)]" style="box-shadow:0 24px 60px rgba(15,23,39,.25);max-height:90vh;overflow-y:auto">
-        <div class="text-lg font-bold mb-3" style="color:var(--bhub-navy)">${isNew?'Nova Tarefa':'Editar Tarefa'}</div>
-        <form id="taskForm" class="grid grid-cols-2 gap-3 text-sm">
+      <div class="bg-white rounded-2xl p-4 w-full max-w-2xl border border-[color:var(--bhub-border)]" style="box-shadow:0 24px 60px rgba(15,23,39,.25);max-height:90vh;overflow-y:auto">
+        <div class="text-base font-bold mb-2" style="color:var(--bhub-navy)">${isNew?'Nova Tarefa':'Editar Tarefa'}</div>
+        <form id="taskForm" class="grid grid-cols-2 gap-2 text-sm">
 
           <label class="block">REF
             <input name="ref" value="${escapeHtml(existing?.ref||'')}" placeholder="ex: 1.1" />
