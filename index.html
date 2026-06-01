@@ -3870,8 +3870,11 @@ function openTaskModal(company, taskId){
               ${DEFAULT_PHASES.map(p=>`<option value="${p.id}" ${existing?.phaseId===p.id?'selected':''}>${escapeHtml(p.name)}</option>`).join('')}
             </select>
           </label>
-          <label class="block">% Concluído
-            <input name="completado" type="number" min="0" max="100" value="${existing?.completado||0}" />
+          <label class="block">Concluído?
+            <select name="completado">
+              <option value="0" ${(existing?.completado||0) < 100 ? 'selected' : ''}>Não</option>
+              <option value="100" ${(existing?.completado||0) >= 100 ? 'selected' : ''}>Sim</option>
+            </select>
           </label>
 
           <label class="block">Data Real de Conclusão
