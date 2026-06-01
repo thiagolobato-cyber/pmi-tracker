@@ -3864,18 +3864,14 @@ function openTaskModal(company, taskId){
             <input name="prazo" type="number" min="0" value="${existing?.prazo||0}" />
           </label>
 
-          <label class="block col-span-2">Concluído?
+          <label class="block">Concluído?
             <select name="completado">
               <option value="0" ${(existing?.completado||0) < 100 ? 'selected' : ''}>Não</option>
               <option value="100" ${(existing?.completado||0) >= 100 ? 'selected' : ''}>Sim</option>
             </select>
           </label>
-
           <label class="block">Data Real de Conclusão
             <input name="dataRealConclusao" type="date" value="${existing?.dataRealConclusao?toIso(parseDate(existing.dataRealConclusao)):''}" />
-          </label>
-          <label class="block">Último Update
-            <input name="ultimoUpdate" type="date" value="${existing?.ultimoUpdate?toIso(parseDate(existing.ultimoUpdate)):''}" />
           </label>
 
           <label class="block col-span-2">Próximo Passo
@@ -4005,7 +4001,7 @@ function openTaskModal(company, taskId){
       phaseId:          fd.get('phaseId')||'',
       completado:       Number(fd.get('completado'))||0,
       dataRealConclusao:fd.get('dataRealConclusao')||'',
-      ultimoUpdate:     fd.get('ultimoUpdate')||'',
+      ultimoUpdate:     existing?.ultimoUpdate||'',
       proximoPasso:     fd.get('proximoPasso')||'',
       bloqueio:         fd.get('bloqueio')||'Não',
       bloqueioDescricao:fd.get('bloqueioDescricao')||'',
