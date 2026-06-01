@@ -75,7 +75,7 @@
   .search-result-item{display:flex;align-items:center;justify-content:space-between;padding:.55rem .75rem;cursor:pointer;border-bottom:1px solid var(--bhub-border);transition:background .12s}
   .search-result-item:last-child{border-bottom:none}
   .search-result-item:hover{background:#f3f6fb}
-  input[type=text],input[type=email],input[type=number],input[type=date],input[type=password],select,textarea{
+  input[type=text],input[type=email],input[type=number],input[type=date],input[type=password],input:not([type]),select,textarea{
     border:1px solid var(--bhub-border);border-radius:.625rem;padding:.45rem .7rem;font-size:.875rem;width:100%;background:#fff;
     font-family:inherit;color:var(--bhub-text);transition:border-color .2s,box-shadow .2s
   }
@@ -3864,7 +3864,7 @@ function openTaskModal(company, taskId){
             <input name="prazo" type="number" min="0" value="${existing?.prazo||0}" />
           </label>
 
-          <label class="block">Concluído?
+          <label class="block col-span-2">Concluído?
             <select name="completado">
               <option value="0" ${(existing?.completado||0) < 100 ? 'selected' : ''}>Não</option>
               <option value="100" ${(existing?.completado||0) >= 100 ? 'selected' : ''}>Sim</option>
