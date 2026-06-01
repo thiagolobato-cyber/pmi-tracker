@@ -1858,17 +1858,17 @@ function renderRaidPortfolio(){
           });
           const uid2 = 'blk-'+r.id;
           const tooltip = blockedTasks.map(t=>`<div style="padding:.2rem 0;border-bottom:1px solid #fee2e2;white-space:nowrap"><span style="opacity:.6;font-size:.65rem">${escapeHtml(t.ref||'')} ${escapeHtml(t.dealName)}</span><br>${escapeHtml(t.task||'')}</div>`).join('');
-          return `<td class="text-center"><span id="${uid2}" style="background:#fee2e2;color:#991b1b;padding:.1rem .45rem;border-radius:9999px;font-weight:700;font-size:.75rem;cursor:pointer" title="Ver bloqueios">${blockCount}</span><div id="${uid2}-list" style="display:none;text-align:left;margin-top:.3rem;font-size:.72rem;background:#fff5f5;border:1px solid #fecaca;border-radius:.4rem;padding:.3rem .5rem;min-width:200px">${tooltip}</div></td>`;
+          return `<td class="text-center"><span data-blk-toggle="${escapeHtml(r.id)}" style="background:#fee2e2;color:#991b1b;padding:.1rem .45rem;border-radius:9999px;font-weight:700;font-size:.75rem;cursor:pointer;display:inline-block" title="Ver bloqueios">${blockCount}</span><div data-blk-list="${escapeHtml(r.id)}" style="display:none;text-align:left;margin-top:.3rem;font-size:.72rem;background:#fff5f5;border:1px solid #fecaca;border-radius:.4rem;padding:.3rem .5rem;min-width:200px;max-width:320px">${tooltip}</div></td>`;
         })()
         +(canEdit()?'<td><button class="btn btn-secondary" data-raid-edit="'+r.id+'">✎</button></td>':'');
       tbody.appendChild(tr);
     });
     node.querySelectorAll('[data-raid-edit]').forEach(b=>b.onclick=()=>openRaidModal(null, b.dataset.raidEdit));
     // Toggle lista de bloqueios associados
-    tbody.querySelectorAll('[id^="blk-"]:not([id$="-list"])').forEach(btn=>{
+    tbody.querySelectorAll('[data-blk-toggle]').forEach(btn=>{
       btn.addEventListener('click', e=>{
         e.stopPropagation();
-        const list = document.getElementById(btn.id+'-list');
+        const list = tbody.querySelector('[data-blk-list="'+btn.dataset.blkToggle+'"]');
         if(list) list.style.display = list.style.display==='none' ? 'block' : 'none';
       });
     });
@@ -3401,7 +3401,7 @@ function renderDealTasks(company, deal, tasks){
             <option value="">Todos (${total})</option>
             ${allOwners.map(o=>`<option value="${escapeHtml(o)}"${activeOwnerFilter===o?' selected':''}>${escapeHtml(o)}</option>`).join('')}
           </select>
-          <button id="bloqueioFilterBtn" style="padding:.3rem .75rem;font-size:.78rem;border-radius:.5rem;border:1px solid ${activeBloqueioFilter?'#dc2626':'var(--bhub-border)'};background:${activeBloqueioFilter?'#fee2e2':'#fff'};color:${activeBloqueioFilter?'#991b1b':'var(--bhub-muted)'};font-weight:600;cursor:pointer;white-space:nowrap">
+          <button data-bloqueio-filter="1" style="padding:.3rem .75rem;font-size:.78rem;border-radius:.5rem;border:1px solid ${activeBloqueioFilter?'#dc2626':'var(--bhub-border)'};background:${activeBloqueioFilter?'#fee2e2':'#fff'};color:${activeBloqueioFilter?'#991b1b':'var(--bhub-muted)'};font-weight:600;cursor:pointer;white-space:nowrap">
             🚨 ${activeBloqueioFilter ? 'Só bloqueios ✕' : 'Ver bloqueios'}
           </button>
           ${(activeOwnerFilter||activeBloqueioFilter) ? `<span style="font-size:.75rem;color:var(--bhub-muted)">${filteredTasks.length} de ${total} tarefas</span>` : ''}
@@ -3457,7 +3457,7 @@ function renderDealTasks(company, deal, tasks){
     view.dealTaskOwnerFilter = dealOwnerFilterEl.value;
     render();
   });
-  const bloqueioFilterBtn = node.querySelector('#bloqueioFilterBtn');
+  const bloqueioFilterBtn = node.querySelector('[data-bloqueio-filter]');
   if(bloqueioFilterBtn) bloqueioFilterBtn.addEventListener('click', ()=>{
     view.dealTaskBloqueioFilter = view.dealTaskBloqueioFilter ? '' : 'Sim';
     render();
