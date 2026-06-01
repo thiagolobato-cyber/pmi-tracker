@@ -3595,7 +3595,7 @@ function renderDealRaid(company, deal){
       <div class="bhub-card overflow-hidden">
         <div class="scroll-x">
           <table class="w-full">
-            <thead><tr><th class="min-w-[16rem]">TÍTULO</th><th>ASPECTOS</th><th>ÁREA</th><th>SEVERIDADE</th><th>STATUS</th><th>OWNER</th><th>PARTICIPANTES</th><th>PRAZO</th><th class="min-w-[14rem]">MITIGAÇÃO</th>${canEdit()?'<th></th>':''}</tr></thead>
+            <thead><tr><th class="min-w-[16rem]">TÍTULO</th><th>ASPECTOS</th><th>ÁREA</th><th>SEVERIDADE</th><th>STATUS</th><th>OWNER</th><th>PARTICIPANTES</th><th>PRAZO</th><th class="min-w-[14rem]">MITIGAÇÃO</th><th class="text-center">BLOQUEIOS</th>${canEdit()?'<th></th>':''}</tr></thead>
             <tbody id="dealRaidRows"></tbody>
           </table>
         </div>
@@ -3629,6 +3629,12 @@ function renderDealRaid(company, deal){
 
         +'<td class="text-xs">'+(r.dueDate?fmtDate(parseDate(r.dueDate)):'')+'</td>'
         +'<td class="text-xs">'+escapeHtml(r.mitigation||'')+'</td>'
+        +(()=>{
+          const blockedTasks = (deal.tasks||[])
+            .filter(t=>t.bloqueio==='Sim' && t.raidId===r.id)
+            .map(t=>({...t, dealName: company.name||''}));
+          return '<td class="text-center">'+(blockedTasks.length>0 ? blkDropdownHtml(r.id, blockedTasks) : '<span style="color:#9ca3af">0</span>')+'</td>';
+        })()
         +(canEdit()?'<td><button class="btn btn-secondary" data-raid-edit="'+r.id+'">✎</button></td>':'');
       tbody.appendChild(tr);
     });
@@ -3653,6 +3659,7 @@ function renderDealRaid(company, deal){
   node.querySelectorAll('[data-rf]').forEach(b=>b.onclick = ()=>{ view.raidFilter=b.dataset.rf; render(); });
   const add = node.querySelector('#addRaid');
   if(add) add.onclick = ()=>openRaidModal(company);
+  attachBlkListeners(node);
   return node;
 }
 /* sevRank, escapeHtml importados de js/pure.js */
