@@ -1279,8 +1279,34 @@ function blkTooltipItems(blockedTasks){
 }
 function blkDropdownHtml(id, blockedTasks){
   const items = blkTooltipItems(blockedTasks);
+  // O dropdown usa position:fixed via JS para escapar de qualquer overflow:hidden/auto
   return `<span data-blk-toggle="${escapeHtml(id)}" style="background:#fee2e2;color:#991b1b;padding:.1rem .5rem;border-radius:9999px;font-weight:700;cursor:pointer;display:inline-block" title="Ver bloqueios">${blockedTasks.length}</span>`
-    +`<div data-blk-list="${escapeHtml(id)}" style="display:none;position:absolute;right:0;z-index:99;text-align:left;margin-top:.3rem;font-size:.72rem;background:#fff5f5;border:1px solid #fecaca;border-radius:.5rem;padding:.4rem .6rem;width:320px;box-shadow:0 6px 16px rgba(0,0,0,.12)">${items}</div>`;
+    +`<div data-blk-list="${escapeHtml(id)}" style="display:none;position:fixed;z-index:9999;text-align:left;font-size:.72rem;background:#fff5f5;border:1px solid #fecaca;border-radius:.5rem;padding:.4rem .6rem;width:320px;box-shadow:0 6px 16px rgba(0,0,0,.15)">${items}</div>`;
+}
+
+// Registra os event listeners de blk-toggle num container (node ou root)
+function attachBlkListeners(container){
+  container.querySelectorAll('[data-blk-toggle]').forEach(btn=>{
+    if(btn._blkBound) return; // evita duplicar
+    btn._blkBound = true;
+    btn.addEventListener('click', e=>{
+      e.stopPropagation();
+      const id = btn.dataset.blkToggle;
+      const list = container.ownerDocument.querySelector('[data-blk-list="'+id+'"]');
+      // Fecha outros abertos
+      container.ownerDocument.querySelectorAll('[data-blk-list]').forEach(el=>{ if(el.dataset.blkList!==id) el.style.display='none'; });
+      if(!list) return;
+      if(list.style.display !== 'none'){
+        list.style.display = 'none';
+        return;
+      }
+      // Posiciona com fixed relativo ao botão
+      const rect = btn.getBoundingClientRect();
+      list.style.top  = (rect.bottom + 4) + 'px';
+      list.style.left = Math.max(4, rect.right - 320) + 'px';
+      list.style.display = 'block';
+    });
+  });
 }
 
 function render(){
@@ -1289,22 +1315,13 @@ function render(){
   if(!session){ root.appendChild(renderLogin()); return; }
   root.appendChild(renderShell());
   // Delegação global: clique em nome de empresa/área/owner abre o snapshot correspondente
-  // Bloqueios expand — dashboard e tabela de Ações de Mitigação (listener direto em cada botão)
-  root.querySelectorAll('[data-blk-toggle]').forEach(btn=>{
-    btn.addEventListener('click', e=>{
-      e.stopPropagation();
-      const id = btn.dataset.blkToggle;
-      root.querySelectorAll('[data-blk-list]').forEach(el=>{ if(el.dataset.blkList!==id) el.style.display='none'; });
-      const list = root.querySelector('[data-blk-list="'+id+'"]');
-      if(list) list.style.display = list.style.display==='none' ? 'block' : 'none';
-    });
-  });
-  // Fecha ao clicar fora de qualquer blk-list/toggle
+  // Bloqueios expand — anexa listeners em todos os [data-blk-toggle] presentes no root
+  attachBlkListeners(root);
+  // Fecha ao clicar fora (scroll ou área em branco)
   document.addEventListener('click', function _blkClose(e){
     if(!e.target.closest('[data-blk-toggle]') && !e.target.closest('[data-blk-list]')){
-      root.querySelectorAll('[data-blk-list]').forEach(el=>el.style.display='none');
+      document.querySelectorAll('[data-blk-list]').forEach(el=>el.style.display='none');
     }
-    // Remove-se na próxima re-renderização (root.innerHTML = '' descarta os nós)
   });
   root.querySelectorAll('[data-summary]').forEach(el=>{
     el.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); openCompanySummary(el.dataset.summary); });
@@ -1889,7 +1906,8 @@ function renderRaidPortfolio(){
       tbody.appendChild(tr);
     });
     node.querySelectorAll('[data-raid-edit]').forEach(b=>b.onclick=()=>openRaidModal(null, b.dataset.raidEdit));
-    // Toggle lista de bloqueios: tratado pelo event delegation global em render()
+    // Listeners de bloqueios no nó local (complementa o attachBlkListeners do render)
+    attachBlkListeners(node);
     // Toggle "+N" participantes na tabela global
     tbody.querySelectorAll('[id^="gpp-"]:not([id$="-extra"])').forEach(btn=>{
       btn.addEventListener('click', e=>{
@@ -2394,6 +2412,8 @@ function renderDashboard(){
       }
     });
   },0);
+  // Garante listeners de bloqueios no dashboard (independente do render())
+  attachBlkListeners(node);
   return node;
 }
 
