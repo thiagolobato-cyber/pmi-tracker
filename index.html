@@ -1273,28 +1273,38 @@ function exportXlsx(){
 /* ---------- Render ---------- */
 function el(html){ const t=document.createElement('template'); t.innerHTML=html.trim(); return t.content.firstChild; }
 
+// Gera o HTML interno do tooltip de bloqueios (reutilizado no dashboard e na tabela de Ações de Mitigação)
+function blkTooltipItems(blockedTasks){
+  return blockedTasks.map(t=>`<div style="padding:.25rem 0;border-bottom:1px solid #fecaca;last:border:none"><div style="font-size:.65rem;opacity:.65;margin-bottom:.1rem">${escapeHtml(t.ref||'')} · ${escapeHtml(t.dealName)}</div><div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:280px;font-weight:500">${escapeHtml(t.task||'')}</div></div>`).join('');
+}
+function blkDropdownHtml(id, blockedTasks){
+  const items = blkTooltipItems(blockedTasks);
+  return `<span data-blk-toggle="${escapeHtml(id)}" style="background:#fee2e2;color:#991b1b;padding:.1rem .5rem;border-radius:9999px;font-weight:700;cursor:pointer;display:inline-block" title="Ver bloqueios">${blockedTasks.length}</span>`
+    +`<div data-blk-list="${escapeHtml(id)}" style="display:none;position:absolute;right:0;z-index:99;text-align:left;margin-top:.3rem;font-size:.72rem;background:#fff5f5;border:1px solid #fecaca;border-radius:.5rem;padding:.4rem .6rem;width:320px;box-shadow:0 6px 16px rgba(0,0,0,.12)">${items}</div>`;
+}
+
 function render(){
   const root = document.getElementById('app');
   root.innerHTML = '';
   if(!session){ root.appendChild(renderLogin()); return; }
   root.appendChild(renderShell());
   // Delegação global: clique em nome de empresa/área/owner abre o snapshot correspondente
-  // Bloqueios expand — dashboard e tabela de Ações de Mitigação
-  root.addEventListener('click', (e)=>{
-    const btn = e.target.closest('[data-blk-toggle]');
-    if(!btn) return;
-    e.stopPropagation();
-    const id = btn.dataset.blkToggle;
-    // Fecha outros abertos
-    root.querySelectorAll('[data-blk-list]').forEach(el=>{ if(el.dataset.blkList!==id) el.style.display='none'; });
-    const list = root.querySelector('[data-blk-list="'+id+'"]');
-    if(list) list.style.display = list.style.display==='none' ? 'block' : 'none';
+  // Bloqueios expand — dashboard e tabela de Ações de Mitigação (listener direto em cada botão)
+  root.querySelectorAll('[data-blk-toggle]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      e.stopPropagation();
+      const id = btn.dataset.blkToggle;
+      root.querySelectorAll('[data-blk-list]').forEach(el=>{ if(el.dataset.blkList!==id) el.style.display='none'; });
+      const list = root.querySelector('[data-blk-list="'+id+'"]');
+      if(list) list.style.display = list.style.display==='none' ? 'block' : 'none';
+    });
   });
-  // Fecha ao clicar fora
-  root.addEventListener('click', (e)=>{
+  // Fecha ao clicar fora de qualquer blk-list/toggle
+  document.addEventListener('click', function _blkClose(e){
     if(!e.target.closest('[data-blk-toggle]') && !e.target.closest('[data-blk-list]')){
       root.querySelectorAll('[data-blk-list]').forEach(el=>el.style.display='none');
     }
+    // Remove-se na próxima re-renderização (root.innerHTML = '' descarta os nós)
   });
   root.querySelectorAll('[data-summary]').forEach(el=>{
     el.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); openCompanySummary(el.dataset.summary); });
@@ -1873,9 +1883,7 @@ function renderRaidPortfolio(){
               .filter(t=>t.bloqueio==='Sim' && t.raidId===r.id)
               .map(t=>({...t, dealName: c?.name||''}));
           });
-          const uid2 = 'blk-'+r.id;
-          const tooltip = blockedTasks.map(t=>`<div style="padding:.2rem 0;border-bottom:1px solid #fee2e2;white-space:nowrap"><span style="opacity:.6;font-size:.65rem">${escapeHtml(t.ref||'')} ${escapeHtml(t.dealName)}</span><br>${escapeHtml(t.task||'')}</div>`).join('');
-          return `<td class="text-center"><span data-blk-toggle="${escapeHtml(r.id)}" style="background:#fee2e2;color:#991b1b;padding:.1rem .45rem;border-radius:9999px;font-weight:700;font-size:.75rem;cursor:pointer;display:inline-block" title="Ver bloqueios">${blockCount}</span><div data-blk-list="${escapeHtml(r.id)}" style="display:none;text-align:left;margin-top:.3rem;font-size:.72rem;background:#fff5f5;border:1px solid #fecaca;border-radius:.4rem;padding:.3rem .5rem;min-width:200px;max-width:320px">${tooltip}</div></td>`;
+          return `<td class="text-center" style="position:relative">${blkDropdownHtml(r.id, blockedTasks)}</td>`;
         })()
         +(canEdit()?'<td><button class="btn btn-secondary" data-raid-edit="'+r.id+'">✎</button></td>':'');
       tbody.appendChild(tr);
@@ -2176,16 +2184,7 @@ function renderDashboard(){
                   <td>${r.area?`<span class="deal-link" data-area="${escapeHtml(r.area)}">${escapeHtml(r.area)}</span>`:''}</td>
                   <td><span style="color:${r.severity==='high'?'#dc2626':r.severity==='med'?'#d97706':'#3b82f6'};font-weight:600">${SEVERITIES.find(s=>s.id===r.severity)?.label||''}</span></td>
                   <td>${r.owner?`<span class="deal-link" data-owner="${escapeHtml(r.owner)}">${escapeHtml(r.owner)}</span>`:''}</td>
-                  <td class="text-center" style="position:relative">${r.blockCount>0?(()=>{
-                    const blockedTasks = (r.dealIds||[]).flatMap(cid=>{
-                      const c = state.companies.find(x=>x.id===cid);
-                      return (state.deals[cid]?.tasks||[])
-                        .filter(t=>t.bloqueio==='Sim' && t.raidId===r.id)
-                        .map(t=>({...t, dealName: c?.name||''}));
-                    });
-                    const tooltip = blockedTasks.map(t=>`<div style="padding:.2rem 0;border-bottom:1px solid #fee2e2;white-space:nowrap"><span style="opacity:.6;font-size:.65rem">${escapeHtml(t.ref||'')} ${escapeHtml(t.dealName)}</span><br>${escapeHtml(t.task||'')}</div>`).join('');
-                    return `<span data-blk-toggle="${escapeHtml(r.id)}" style="background:#fee2e2;color:#991b1b;padding:.1rem .5rem;border-radius:9999px;font-weight:700;cursor:pointer;display:inline-block" title="Ver bloqueios">${r.blockCount}</span><div data-blk-list="${escapeHtml(r.id)}" style="display:none;position:absolute;right:0;z-index:50;text-align:left;margin-top:.2rem;font-size:.72rem;background:#fff5f5;border:1px solid #fecaca;border-radius:.4rem;padding:.3rem .5rem;min-width:220px;max-width:340px;box-shadow:0 4px 12px rgba(0,0,0,.1)">${tooltip}</div>`;
-                  })():'<span style="color:#9ca3af">0</span>'}</td>
+                  <td class="text-center" style="position:relative">${r.blockCount>0?blkDropdownHtml(r.id,(r.dealIds||[]).flatMap(cid=>{const c=state.companies.find(x=>x.id===cid);return(state.deals[cid]?.tasks||[]).filter(t=>t.bloqueio==='Sim'&&t.raidId===r.id).map(t=>({...t,dealName:c?.name||''}));})):'<span style="color:#9ca3af">0</span>'}</td>
                 </tr>`).join('')}
               </tbody>
             </table>
