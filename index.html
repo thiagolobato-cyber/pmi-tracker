@@ -1273,38 +1273,65 @@ function exportXlsx(){
 /* ---------- Render ---------- */
 function el(html){ const t=document.createElement('template'); t.innerHTML=html.trim(); return t.content.firstChild; }
 
-// Gera o HTML interno do tooltip de bloqueios (reutilizado no dashboard e na tabela de Ações de Mitigação)
-function blkTooltipItems(blockedTasks){
-  return blockedTasks.map(t=>`<div style="padding:.25rem 0;border-bottom:1px solid #fecaca;last:border:none"><div style="font-size:.65rem;opacity:.65;margin-bottom:.1rem">${escapeHtml(t.ref||'')} · ${escapeHtml(t.dealName)}</div><div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:280px;font-weight:500">${escapeHtml(t.task||'')}</div></div>`).join('');
-}
+// Badge clicável de bloqueios — só o badge, a linha inline é inserida pelo attachBlkListeners
 function blkDropdownHtml(id, blockedTasks){
-  const items = blkTooltipItems(blockedTasks);
-  // O dropdown usa position:fixed via JS para escapar de qualquer overflow:hidden/auto
-  return `<span data-blk-toggle="${escapeHtml(id)}" style="background:#fee2e2;color:#991b1b;padding:.1rem .5rem;border-radius:9999px;font-weight:700;cursor:pointer;display:inline-block" title="Ver bloqueios">${blockedTasks.length}</span>`
-    +`<div data-blk-list="${escapeHtml(id)}" style="display:none;position:fixed;z-index:9999;text-align:left;font-size:.72rem;background:#fff5f5;border:1px solid #fecaca;border-radius:.5rem;padding:.4rem .6rem;width:320px;box-shadow:0 6px 16px rgba(0,0,0,.15)">${items}</div>`;
+  return `<span data-blk-toggle="${escapeHtml(id)}" style="background:#fee2e2;color:#991b1b;padding:.1rem .5rem;border-radius:9999px;font-weight:700;cursor:pointer;display:inline-block;transition:background .15s" title="Clique para ver os bloqueios">${blockedTasks.length}</span>`;
 }
 
-// Registra os event listeners de blk-toggle num container (node ou root)
+// Registra os event listeners de blk-toggle num container — expande linha inline na tabela
 function attachBlkListeners(container){
   container.querySelectorAll('[data-blk-toggle]').forEach(btn=>{
-    if(btn._blkBound) return; // evita duplicar
+    if(btn._blkBound) return;
     btn._blkBound = true;
     btn.addEventListener('click', e=>{
       e.stopPropagation();
-      const id = btn.dataset.blkToggle;
-      const list = container.ownerDocument.querySelector('[data-blk-list="'+id+'"]');
-      // Fecha outros abertos
-      container.ownerDocument.querySelectorAll('[data-blk-list]').forEach(el=>{ if(el.dataset.blkList!==id) el.style.display='none'; });
-      if(!list) return;
-      if(list.style.display !== 'none'){
-        list.style.display = 'none';
+      const raidId = btn.dataset.blkToggle;
+      const tr = btn.closest('tr');
+      if(!tr) return;
+      // Toggle: remove se já está aberto
+      const next = tr.nextElementSibling;
+      if(next && next.dataset.blkExpand === raidId){
+        next.remove();
+        btn.style.background = '#fee2e2';
         return;
       }
-      // Posiciona com fixed relativo ao botão
-      const rect = btn.getBoundingClientRect();
-      list.style.top  = (rect.bottom + 4) + 'px';
-      list.style.left = Math.max(4, rect.right - 320) + 'px';
-      list.style.display = 'block';
+      // Fecha qualquer outro expand aberto
+      document.querySelectorAll('[data-blk-expand]').forEach(el=>{
+        el.previousElementSibling?.querySelector('[data-blk-toggle]')?.style && (el.previousElementSibling.querySelector('[data-blk-toggle]').style.background='#fee2e2');
+        el.remove();
+      });
+      // Busca tarefas bloqueadas deste RAID no state
+      const raid = (state.raid||[]).find(r=>r.id===raidId);
+      if(!raid) return;
+      const blockedTasks = (raid.dealIds||[]).flatMap(cid=>{
+        const c = state.companies.find(x=>x.id===cid);
+        return (state.deals[cid]?.tasks||[])
+          .filter(t=>t.bloqueio==='Sim' && t.raidId===raidId)
+          .map(t=>({...t, dealName: c?.name||''}));
+      });
+      // Conta colunas da tabela para o colspan
+      const table = tr.closest('table');
+      const cols = table?.querySelector('thead tr')?.children.length || 10;
+      // Monta linhas de bloqueios — texto truncado + title para texto completo
+      const rows = blockedTasks.map(t=>{
+        const ref  = escapeHtml(t.ref||'');
+        const deal = escapeHtml(t.dealName);
+        const task = escapeHtml(t.task||'');
+        return `<div style="display:flex;align-items:center;gap:.6rem;padding:.22rem 0;border-bottom:1px solid #fecaca">
+          <span style="flex-shrink:0;font-size:.65rem;color:#9ca3af;white-space:nowrap">${ref} · ${deal}</span>
+          <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.75rem;font-weight:500;color:#1f2937" title="${task}">${task}</span>
+        </div>`;
+      }).join('');
+      // Insere a linha expandida após o tr atual
+      const expandTr = document.createElement('tr');
+      expandTr.dataset.blkExpand = raidId;
+      expandTr.style.cssText = 'background:#fff5f5';
+      expandTr.innerHTML = `<td colspan="${cols}" style="padding:.4rem 1rem .5rem">
+        <div style="font-size:.68rem;font-weight:700;color:#991b1b;margin-bottom:.15rem">🔒 ${blockedTasks.length} bloqueio${blockedTasks.length>1?'s':''} vinculado${blockedTasks.length>1?'s':''}</div>
+        <div>${rows}</div>
+      </td>`;
+      tr.after(expandTr);
+      btn.style.background = '#fecaca';
     });
   });
 }
@@ -1314,15 +1341,8 @@ function render(){
   root.innerHTML = '';
   if(!session){ root.appendChild(renderLogin()); return; }
   root.appendChild(renderShell());
-  // Delegação global: clique em nome de empresa/área/owner abre o snapshot correspondente
-  // Bloqueios expand — anexa listeners em todos os [data-blk-toggle] presentes no root
+  // Bloqueios expand — linha inline na tabela
   attachBlkListeners(root);
-  // Fecha ao clicar fora (scroll ou área em branco)
-  document.addEventListener('click', function _blkClose(e){
-    if(!e.target.closest('[data-blk-toggle]') && !e.target.closest('[data-blk-list]')){
-      document.querySelectorAll('[data-blk-list]').forEach(el=>el.style.display='none');
-    }
-  });
   root.querySelectorAll('[data-summary]').forEach(el=>{
     el.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); openCompanySummary(el.dataset.summary); });
   });
