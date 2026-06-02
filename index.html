@@ -2876,6 +2876,9 @@ function openCompanyModal(existing){
   if(del) del.onclick = async ()=>{
     if(!confirm('Excluir esta empresa e todas as suas tarefas?')) return;
     try{
+      // Apagar registros dependentes antes de apagar a empresa (evita erro de FK em audit_log)
+      await supa.from('audit_log').delete().eq('company_id', existing.id);
+      await supa.from('tasks').delete().eq('company_id', existing.id);
       const { error } = await supa.from('companies').delete().eq('id', existing.id);
       if(error) throw error;
       state.companies = state.companies.filter(c=>c.id!==existing.id);
