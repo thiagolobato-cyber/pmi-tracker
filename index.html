@@ -4136,7 +4136,7 @@ function openTaskModal(company, taskId){
       bloqueioDescricao:fd.get('bloqueioDescricao')||'',
       ferramenta:       existing?.ferramenta||'',
       evidencia:        existing?.evidencia||'',
-      raidId:           fd.get('raidId')||null,
+      raidId:           (()=>{ const v=fd.get('raidId'); return (v && v!=='__no_raid__') ? v : null; })(),
     };
 
     const needsApproval = !canAdmin() && !canEdit();
