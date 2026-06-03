@@ -4546,6 +4546,7 @@ function entityIcon(t){
 function entityLabel(t){
   return {tasks:'Tarefa', task:'Tarefa', companies:'Empresa', raid_items:'Ação de Mitigação', raid:'Ação de Mitigação', synergies:'Sinergia', health_entries:'Health', template_tasks:'Template', comments:'Comentário', attachments:'Anexo', task_dependencies:'Dependência'}[t]||t;
 }
+let _histTypeFilter = '';
 function renderDealHistorico(company){
   const wrap = el(`
     <div class="space-y-3">
@@ -4564,6 +4565,7 @@ function renderDealHistorico(company){
             <option value="comments">Comentários</option>
             <option value="companies">Empresa</option>
           </select>
+          <button id="histClear" style="display:none;padding:.25rem .5rem;font-size:.72rem;background:#fee2e2;color:#b91c1c;border:1px solid #fca5a5;border-radius:6px;cursor:pointer">× Limpar filtro</button>
           <button id="histReload" class="btn btn-secondary" style="padding:.35rem .7rem;font-size:.75rem">↻ Atualizar</button>
         </div>
       </div>
@@ -4573,11 +4575,17 @@ function renderDealHistorico(company){
     </div>
   `);
 
+  const sel = wrap.querySelector('#histType');
+  const clearBtn = wrap.querySelector('#histClear');
+  if(_histTypeFilter){ sel.value = _histTypeFilter; clearBtn.style.display = ''; }
+  function updateClearBtn(){ clearBtn.style.display = sel.value ? '' : 'none'; }
   async function load(){
+    _histTypeFilter = sel.value;
+    updateClearBtn();
     const list = wrap.querySelector('#histList');
     list.innerHTML = `<div class="space-y-2">${Array(6).fill('<div class="skel" style="width:100%;height:38px"></div>').join('')}</div>`;
     let q = supa.from('audit_log').select('*').eq('company_id', company.id).order('ts',{ascending:false}).limit(200);
-    const type = wrap.querySelector('#histType').value;
+    const type = sel.value;
     if(type) q = q.eq('entity_type', type);
     const { data, error } = await q;
     if(error){
@@ -4613,7 +4621,8 @@ function renderDealHistorico(company){
         + '</div>';
     }).join('') + '</div>';
   }
-  wrap.querySelector('#histType').addEventListener('change', load);
+  sel.addEventListener('change', load);
+  clearBtn.addEventListener('click', function(){ sel.value = ''; load(); });
   wrap.querySelector('#histReload').addEventListener('click', load);
   load();
   return wrap;
