@@ -2529,11 +2529,14 @@ function renderExecutiva(){
 
   function getTasksForArea(area){
     const seen = new Map();
+    // Template: base list, refs como fallback
     state.template.filter(t=>t.area===area).forEach(t=>{
       if(!seen.has(t.task)) seen.set(t.task, t.ref||'');
     });
+    // Deals: adiciona tarefas novas e SOBRESCREVE refs com o ref do deal (ex: 1.1, 1.2)
     Object.values(state.deals).flatMap(d=>d.tasks.filter(t=>t.area===area)).forEach(t=>{
-      if(!seen.has(t.task)) seen.set(t.task, t.ref||'');
+      if(t.ref) seen.set(t.task, t.ref);
+      else if(!seen.has(t.task)) seen.set(t.task, '');
     });
     return Array.from(seen.entries()).map(([task,ref])=>({task,ref}));
   }
