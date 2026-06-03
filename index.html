@@ -3468,13 +3468,14 @@ function renderDealTasks(company, deal, tasks){
             ${allAreas.map(a=>`<option value="${escapeHtml(a)}"${activeAreaFilter===a?' selected':''}>${escapeHtml(a)}</option>`).join('')}
           </select>
           <span style="font-size:.78rem;color:var(--bhub-muted);font-weight:600;white-space:nowrap">Status:</span>
-          <select id="dealStatusFilter" style="min-width:130px;padding:.3rem .6rem;font-size:.8rem;border-radius:.5rem">
+          <select id="dealStatusFilter" style="width:auto;min-width:100px;max-width:150px;padding:.3rem .55rem;font-size:.8rem;border-radius:.5rem">
             <option value="">Todos</option>
-            <option value="done"${activeStatusFilter==='done'?' selected':''}>&#x2705; Done</option>
-            <option value="ontrack"${activeStatusFilter==='ontrack'?' selected':''}>&#x1F535; On track</option>
-            <option value="late"${activeStatusFilter==='late'?' selected':''}>&#x1F534; Atrasado</option>
-            <option value="empty"${activeStatusFilter==='empty'?' selected':''}>&#x2B1C; Sem data</option>
+            <option value="done"${activeStatusFilter==='done'?' selected':''}>Done</option>
+            <option value="ontrack"${activeStatusFilter==='ontrack'?' selected':''}>On track</option>
+            <option value="late"${activeStatusFilter==='late'?' selected':''}>Atrasado</option>
+            <option value="empty"${activeStatusFilter==='empty'?' selected':''}>Sem data</option>
           </select>
+          
           <span style="font-size:.78rem;color:var(--bhub-muted);font-weight:600;white-space:nowrap">Pessoa:</span>
           <select id="dealOwnerFilter" style="min-width:180px;max-width:260px;padding:.3rem .6rem;font-size:.8rem;border-radius:.5rem">
             <option value="">Todos (${total})</option>
