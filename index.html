@@ -3519,7 +3519,7 @@ function renderDealTasks(company, deal, tasks){
                   <td>${t._f.dataPrevista?fmtDate(t._f.dataPrevista):''}</td>
                   <td>${t._f.dataReal?fmtDate(t._f.dataReal):''}</td>
                   <td class="text-right">${t.completado||0}%</td>
-                  <td class="text-right ${t._f.status==='late'?'text-red-700':''}">${t._f.status==='late' ? (t._f.diasAtraso||t._f.atraso||'') : ''}</td>
+                  <td class="text-right ${t._f.status==='late'?'text-red-700':t._f.status==='ontrack'?'text-green-700':''}">${t._f.status==='late'?(t._f.diasAtraso||t._f.atraso||''):t._f.status==='ontrack'?(t._f.atraso||''):''}</td>
                   <td>${t.ultimoUpdate?fmtDate(t.ultimoUpdate):''}</td>
                   <td>${t.proximoPasso||''}</td>
                   <td>${t.bloqueio==='Sim'?'<span class="pill status-late">Sim</span>':'<span class="pill status-empty">Não</span>'}</td>
