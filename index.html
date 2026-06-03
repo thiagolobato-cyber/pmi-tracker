@@ -3954,8 +3954,10 @@ async function renderCommentsPanel(container, entityType, entityId){
 /* ===== Modal de Tarefa ===== */
 function openTaskModal(company, taskId){
   const deal = dealOf(company.id);
-  const existing = taskId ? (deal?.tasks||[]).find(t=>t.id===taskId) : null;
+  let existing = taskId ? (deal?.tasks||[]).find(t=>t.id===taskId) : null;
   const isNew = !existing;
+  // Computar _f antes de renderizar para que dataPrevista esteja disponível no template
+  if(existing) existing = {...existing, _f: computeTaskFields(existing, company)};
 
   const allAreas = Array.from(new Set([
     ...DEFAULT_AREAS.map(a=>a.name),
