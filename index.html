@@ -6363,14 +6363,12 @@ function showRealtimePulse(label){
   _realtimeIndicator._t = setTimeout(()=>{ _realtimeIndicator.style.opacity = '0'; }, 1500);
 }
 let _realtimePollingInterval = null;
-let _lastReloadHash = null;
 
 async function doRealtimeReload(label){
   if(_savingOps > 0) return;
   try{
     await reloadState();
-    const hadModal = document.querySelector('[data-modal="task"]');
-    if(!hadModal) render();
+    render();
     showRealtimePulse(label||'atualizado');
   }catch(e){ console.error('realtime reload:', e); }
 }
@@ -6390,7 +6388,7 @@ function startRealtime(){
     console.log('[realtime] status:', status);
   });
 
-  // Polling de fallback a cada 60s — recarrega estado incondicionalmente
+  // Polling incondicional a cada 60s
   if(_realtimePollingInterval) clearInterval(_realtimePollingInterval);
   _realtimePollingInterval = setInterval(async ()=>{
     if(_savingOps > 0 || document.hidden) return;
