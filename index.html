@@ -4515,7 +4515,7 @@ function describeAuditChanges(row){
   if(row.action === 'insert') return 'Criado';
   if(row.action === 'delete') return 'Removido';
   var SKIP = {company_id:1,id:1,ultimo_update:1,updated_at:1,pending_approval:1,phase_id:1,ferramenta:1,evidencia:1,created_at:1,raid_id:1};
-  var LABELS = {task:'Tarefa',owner:'Responsável',area:'Área',completado:'Concluído',prazo:'Prazo (dias)',proximo_passo:'Próximo passo',bloqueio:'Bloqueio',bloqueio_descricao:'Descrição do bloqueio',ref:'REF',data_real_conclusao:'Data conclusão',status:'Status',title:'Título',name:'Nome',sign_date:'Data assinatura'};
+  var LABELS = {task:'Tarefa',owner:'Responsável',area:'Área',completado:'Concíudo',prazo:'Prazo (dias)',proximo_passo:'Próximo passo',bloqueio:'Bloqueio',bloqueio_descricao:'Descrição do bloqueio',ref:'REF',data_real_conclusao:'Data conclusão',status:'Status',title:'Título',name:'Nome',sign_date:'Data assinatura'};
   function fmtVal(k, raw){
     if(raw===null||raw===undefined||raw==='') return '—';
     var s = String(raw);
@@ -4588,19 +4588,30 @@ function renderDealHistorico(company){
       list.innerHTML = '<div class="text-sm text-gray-500">Sem registros para os filtros atuais.</div>';
       return;
     }
-    list.innerHTML = `<div class="space-y-2 text-xs">${data.map(r=>{
-      const when = new Date(r.ts);
-      const whenStr = when.toLocaleString('pt-BR');
-      const actor = r.actor_name || r.actor_email || 'sistema';
-      const actLabel = r.action==='insert'?'criou':r.action==='update'?'alterou':'removeu';
-      const colorByAct = r.action==='insert'?'#15803d':r.action==='update'?'#1e40af':'#b91c1c';
-      return `<div class="border-l-4 pl-3 py-2" style="border-color:${colorByAct}">
-        <div class="flex justify-between items-baseline gap-3 flex-wrap">
-          <div><b>${escapeHtml(actor)}</b> ${actLabel} ${entityIcon(r.entity_type)} <b>${entityLabel(r.entity_type)}</b></div>
-          <div class="text-gray-500 text-[11px]">${escapeHtml(whenStr)}</div>
-        </div>
-        <div class="text-gray-700 mt-1" style="font-size:.72rem;line-height:1.4">${describeAuditChanges(r)}</div>
-      </div>`;    }).join('')}</div>`;
+        list.innerHTML = '<div class="space-y-2 text-xs">' + data.map(function(r){
+      var when = new Date(r.ts);
+      var whenStr = when.toLocaleString('pt-BR');
+      var actor = r.actor_name || r.actor_email || 'sistema';
+      var actLabel = r.action==='insert'?'criou':r.action==='update'?'alterou':'removeu';
+      var colorByAct = r.action==='insert'?'#15803d':r.action==='update'?'#1e40af':'#b91c1c';
+      var entityName = '';
+      if(r.entity_id && r.entity_type==='tasks'){
+        var allTasks = Object.values(state.deals||{}).flatMap(function(d){ return d.tasks||[]; });
+        var found = allTasks.find(function(t){ return t.id===r.entity_id; });
+        if(found) entityName = (found.ref?found.ref+' — ':'')+found.task;
+      } else if(r.entity_id && (r.entity_type==='raid_items'||r.entity_type==='raid')){
+        var foundRaid = (state.raid||[]).find(function(x){ return x.id===r.entity_id; });
+        if(foundRaid) entityName = foundRaid.title||'';
+      }
+      var nameTag = entityName ? (' <span style="color:#374151;font-style:italic">"'+escapeHtml(entityName.slice(0,60))+(entityName.length>60?'…':'')+'"</span>') : '';
+      return '<div class="border-l-4 pl-3 py-2" style="border-color:'+colorByAct+'">'
+        + '<div class="flex justify-between items-baseline gap-3 flex-wrap">'
+        + '<div><b>'+escapeHtml(actor)+'</b> <span style="color:'+colorByAct+';font-weight:600">'+actLabel+'</span> '+entityIcon(r.entity_type)+' <b>'+entityLabel(r.entity_type)+'</b>'+nameTag+'</div>'
+        + '<div class="text-gray-400 text-[11px]">'+escapeHtml(whenStr)+'</div>'
+        + '</div>'
+        + '<div class="text-gray-600 mt-1" style="font-size:.72rem;line-height:1.6">'+describeAuditChanges(r)+'</div>'
+        + '</div>';
+    }).join('') + '</div>';
   }
   wrap.querySelector('#histType').addEventListener('change', load);
   wrap.querySelector('#histReload').addEventListener('click', load);
