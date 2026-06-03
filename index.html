@@ -4510,19 +4510,35 @@ function openHealthModal(company, area, week){
 
 /* ===== Histórico / Auditoria ===== */
 function describeAuditChanges(row){
-  const c = row.changes;
+  var c = row.changes;
   if(!c) return '—';
   if(row.action === 'insert') return 'Criado';
   if(row.action === 'delete') return 'Removido';
-  // update
-  const keys = Object.keys(c).slice(0, 5);
-  if(!keys.length) return 'Sem alterações';
-  return keys.map(k=>{
-    const v = c[k];
-    const ov = (v?.old===null || v?.old===undefined || v?.old==='') ? '—' : String(v.old).slice(0,40);
-    const nv = (v?.new===null || v?.new===undefined || v?.new==='') ? '—' : String(v.new).slice(0,40);
-    return `<b>${escapeHtml(k)}</b>: <span class="text-gray-500">${escapeHtml(ov)}</span> → <span style="color:var(--bhub-navy)">${escapeHtml(nv)}</span>`;
-  }).join('<br>');
+  var SKIP = {company_id:1,id:1,ultimo_update:1,updated_at:1,pending_approval:1,phase_id:1,ferramenta:1,evidencia:1,created_at:1,raid_id:1};
+  var LABELS = {task:'Tarefa',owner:'Responsável',area:'Área',completado:'Concluído',prazo:'Prazo (dias)',proximo_passo:'Próximo passo',bloqueio:'Bloqueio',bloqueio_descricao:'Descrição do bloqueio',ref:'REF',data_real_conclusao:'Data conclusão',status:'Status',title:'Título',name:'Nome',sign_date:'Data assinatura'};
+  function fmtVal(k, raw){
+    if(raw===null||raw===undefined||raw==='') return '—';
+    var s = String(raw);
+    if(/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(8,10)+'/'+s.slice(5,7)+'/'+s.slice(0,4);
+    if(k==='completado') return Number(raw)>=100?'Sim (100%)':'Não ('+raw+'%)';
+    if(/^[0-9a-f]{8}-[0-9a-f]{4}-/.test(s)) return s.slice(0,8)+'…';
+    return s.length>60?s.slice(0,60)+'…':s;
+  }
+  var keys = Object.keys(c).filter(function(k){
+    if(SKIP[k]) return false;
+    var v = c[k];
+    var ov = fmtVal(k, v&&v.old!==undefined?v.old:null);
+    var nv = fmtVal(k, v&&v.new!==undefined?v.new:null);
+    return ov !== nv;
+  }).slice(0,6);
+  if(!keys.length) return '<span style="color:#9ca3af">Sem alterações visíveis</span>';
+  return keys.map(function(k){
+    var v = c[k];
+    var label = LABELS[k]||k;
+    var ov = fmtVal(k, v&&v.old!==undefined?v.old:null);
+    var nv = fmtVal(k, v&&v.new!==undefined?v.new:null);
+    return '<span style="color:#6b7280">'+escapeHtml(label)+':</span> '+escapeHtml(ov)+' <span style="color:#9ca3af">→</span> <b style="color:#1e40af">'+escapeHtml(nv)+'</b>';
+  }).join('&nbsp;&nbsp;·&nbsp;&nbsp;');
 }
 function entityIcon(t){
   return {tasks:'📋', task:'📋', companies:'🏢', raid_items:'🎯', raid:'🎯', synergies:'💰', health_entries:'🚦', template_tasks:'📐', comments:'💬', attachments:'📎', task_dependencies:'🔗'}[t]||'•';
