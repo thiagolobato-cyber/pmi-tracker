@@ -557,7 +557,7 @@ const BHUB_LOGO_ICON = `<svg viewBox="0 0 40 40" fill="currentColor" xmlns="http
 /* ---------- State ---------- */
 let state = defaultState();
 let session = null; // { id, email, username, role }
-let view = { tab:'dashboard', dealId:null, dealTab:'tarefas', executiveArea:'todas', raidFilter:'all', raidPortfolioFilter:'all', synergyFilter:'all', dashFilters:{deals:[],areas:[],owners:[]}, empresasSearch:'', empresasSortCol:'date', empresasSortDir:'desc', sidebarCollapsed:false, executivaDealSearch:'', execPdfDeals:null, dealTaskOwnerFilter:'', dealTaskBloqueioFilter:'', dealTaskAreaFilter:'' };
+let view = { tab:'dashboard', dealId:null, dealTab:'tarefas', executiveArea:'todas', raidFilter:'all', raidPortfolioFilter:'all', synergyFilter:'all', dashFilters:{deals:[],areas:[],owners:[]}, empresasSearch:'', empresasSortCol:'date', empresasSortDir:'desc', sidebarCollapsed:false, executivaDealSearch:'', execPdfDeals:null, dealTaskOwnerFilter:'', dealTaskBloqueioFilter:'', dealTaskAreaFilter:'', dealTaskStatusFilter:'' };
 
 // Tooltip explicativo do acrônimo RAID dentro de Ações de Mitigação
 function raidTooltipLabel(text){
@@ -746,7 +746,7 @@ async function logout(){
   // Limpa estado e renderiza ANTES de esperar a rede — usuário sai visualmente imediato
   session = null;
   state = defaultState();
-  view = { tab:'dashboard', dealId:null, dealTab:'tarefas', executiveArea:DEFAULT_AREAS[0]?.name||'', raidFilter:'all', raidPortfolioFilter:'all', synergyFilter:'all', dashFilters:{deals:[],areas:[],owners:[]}, empresasSearch:'', empresasSortCol:'date', empresasSortDir:'desc', sidebarCollapsed:false, executivaDealSearch:'', execPdfDeals:null, dealTaskOwnerFilter:'', dealTaskBloqueioFilter:'', dealTaskAreaFilter:'' };
+  view = { tab:'dashboard', dealId:null, dealTab:'tarefas', executiveArea:DEFAULT_AREAS[0]?.name||'', raidFilter:'all', raidPortfolioFilter:'all', synergyFilter:'all', dashFilters:{deals:[],areas:[],owners:[]}, empresasSearch:'', empresasSortCol:'date', empresasSortDir:'desc', sidebarCollapsed:false, executivaDealSearch:'', execPdfDeals:null, dealTaskOwnerFilter:'', dealTaskBloqueioFilter:'', dealTaskAreaFilter:'', dealTaskStatusFilter:'' };
   render();
   // signOut com timeout de 3s para não travar
   try { await Promise.race([supa.auth.signOut({scope:'global'}), new Promise(r=>setTimeout(r,3000))]); } catch(e){}
@@ -3422,8 +3422,8 @@ function renderDeal(){
     </div>
   `);
   node.querySelector('#subview').appendChild(subView);
-  node.querySelector('#back').onclick = ()=>{ view.tab='empresas'; view.dealId=null; view.dealTab='tarefas'; view.dealTaskOwnerFilter=''; view.dealTaskAreaFilter=''; render(); };
-  node.querySelector('#dealSel').onchange = e=>{ view.dealId=e.target.value; view.dealTaskOwnerFilter=''; view.dealTaskAreaFilter=''; render(); };
+  node.querySelector('#back').onclick = ()=>{ view.tab='empresas'; view.dealId=null; view.dealTab='tarefas'; view.dealTaskOwnerFilter=''; view.dealTaskAreaFilter=''; view.dealTaskStatusFilter=''; render(); };
+  node.querySelector('#dealSel').onchange = e=>{ view.dealId=e.target.value; view.dealTaskOwnerFilter=''; view.dealTaskAreaFilter=''; view.dealTaskStatusFilter=''; render(); };
   const editCo = node.querySelector('#editCo');
   if(editCo) editCo.onclick = ()=>openCompanyModal(company);
   node.querySelectorAll('[data-subtab]').forEach(b=>b.onclick = ()=>{ view.dealTab=b.dataset.subtab; render(); });
@@ -3438,10 +3438,12 @@ function renderDealTasks(company, deal, tasks){
   const activeOwnerFilter = view.dealTaskOwnerFilter || '';
   const activeBloqueioFilter = view.dealTaskBloqueioFilter || '';
   const activeAreaFilter = view.dealTaskAreaFilter || '';
+  const activeStatusFilter = view.dealTaskStatusFilter || '';
   const filteredTasks = tasks
     .filter(t => !activeOwnerFilter || t.owner === activeOwnerFilter)
     .filter(t => !activeBloqueioFilter || t.bloqueio === activeBloqueioFilter)
-    .filter(t => !activeAreaFilter || t.area === activeAreaFilter);
+    .filter(t => !activeAreaFilter || t.area === activeAreaFilter)
+    .filter(t => !activeStatusFilter || computeTaskFields(t, company).status === activeStatusFilter);
   // group by area, sorted by ref within each group, areas in canonical order
   const grouped = {};
   filteredTasks.forEach(t => {
@@ -3465,6 +3467,14 @@ function renderDealTasks(company, deal, tasks){
             <option value="">Todas</option>
             ${allAreas.map(a=>`<option value="${escapeHtml(a)}"${activeAreaFilter===a?' selected':''}>${escapeHtml(a)}</option>`).join('')}
           </select>
+          <span style="font-size:.78rem;color:var(--bhub-muted);font-weight:600;white-space:nowrap">Status:</span>
+          <select id="dealStatusFilter" style="min-width:130px;padding:.3rem .6rem;font-size:.8rem;border-radius:.5rem">
+            <option value="">Todos</option>
+            <option value="done"${activeStatusFilter==='done'?' selected':''}>&#x2705; Done</option>
+            <option value="ontrack"${activeStatusFilter==='ontrack'?' selected':''}>&#x1F535; On track</option>
+            <option value="late"${activeStatusFilter==='late'?' selected':''}>&#x1F534; Atrasado</option>
+            <option value="empty"${activeStatusFilter==='empty'?' selected':''}>&#x2B1C; Sem data</option>
+          </select>
           <span style="font-size:.78rem;color:var(--bhub-muted);font-weight:600;white-space:nowrap">Pessoa:</span>
           <select id="dealOwnerFilter" style="min-width:180px;max-width:260px;padding:.3rem .6rem;font-size:.8rem;border-radius:.5rem">
             <option value="">Todos (${total})</option>
@@ -3473,7 +3483,7 @@ function renderDealTasks(company, deal, tasks){
           <button data-bloqueio-filter="1" style="padding:.3rem .75rem;font-size:.78rem;border-radius:.5rem;border:1px solid ${activeBloqueioFilter?'#dc2626':'var(--bhub-border)'};background:${activeBloqueioFilter?'#fee2e2':'#fff'};color:${activeBloqueioFilter?'#991b1b':'var(--bhub-muted)'};font-weight:600;cursor:pointer;white-space:nowrap">
             🚨 ${activeBloqueioFilter ? 'Só bloqueios ✕' : 'Ver bloqueios'}
           </button>
-          ${(activeOwnerFilter||activeBloqueioFilter||activeAreaFilter) ? `<span style="font-size:.75rem;color:var(--bhub-muted)">${filteredTasks.length} de ${total} tarefas</span>` : ''}
+          ${(activeOwnerFilter||activeBloqueioFilter||activeAreaFilter||activeStatusFilter) ? `<span style="font-size:.75rem;color:var(--bhub-muted)">${filteredTasks.length} de ${total} tarefas</span>` : ''}
         </div>
         <div class="flex items-center gap-2">
           ${canEdit() && total===0 ? `<button id="seed" class="btn btn-primary">Criar a partir do Template</button>`:''}
@@ -3524,6 +3534,11 @@ function renderDealTasks(company, deal, tasks){
   const dealAreaFilterEl = node.querySelector('#dealAreaFilter');
   if(dealAreaFilterEl) dealAreaFilterEl.addEventListener('change', ()=>{
     view.dealTaskAreaFilter = dealAreaFilterEl.value;
+    render();
+  });
+  const dealStatusFilterEl = node.querySelector('#dealStatusFilter');
+  if(dealStatusFilterEl) dealStatusFilterEl.addEventListener('change', ()=>{
+    view.dealTaskStatusFilter = dealStatusFilterEl.value;
     render();
   });
   const dealOwnerFilterEl = node.querySelector('#dealOwnerFilter');
