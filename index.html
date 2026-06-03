@@ -6362,6 +6362,9 @@ function showRealtimePulse(label){
   clearTimeout(_realtimeIndicator._t);
   _realtimeIndicator._t = setTimeout(()=>{ _realtimeIndicator.style.opacity = '0'; }, 1500);
 }
+let _realtimePollingInterval = null;
+let _lastReloadHash = null;
+
 async function doRealtimeReload(label){
   if(_savingOps > 0) return;
   try{
@@ -6386,9 +6389,22 @@ function startRealtime(){
   _realtimeCh.subscribe((status)=>{
     console.log('[realtime] status:', status);
   });
+
+  // Polling de fallback a cada 60s
+  if(_realtimePollingInterval) clearInterval(_realtimePollingInterval);
+  _realtimePollingInterval = setInterval(async ()=>{
+    if(_savingOps > 0 || document.hidden) return;
+    try{
+      const { data } = await supa.from('tasks').select('id,updated_at').order('updated_at',{ascending:false}).limit(1);
+      const hash = data?.[0]?.updated_at || '';
+      if(_lastReloadHash && hash !== _lastReloadHash) await doRealtimeReload('sync');
+      _lastReloadHash = hash;
+    }catch(e){}
+  }, 60000);
 }
 function stopRealtime(){
   if(_realtimeCh){ supa.removeChannel(_realtimeCh); _realtimeCh = null; }
+  if(_realtimePollingInterval){ clearInterval(_realtimePollingInterval); _realtimePollingInterval = null; }
 }
 
 // Detecta erros do Supabase Auth no fragmento da URL (#error=...&error_code=...).
