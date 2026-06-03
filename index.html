@@ -2528,10 +2528,14 @@ function renderExecutiva(){
   const areasToShow = view.executiveArea === 'todas' ? allAreas : [view.executiveArea];
 
   function getTasksForArea(area){
-    return Array.from(new Set([
-      ...state.template.filter(t=>t.area===area).map(t=>t.task),
-      ...Object.values(state.deals).flatMap(d=>d.tasks.filter(t=>t.area===area).map(t=>t.task))
-    ]));
+    const seen = new Map();
+    state.template.filter(t=>t.area===area).forEach(t=>{
+      if(!seen.has(t.task)) seen.set(t.task, t.ref||'');
+    });
+    Object.values(state.deals).flatMap(d=>d.tasks.filter(t=>t.area===area)).forEach(t=>{
+      if(!seen.has(t.task)) seen.set(t.task, t.ref||'');
+    });
+    return Array.from(seen.entries()).map(([task,ref])=>({task,ref}));
   }
 
   function cellFor(deal, taskName){
@@ -2547,11 +2551,10 @@ function renderExecutiva(){
     if(!taskList.length) return '';
     const areaHeader = view.executiveArea === 'todas'
       ? `<tr class="exec-area-header"><td colspan="${data.length + 2}">${area}</td></tr>` : '';
-    const rows = taskList.map(tn=>{
+    const rows = taskList.map(({task: tn, ref})=>{
       taskCounter++;
-      const n = taskCounter;
       return `<tr>
-        <td class="text-center text-gray-500 sticky-col" style="width:2.25rem;min-width:2.25rem">${n}</td>
+        <td class="text-center text-gray-500 sticky-col" style="width:2.25rem;min-width:2.25rem">${escapeHtml(ref||'')}</td>
         <td class="sticky-col-2" style="min-width:16rem;max-width:20rem;word-break:break-word;padding-right:.75rem">${escapeHtml(tn)}</td>
         ${data.map(d=>{
           const st = cellFor(d, tn);
