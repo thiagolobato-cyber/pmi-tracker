@@ -6390,16 +6390,11 @@ function startRealtime(){
     console.log('[realtime] status:', status);
   });
 
-  // Polling de fallback a cada 60s
+  // Polling de fallback a cada 60s — recarrega estado incondicionalmente
   if(_realtimePollingInterval) clearInterval(_realtimePollingInterval);
   _realtimePollingInterval = setInterval(async ()=>{
     if(_savingOps > 0 || document.hidden) return;
-    try{
-      const { data } = await supa.from('tasks').select('id,updated_at').order('updated_at',{ascending:false}).limit(1);
-      const hash = data?.[0]?.updated_at || '';
-      if(_lastReloadHash && hash !== _lastReloadHash) await doRealtimeReload('sync');
-      _lastReloadHash = hash;
-    }catch(e){}
+    await doRealtimeReload('sync');
   }, 60000);
 }
 function stopRealtime(){
