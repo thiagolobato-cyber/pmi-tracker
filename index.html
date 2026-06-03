@@ -6171,8 +6171,9 @@ function renderUsuarios(){
       (deal.tasks||[]).forEach(t=>{ if(t.owner&&t.owner.trim()) ownerNames.add(t.owner.trim()); });
       (deal.raid||[]).forEach(r=>{ if(r.owner&&r.owner.trim()) ownerNames.add(r.owner.trim()); });
     });
-    const profileNames = new Set((state.users||[]).map(u=>(u.username||'').trim().toLowerCase()));
-    const unlinked = [...ownerNames].filter(n=>!profileNames.has(n.toLowerCase())).sort();
+    const normName = s=>(s||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
+    const profileNames = new Set((state.users||[]).map(u=>normName(u.username)));
+    const unlinked = [...ownerNames].filter(n=>!profileNames.has(normName(n))).sort();
 
     const ownerSection = node.querySelector('#ownersWithoutAccount');
     if(ownerSection){
@@ -6361,34 +6362,29 @@ function showRealtimePulse(label){
   clearTimeout(_realtimeIndicator._t);
   _realtimeIndicator._t = setTimeout(()=>{ _realtimeIndicator.style.opacity = '0'; }, 1500);
 }
+async function doRealtimeReload(label){
+  if(_savingOps > 0) return;
+  try{
+    await reloadState();
+    const hadModal = document.querySelector('[data-modal="task"]');
+    if(!hadModal) render();
+    showRealtimePulse(label||'atualizado');
+  }catch(e){ console.error('realtime reload:', e); }
+}
+
 function startRealtime(){
   if(_realtimeCh) return;
-  // Não dispara reload por mudanças causadas localmente (já temos render)
-  // mas é melhor sempre rodar reloadState para garantir consistência cross-tab/usuário.
   const tables = ['tasks','companies','raid_items','raid_deal_links','synergies','health_entries','template_tasks','comments','attachments','task_dependencies'];
-  _realtimeCh = supa.channel('pmi-app');
+  _realtimeCh = supa.channel('pmi-app-v2');
   tables.forEach(t=>{
     _realtimeCh.on('postgres_changes', { event:'*', schema:'public', table:t }, (payload)=>{
-      // Se estamos no meio de uma operação de salvar, ignora (já temos UI atualizada)
       if(_savingOps > 0) return;
-      const label = `${t} ${payload.eventType||''}`.trim();
       clearTimeout(_realtimeDebounce);
-      _realtimeDebounce = setTimeout(async ()=>{
-        try{
-          await reloadState();
-          // Re-render preservando o panel atual se houver modal aberto
-          const hadOpenTaskModal = document.querySelector('[data-modal="task"]');
-          render();
-          if(hadOpenTaskModal){
-            // O modal foi removido pelo render; uma re-abertura seria possível mas exigiria persistir o id.
-          }
-          showRealtimePulse(label);
-        }catch(e){ console.error('realtime reload:', e); }
-      }, 600);
+      _realtimeDebounce = setTimeout(()=> doRealtimeReload(t), 800);
     });
   });
   _realtimeCh.subscribe((status)=>{
-    if(status === 'SUBSCRIBED') console.log('[realtime] conectado');
+    console.log('[realtime] status:', status);
   });
 }
 function stopRealtime(){
