@@ -3954,10 +3954,8 @@ async function renderCommentsPanel(container, entityType, entityId){
 /* ===== Modal de Tarefa ===== */
 function openTaskModal(company, taskId){
   const deal = dealOf(company.id);
-  let existing = taskId ? (deal?.tasks||[]).find(t=>t.id===taskId) : null;
+  const existing = taskId ? (deal?.tasks||[]).find(t=>t.id===taskId) : null;
   const isNew = !existing;
-  // Computar _f antes de renderizar para que dataPrevista esteja disponível no template
-  if(existing) existing = {...existing, _f: computeTaskFields(existing, company)};
 
   const allAreas = Array.from(new Set([
     ...DEFAULT_AREAS.map(a=>a.name),
@@ -3992,7 +3990,14 @@ function openTaskModal(company, taskId){
             ${ownerSelectHtml(existing?.owner||'')}
           </label>
           <label class="block">Data Prevista
-            <input name="dataPrevistaManual" type="date" value="${existing?._f?.dataPrevista?toIso(existing._f.dataPrevista):''}" />
+            <input name="dataPrevistaManual" type="date" value="${(()=>{ const dp=computeTaskFields(existing||{prazo:0},company).dataPrevista; return dp?toIso(dp):''; })()} " />
+          </label>
+
+          <label class="block">Concluído?
+            <select name="completado">
+              <option value="0" ${(existing?.completado||0) < 100 ? 'selected' : ''}>Não</option>
+              <option value="100" ${(existing?.completado||0) >= 100 ? 'selected' : ''}>Sim</option>
+            </select>
           </label>
 
           <label class="block">Concluído?
