@@ -3989,8 +3989,8 @@ function openTaskModal(company, taskId){
           <label class="block">Owner
             ${ownerSelectHtml(existing?.owner||'')}
           </label>
-          <label class="block">Prazo (dias úteis)
-            <input name="prazo" type="number" min="0" value="${existing?.prazo||0}" />
+          <label class="block">Data Prevista
+            <input name="dataPrevistaManual" type="date" value="${existing?._f?.dataPrevista?toIso(existing._f.dataPrevista):''}" />
           </label>
 
           <label class="block">Concluído?
@@ -3998,9 +3998,6 @@ function openTaskModal(company, taskId){
               <option value="0" ${(existing?.completado||0) < 100 ? 'selected' : ''}>Não</option>
               <option value="100" ${(existing?.completado||0) >= 100 ? 'selected' : ''}>Sim</option>
             </select>
-          </label>
-          <label class="block">Data Real de Conclusão
-            <input name="dataRealConclusao" type="date" value="${existing?.dataRealConclusao?toIso(parseDate(existing.dataRealConclusao)):''}" />
           </label>
 
           <label class="block col-span-2">Próximo Passo
@@ -4126,10 +4123,21 @@ function openTaskModal(company, taskId){
       area:             fd.get('area')||'',
       task:             fd.get('task')?.trim()||'',
       owner:            fd.get('owner')||'',
-      prazo:            parseInt(fd.get('prazo'))||0,
+      prazo:            (()=>{
+        const dpRaw = fd.get('dataPrevistaManual');
+        if(dpRaw && company.signDate){
+          const dp = new Date(dpRaw + 'T12:00:00');
+          const sd = parseDate(company.signDate);
+          if(sd && !isNaN(dp)){
+            const diff = businessDaysBetween(sd, dp);
+            return Math.max(0, diff != null ? diff : 0);
+          }
+        }
+        return existing?.prazo||0;
+      })(),
       phaseId:          fd.get('phaseId')||'',
       completado:       Number(fd.get('completado'))||0,
-      dataRealConclusao:fd.get('dataRealConclusao')||'',
+      dataRealConclusao:existing?.dataRealConclusao||'',
       ultimoUpdate:     existing?.ultimoUpdate||'',
       proximoPasso:     fd.get('proximoPasso')||'',
       bloqueio:         fd.get('bloqueio')||'Não',
