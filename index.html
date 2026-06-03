@@ -3832,6 +3832,7 @@ function openRaidModal(company, raidId){
           task_name: existing?.title||'Ação de Mitigação',
           area: existing?.area||'',
           requested_by_id: session.id,
+          requested_by_name: session.username||'',
           status: 'pending'
         });
         if(error) throw error;
@@ -4102,8 +4103,11 @@ function openTaskModal(company, taskId){
           task_id: taskId,
           task_name: existing?.task||'',
           task_ref: existing?.ref||'',
+          area: existing?.area||'',
           company_id: company.id,
+          company_name: company.name||'',
           requested_by_id: session.id,
+          requested_by_name: session.username||'',
           status: 'pending'
         });
         if(error) throw error;
@@ -6009,9 +6013,9 @@ function renderHoje(){
             <div class="hoje-row-left" style="flex:1;min-width:0">
               <div class="hoje-row-task" style="font-weight:600">${typeBadge}${refDisplay}${escapeHtml(r.task_name||'(sem nome)')}</div>
               <div class="hoje-row-meta">
-                ${!isRaid?`<span>${escapeHtml(r.company_name||'—')}</span><span class="sep">·</span>`:''}
+                ${!isRaid?`<span style="font-weight:600;color:var(--bhub-navy)">${escapeHtml(r.company_name||'—')}</span><span class="sep">·</span>`:''}
                 <span>${escapeHtml(r.area||'—')}</span><span class="sep">·</span>
-                <span>Solicitado por <strong>${escapeHtml(r.requested_by_name||'?')}</strong></span><span class="sep">·</span>
+                <span>Por <strong>${escapeHtml(r.requested_by_name||r.requested_by_id?.slice(0,8)||'?')}</strong></span><span class="sep">·</span>
                 <span>${r.requested_at ? fmtDate(new Date(r.requested_at)) : ''}</span>
               </div>
             </div>
