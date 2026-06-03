@@ -6013,9 +6013,9 @@ function renderHoje(){
             <div class="hoje-row-left" style="flex:1;min-width:0">
               <div class="hoje-row-task" style="font-weight:600">${typeBadge}${refDisplay}${escapeHtml(r.task_name||'(sem nome)')}</div>
               <div class="hoje-row-meta">
-                ${!isRaid?`<span style="font-weight:600;color:var(--bhub-navy)">${escapeHtml(r.company_name||'—')}</span><span class="sep">·</span>`:''}
-                <span>${escapeHtml(r.area||'—')}</span><span class="sep">·</span>
-                <span>Por <strong>${escapeHtml(r.requested_by_name||r.requested_by_id?.slice(0,8)||'?')}</strong></span><span class="sep">·</span>
+                ${!isRaid?`<span style="font-weight:600;color:var(--bhub-navy)">${escapeHtml(r.company_name||(state.companies||[]).find(c=>c.id===r.company_id)?.name||'—')}</span><span class="sep">·</span>`:''}
+                <span>${escapeHtml(r.area||(state.deals[r.company_id]?.tasks||[]).find(t=>t.id===r.task_id)?.area||'—')}</span><span class="sep">·</span>
+                <span>Por <strong>${escapeHtml(r.requested_by_name||(state.users||[]).find(u=>u.id===r.requested_by_id)?.username||'?')}</strong></span><span class="sep">·</span>
                 <span>${r.requested_at ? fmtDate(new Date(r.requested_at)) : ''}</span>
               </div>
             </div>
