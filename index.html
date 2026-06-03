@@ -4514,49 +4514,15 @@ function describeAuditChanges(row){
   if(!c) return '—';
   if(row.action === 'insert') return 'Criado';
   if(row.action === 'delete') return 'Removido';
-
-  // Campos ignorados (internos/sem valor para o usuário)
-  const SKIP = new Set(['company_id','id','ultimo_update','updated_at','pending_approval','phase_id','ferramenta','evidencia','created_at']);
-
-  // Tradução de nomes de campo
-  const FIELD_LABELS = {
-    task: 'Tarefa', owner: 'Responsável', area: 'Área',
-    completado: 'Concluído', prazo: 'Prazo (dias úteis)',
-    proximo_passo: 'Próximo passo', bloqueio: 'Bloqueio',
-    bloqueio_descricao: 'Descrição do bloqueio', ref: 'REF',
-    data_real_conclusao: 'Data de conclusão', raid_id: 'Ação de Mitigação',
-    status: 'Status', title: 'Título', description: 'Descrição',
-    sign_date: 'Data de assinatura', name: 'Nome',
-    planned_value: 'Valor planejado', realized_value: 'Valor realizado',
-    body: 'Comentário', type: 'Tipo',
-  };
-
-  // Formatar valor para exibição
-  function fmtVal(key, raw){
-    if(raw === null || raw === undefined || raw === '') return '—';
-    const s = String(raw);
-    // Datas ISO
-    if(/^d{4}-d{2}-d{2}/.test(s)){
-      const parts = s.slice(0,10).split('-');
-      return parts[2]+'/'+parts[1]+'/'+parts[0];
-    }
-    // Completado: 0/100 → Não/Sim
-    if(key === 'completado') return Number(raw) >= 100 ? '✅ Sim (100%)' : (Number(raw) > 0 ? Number(raw)+'%' : 'Não (0%)');
-    // UUIDs longos: truncar
-    if(/^[0-9a-f]{8}-[0-9a-f]{4}-/.test(s)) return s.slice(0,8)+'…';
-    return s.length > 60 ? s.slice(0,60)+'…' : s;
-  }
-
-  const keys = Object.keys(c).filter(k=>!SKIP.has(k)).slice(0, 6);
-  if(!keys.length) return '<span class="text-gray-400">Alteração interna</span>';
-
+  // update
+  const keys = Object.keys(c).slice(0, 5);
+  if(!keys.length) return 'Sem alterações';
   return keys.map(k=>{
     const v = c[k];
-    const label = FIELD_LABELS[k] || k;
-    const ov = fmtVal(k, v?.old);
-    const nv = fmtVal(k, v?.new);
-    return `<span class="text-gray-500">${escapeHtml(label)}:</span> ${escapeHtml(ov)} <span style="color:#6b7280">→</span> <b style="color:var(--bhub-navy)">${escapeHtml(nv)}</b>`;
-  }).join('&nbsp;&nbsp;·&nbsp;&nbsp;');
+    const ov = (v?.old===null || v?.old===undefined || v?.old==='') ? '—' : String(v.old).slice(0,40);
+    const nv = (v?.new===null || v?.new===undefined || v?.new==='') ? '—' : String(v.new).slice(0,40);
+    return `<b>${escapeHtml(k)}</b>: <span class="text-gray-500">${escapeHtml(ov)}</span> → <span style="color:var(--bhub-navy)">${escapeHtml(nv)}</span>`;
+  }).join('<br>');
 }
 function entityIcon(t){
   return {tasks:'📋', task:'📋', companies:'🏢', raid_items:'🎯', raid:'🎯', synergies:'💰', health_entries:'🚦', template_tasks:'📐', comments:'💬', attachments:'📎', task_dependencies:'🔗'}[t]||'•';
@@ -4612,23 +4578,13 @@ function renderDealHistorico(company){
       const actor = r.actor_name || r.actor_email || 'sistema';
       const actLabel = r.action==='insert'?'criou':r.action==='update'?'alterou':'removeu';
       const colorByAct = r.action==='insert'?'#15803d':r.action==='update'?'#1e40af':'#b91c1c';
-      // Tentar extrair nome/ref da tarefa do changes
-      const taskRef = r.changes?.ref?.new || r.changes?.ref?.old || '';
-      const taskName = r.changes?.task?.new || r.changes?.task?.old || r.entity_name || '';
-      const entityDetail = taskRef ? ` <span style="font-family:monospace;background:#f3f4f6;padding:.05rem .3rem;border-radius:.2rem;font-size:.7rem">${escapeHtml(taskRef)}</span>` : '';
-      const taskDetail = taskName ? ` <span class="text-gray-600">${escapeHtml(taskName.slice(0,50)${taskName.length>50?'…':''})}</span>` : '';
       return `<div class="border-l-4 pl-3 py-2" style="border-color:${colorByAct}">
         <div class="flex justify-between items-baseline gap-3 flex-wrap">
-          <div>
-            <b>${escapeHtml(actor)}</b>
-            <span style="color:${colorByAct};font-weight:600"> ${actLabel}</span>
-            ${entityIcon(r.entity_type)} <b>${entityLabel(r.entity_type)}</b>${entityDetail}${taskDetail}
-          </div>
-          <div class="text-gray-400 text-[11px]">${escapeHtml(whenStr)}</div>
+          <div><b>${escapeHtml(actor)}</b> ${actLabel} ${entityIcon(r.entity_type)} <b>${entityLabel(r.entity_type)}</b></div>
+          <div class="text-gray-500 text-[11px]">${escapeHtml(whenStr)}</div>
         </div>
-        <div class="text-gray-600 mt-1" style="font-size:.72rem;line-height:1.6">${describeAuditChanges(r)}</div>
-      </div>`;
-    }).join('')}</div>`;
+        <div class="text-gray-700 mt-1" style="font-size:.72rem;line-height:1.4">${describeAuditChanges(r)}</div>
+      </div>`;    }).join('')}</div>`;
   }
   wrap.querySelector('#histType').addEventListener('change', load);
   wrap.querySelector('#histReload').addEventListener('click', load);
