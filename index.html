@@ -4577,8 +4577,10 @@ function renderDealHistorico(company){
 
   const sel = wrap.querySelector('#histType');
   const clearBtn = wrap.querySelector('#histClear');
+
   if(_histTypeFilter){ sel.value = _histTypeFilter; clearBtn.style.display = ''; }
   function updateClearBtn(){ clearBtn.style.display = sel.value ? '' : 'none'; }
+
   async function load(){
     _histTypeFilter = sel.value;
     updateClearBtn();
@@ -4596,7 +4598,7 @@ function renderDealHistorico(company){
       list.innerHTML = '<div class="text-sm text-gray-500">Sem registros para os filtros atuais.</div>';
       return;
     }
-        list.innerHTML = '<div class="space-y-2 text-xs">' + data.map(function(r){
+    list.innerHTML = '<div class="space-y-2 text-xs">' + data.map(function(r){
       var when = new Date(r.ts);
       var whenStr = when.toLocaleString('pt-BR');
       var actor = r.actor_name || r.actor_email || 'sistema';
@@ -4611,7 +4613,7 @@ function renderDealHistorico(company){
         var foundRaid = (state.raid||[]).find(function(x){ return x.id===r.entity_id; });
         if(foundRaid) entityName = foundRaid.title||'';
       }
-      var nameTag = entityName ? (' <span style="color:#374151;font-style:italic">"'+escapeHtml(entityName.slice(0,60))+(entityName.length>60?'…':'')+'"</span>') : '';
+      var nameTag = entityName ? (' <span style="color:#374151;font-style:italic">"'+escapeHtml(entityName.slice(0,60))+(entityName.length>60?'\u2026':'')+'"</span>') : '';
       return '<div class="border-l-4 pl-3 py-2" style="border-color:'+colorByAct+'">'
         + '<div class="flex justify-between items-baseline gap-3 flex-wrap">'
         + '<div><b>'+escapeHtml(actor)+'</b> <span style="color:'+colorByAct+';font-weight:600">'+actLabel+'</span> '+entityIcon(r.entity_type)+' <b>'+entityLabel(r.entity_type)+'</b>'+nameTag+'</div>'
