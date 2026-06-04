@@ -3427,7 +3427,7 @@ function renderDeal(){
   `);
   node.querySelector('#subview').appendChild(subView);
   node.querySelector('#back').onclick = ()=>{ view.tab='empresas'; view.dealId=null; view.dealTab='tarefas'; view.dealTaskOwnerFilter=''; view.dealTaskAreaFilter=''; view.dealTaskStatusFilter=''; render(); };
-  node.querySelector('#dealSel').onchange = e=>{ view.dealId=e.target.value; view.dealTaskOwnerFilter=''; view.dealTaskAreaFilter=''; view.dealTaskStatusFilter=''; render(); };
+  node.querySelector('#dealSel').onchange = e=>{ view.dealId=e.target.value; render(); };
   const editCo = node.querySelector('#editCo');
   if(editCo) editCo.onclick = ()=>openCompanyModal(company);
   node.querySelectorAll('[data-subtab]').forEach(b=>b.onclick = ()=>{ view.dealTab=b.dataset.subtab; render(); });
@@ -3488,7 +3488,7 @@ function renderDealTasks(company, deal, tasks){
           <button data-bloqueio-filter="1" style="padding:.3rem .75rem;font-size:.78rem;border-radius:.5rem;border:1px solid ${activeBloqueioFilter?'#dc2626':'var(--bhub-border)'};background:${activeBloqueioFilter?'#fee2e2':'#fff'};color:${activeBloqueioFilter?'#991b1b':'var(--bhub-muted)'};font-weight:600;cursor:pointer;white-space:nowrap">
             🚨 ${activeBloqueioFilter ? 'Só bloqueios ✕' : 'Ver bloqueios'}
           </button>
-          ${(activeOwnerFilter||activeBloqueioFilter||activeAreaFilter||activeStatusFilter) ? `<span style="font-size:.75rem;color:var(--bhub-muted)">${filteredTasks.length} de ${total} tarefas</span>` : ''}
+          ${(activeOwnerFilter||activeBloqueioFilter||activeAreaFilter||activeStatusFilter) ? `<span style="font-size:.75rem;color:var(--bhub-muted)">${filteredTasks.length} de ${total} tarefas</span><button id="clearTaskFilters" style="margin-left:.25rem;padding:.25rem .5rem;font-size:.72rem;background:#fee2e2;color:#b91c1c;border:1px solid #fca5a5;border-radius:6px;cursor:pointer;font-weight:600">× Limpar filtros</button>` : ''}
         </div>
         <div class="flex items-center gap-2">
           ${canEdit() && total===0 ? `<button id="seed" class="btn btn-primary">Criar a partir do Template</button>`:''}
@@ -3554,6 +3554,11 @@ function renderDealTasks(company, deal, tasks){
   const bloqueioFilterBtn = node.querySelector('[data-bloqueio-filter]');
   if(bloqueioFilterBtn) bloqueioFilterBtn.addEventListener('click', ()=>{
     view.dealTaskBloqueioFilter = view.dealTaskBloqueioFilter ? '' : 'Sim';
+    render();
+  });
+  const clearTaskFiltersBtn = node.querySelector('#clearTaskFilters');
+  if(clearTaskFiltersBtn) clearTaskFiltersBtn.addEventListener('click', ()=>{
+    view.dealTaskOwnerFilter=''; view.dealTaskAreaFilter=''; view.dealTaskStatusFilter=''; view.dealTaskBloqueioFilter='';
     render();
   });
   const seed = node.querySelector('#seed');
@@ -4560,8 +4565,6 @@ function renderDealHistorico(company){
             <option value="">Todas as entidades</option>
             <option value="tasks">Tarefas</option>
             <option value="raid_items">Ações de Mitigação</option>
-            <option value="synergies">Sinergias</option>
-            <option value="health_entries">Health</option>
             <option value="comments">Comentários</option>
             <option value="companies">Empresa</option>
           </select>
