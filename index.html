@@ -3508,6 +3508,9 @@ function renderDeal(){
   // Adiciona opcao 'Todos os Deals' no topo do dealSel
   var _ds = node.querySelector('#dealSel');
   if(_ds){ var _ao = document.createElement('option'); _ao.value='__all__'; _ao.textContent='Todos os Deals'; _ds.insertBefore(_ao, _ds.firstChild); }
+  // Adiciona opcao 'Todos os Deals' no topo do dealSel
+  var _ds = node.querySelector('#dealSel');
+  if(_ds){ var _ao = document.createElement('option'); _ao.value='__all__'; _ao.textContent='Todos os Deals'; _ds.insertBefore(_ao, _ds.firstChild); }
   node.querySelector('#dealSel').onchange = e=>{ view.dealId=e.target.value; render(); };
   const editCo = node.querySelector('#editCo');
   if(editCo) editCo.onclick = ()=>openCompanyModal(company);
