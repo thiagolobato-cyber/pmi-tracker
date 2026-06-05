@@ -2448,13 +2448,17 @@ function renderDashboard(){
       card.addEventListener('click', function(){
         var lbl = (card.querySelector('.kpi-label')||{}).textContent || '';
         if(lbl.includes('Mitiga')){ view.tab = 'raid'; render(); return; }
-        view.tab = 'empresas';
-        if(lbl.includes('Done'))           { view.empresasSortCol = 'done'; }
-        else if(lbl.includes('Track'))     { view.empresasSortCol = 'pct'; }
-        else if(lbl.includes('Atrasad'))   { view.empresasSortCol = 'late'; }
-        else if(lbl.includes('Bloqueio'))  { view.empresasSortCol = 'blocked'; }
-        else                               { view.empresasSortCol = 'pct'; }
-        view.empresasSortDir = 'desc';
+        view.tab = 'deal';
+        view.dealId = '__all__';
+        view.dealTab = 'tarefas';
+        view.dealTaskStatusFilter = '';
+        view.dealTaskBloqueioFilter = '';
+        view.dealTaskAreaFilter = '';
+        view.dealTaskOwnerFilter = '';
+        if(lbl.includes('Done'))          { view.dealTaskStatusFilter = 'done'; }
+        else if(lbl.includes('Track'))    { view.dealTaskStatusFilter = 'ontrack'; }
+        else if(lbl.includes('Atrasad'))  { view.dealTaskStatusFilter = 'late'; }
+        else if(lbl.includes('Bloqueio')) { view.dealTaskBloqueioFilter = 'Sim'; }
         render();
       });
     });
@@ -3369,8 +3373,60 @@ function openCompareDealsView(ids){
   m.querySelectorAll('[data-area]').forEach(el=>el.addEventListener('click', e=>{ e.stopPropagation(); if(el.dataset.area){ m.remove(); openAreaSummary(el.dataset.area); } }));
 }
 
+function renderAllDealsView(){
+  var allTasks = state.companies.flatMap(function(c){
+    var d = dealOf(c.id);
+    return d.tasks.map(function(t){ return Object.assign({}, t, {_f: computeTaskFields(t, c)}); });
+  });
+  var total = allTasks.length;
+  var doneCnt = allTasks.filter(function(t){ return t._f.status==='done'; }).length;
+  var lateCnt = allTasks.filter(function(t){ return t._f.status==='late'; }).length;
+  var blkCnt  = allTasks.filter(function(t){ return t.bloqueio==='Sim'; }).length;
+  var pct = total ? Math.round(doneCnt/total*100) : 0;
+  var fc = {id:'__all__', name:'Todos os Deals', signDate:null, phases:[]};
+  var subView = renderDealTasks(fc, {}, allTasks);
+  subView.querySelectorAll('#addTask,#seed,[data-edit],[data-approve-task],[data-reject-task]').forEach(function(el){ el.style.display='none'; });
+  var wrap = document.createElement('div');
+  wrap.className = 'space-y-4';
+  var hdr = document.createElement('div');
+  hdr.className = 'flex items-center justify-between flex-wrap gap-3';
+  hdr.innerHTML = '<div><div class="text-xs text-gray-500"><button class="hover:underline" id="back">← Empresas</button></div>'
+    + '<h1 class="text-xl font-bold">Todos os Deals</h1>'
+    + '<div class="text-sm text-gray-500">' + total + ' tarefas • ' + pct + '% concluído</div></div>';
+  var selWrap = document.createElement('div');
+  selWrap.className = 'flex gap-2 items-start';
+  var sel = document.createElement('select');
+  sel.id = 'dealSel'; sel.className = 'w-56';
+  var aoOpt = document.createElement('option');
+  aoOpt.value = '__all__'; aoOpt.selected = true; aoOpt.textContent = 'Todos os Deals';
+  sel.appendChild(aoOpt);
+  state.companies.forEach(function(c){
+    var o = document.createElement('option'); o.value = c.id; o.textContent = c.name; sel.appendChild(o);
+  });
+  selWrap.appendChild(sel);
+  hdr.appendChild(selWrap);
+  wrap.appendChild(hdr);
+  var statsRow = document.createElement('div');
+  statsRow.className = 'grid grid-cols-2 md:grid-cols-4 gap-2';
+  statsRow.innerHTML = '<div class="mini-stat"><div class="lbl">Progresso</div><div class="val">' + pct + '%</div></div>'
+    + '<div class="mini-stat"><div class="lbl">Tasks Done</div><div class="val">' + doneCnt + '/' + total + '</div></div>'
+    + '<div class="mini-stat"><div class="lbl">Atrasadas</div><div class="val" style="color:var(--bhub-red)">' + lateCnt + '</div></div>'
+    + '<div class="mini-stat"><div class="lbl">Bloqueios</div><div class="val" style="color:#92400e">' + blkCnt + '</div></div>';
+  wrap.appendChild(statsRow);
+  var sv = document.createElement('div');
+  sv.appendChild(subView);
+  wrap.appendChild(sv);
+  hdr.querySelector('#back').onclick = function(){
+    view.tab='empresas'; view.dealId=null; view.dealTab='tarefas';
+    view.dealTaskOwnerFilter=''; view.dealTaskAreaFilter=''; view.dealTaskStatusFilter=''; view.dealTaskBloqueioFilter='';
+    render();
+  };
+  sel.onchange = function(e){ view.dealId = e.target.value; render(); };
+  return wrap;
+}
 /* ---------- Deal detail ---------- */
 function renderDeal(){
+  if(view.dealId === '__all__') return renderAllDealsView();
   const company = state.companies.find(c=>c.id===view.dealId) || state.companies[0];
   if(!company){
     return el(`<div class="text-sm text-gray-500">Nenhum deal selecionado.</div>`);
@@ -3449,6 +3505,9 @@ function renderDeal(){
   `);
   node.querySelector('#subview').appendChild(subView);
   node.querySelector('#back').onclick = ()=>{ view.tab='empresas'; view.dealId=null; view.dealTab='tarefas'; view.dealTaskOwnerFilter=''; view.dealTaskAreaFilter=''; view.dealTaskStatusFilter=''; render(); };
+  // Adiciona opcao 'Todos os Deals' no topo do dealSel
+  var _ds = node.querySelector('#dealSel');
+  if(_ds){ var _ao = document.createElement('option'); _ao.value='__all__'; _ao.textContent='Todos os Deals'; _ds.insertBefore(_ao, _ds.firstChild); }
   node.querySelector('#dealSel').onchange = e=>{ view.dealId=e.target.value; render(); };
   const editCo = node.querySelector('#editCo');
   if(editCo) editCo.onclick = ()=>openCompanyModal(company);
@@ -3469,7 +3528,7 @@ function renderDealTasks(company, deal, tasks){
     .filter(t => !activeOwnerFilter || t.owner === activeOwnerFilter)
     .filter(t => !activeBloqueioFilter || t.bloqueio === activeBloqueioFilter)
     .filter(t => !activeAreaFilter || t.area === activeAreaFilter)
-    .filter(t => !activeStatusFilter || computeTaskFields(t, company).status === activeStatusFilter);
+    .filter(t => !activeStatusFilter || t._f.status === activeStatusFilter);
   // group by area, sorted by ref within each group, areas in canonical order
   const grouped = {};
   filteredTasks.forEach(t => {
