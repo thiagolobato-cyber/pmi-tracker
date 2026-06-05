@@ -2437,6 +2437,28 @@ function renderDashboard(){
     });
   },0);
   // Garante listeners de bloqueios no dashboard (independente do render())
+  // Navegacao pelos cards KPI
+  var kpiHeroSection = node.querySelector('.kpi-hero-section');
+  if(kpiHeroSection){
+    kpiHeroSection.querySelectorAll('.kpi, .kpi-hero').forEach(function(card){
+      card.style.cursor = 'pointer';
+      card.style.transition = 'box-shadow .15s, transform .15s';
+      card.addEventListener('mouseenter', function(){ card.style.boxShadow = '0 4px 16px rgba(1,113,228,.20)'; card.style.transform = 'translateY(-2px)'; });
+      card.addEventListener('mouseleave', function(){ card.style.boxShadow = ''; card.style.transform = ''; });
+      card.addEventListener('click', function(){
+        var lbl = (card.querySelector('.kpi-label')||{}).textContent || '';
+        if(lbl.includes('Mitiga')){ view.tab = 'raid'; render(); return; }
+        view.tab = 'empresas';
+        if(lbl.includes('Done'))           { view.empresasSortCol = 'done'; }
+        else if(lbl.includes('Track'))     { view.empresasSortCol = 'pct'; }
+        else if(lbl.includes('Atrasad'))   { view.empresasSortCol = 'late'; }
+        else if(lbl.includes('Bloqueio'))  { view.empresasSortCol = 'blocked'; }
+        else                               { view.empresasSortCol = 'pct'; }
+        view.empresasSortDir = 'desc';
+        render();
+      });
+    });
+  }
   attachBlkListeners(node);
   return node;
 }
