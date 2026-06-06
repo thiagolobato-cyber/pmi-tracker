@@ -3534,6 +3534,16 @@ function renderDeal(){
   var _ds = node.querySelector('#dealSel');
 
   node.querySelector('#dealSel').onchange = e=>{ view.dealId=e.target.value; render(); };
+  // [v4] Garante exatamente 1 'Todos os Deals' no dealSel
+  (function(){
+    var _ds4 = node.querySelector('#dealSel');
+    if (!_ds4) return;
+    _ds4.querySelectorAll('option[value="__all__"]').forEach(function(o){ o.remove(); });
+    var _opt4 = document.createElement('option');
+    _opt4.value = '__all__';
+    _opt4.textContent = 'Todos os Deals';
+    _ds4.insertBefore(_opt4, _ds4.firstChild);
+  })();
   const editCo = node.querySelector('#editCo');
   if(editCo) editCo.onclick = ()=>openCompanyModal(company);
   node.querySelectorAll('[data-subtab]').forEach(b=>b.onclick = ()=>{ view.dealTab=b.dataset.subtab; render(); });
