@@ -3502,7 +3502,8 @@ function renderDeal(){
         </div>
         <div class="flex gap-2 items-start">
           <select id="dealSel" class="w-56">
-            ${state.companies.map(c=>`<option value="${c.id}" ${c.id===company.id?'selected':''}>${c.name}</option>`).join('')}
+            <option value="__all__">Todos os Deals</option>
+          ${state.companies.map(c=>`<option value="${c.id}" ${c.id===company.id?'selected':''}>${c.name}</option>`).join('')}
           </select>
           ${canEdit() ? `<button id="editCo" class="btn btn-secondary">⚙ Editar</button>`:''}
         </div>
@@ -3526,12 +3527,12 @@ function renderDeal(){
   `);
   node.querySelector('#subview').appendChild(subView);
   node.querySelector('#back').onclick = ()=>{ view.tab='empresas'; view.dealId=null; view.dealTab='tarefas'; view.dealTaskOwnerFilter=''; view.dealTaskAreaFilter=''; view.dealTaskStatusFilter=''; render(); };
+
+
+
   // Adiciona opcao 'Todos os Deals' no topo do dealSel
   var _ds = node.querySelector('#dealSel');
-  if(_ds){ _ds.querySelectorAll('option[value="__all__"]').forEach(function(o){ o.remove(); }); var _ao = document.createElement('option'); _ao.value='__all__'; _ao.textContent='Todos os Deals'; _ds.insertBefore(_ao, _ds.firstChild); }
-  // Adiciona opcao 'Todos os Deals' no topo do dealSel
-  var _ds = node.querySelector('#dealSel');
-  if(_ds){ var _ao = document.createElement('option'); _ao.value='__all__'; _ao.textContent='Todos os Deals'; _ds.insertBefore(_ao, _ds.firstChild); }
+
   node.querySelector('#dealSel').onchange = e=>{ view.dealId=e.target.value; render(); };
   const editCo = node.querySelector('#editCo');
   if(editCo) editCo.onclick = ()=>openCompanyModal(company);
