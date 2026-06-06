@@ -3528,7 +3528,7 @@ function renderDeal(){
   node.querySelector('#back').onclick = ()=>{ view.tab='empresas'; view.dealId=null; view.dealTab='tarefas'; view.dealTaskOwnerFilter=''; view.dealTaskAreaFilter=''; view.dealTaskStatusFilter=''; render(); };
   // Adiciona opcao 'Todos os Deals' no topo do dealSel
   var _ds = node.querySelector('#dealSel');
-  if(_ds){ var _ao = document.createElement('option'); _ao.value='__all__'; _ao.textContent='Todos os Deals'; _ds.insertBefore(_ao, _ds.firstChild); }
+  if(_ds && !_ds.querySelector('option[value="__all__"]')){ var _ao = document.createElement('option'); _ao.value='__all__'; _ao.textContent='Todos os Deals'; _ds.insertBefore(_ao, _ds.firstChild); }
   // Adiciona opcao 'Todos os Deals' no topo do dealSel
   var _ds = node.querySelector('#dealSel');
   if(_ds){ var _ao = document.createElement('option'); _ao.value='__all__'; _ao.textContent='Todos os Deals'; _ds.insertBefore(_ao, _ds.firstChild); }
