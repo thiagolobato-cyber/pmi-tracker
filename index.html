@@ -3423,7 +3423,7 @@ function renderAllDealsView(){
     if((sf || bf) && matchCnt === 0) return;
     var det = document.createElement('details');
     det.className = 'border border-gray-200 rounded-lg overflow-hidden mb-2';
-    det.open = true;
+    det.open = false;
     var sumEl = document.createElement('summary');
     sumEl.className = 'px-4 py-2 bg-gray-50 font-semibold text-sm cursor-pointer select-none';
     sumEl.textContent = c.name + (sf || bf ? ' (' + matchCnt + ')' : '');
