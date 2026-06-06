@@ -3374,6 +3374,8 @@ function openCompareDealsView(ids){
 }
 
 function renderAllDealsView(){
+  var sf = view.dealTaskStatusFilter || '';
+  var bf = view.dealTaskBloqueioFilter || '';
   var allTasks = state.companies.flatMap(function(c){
     var d = dealOf(c.id);
     return d.tasks.map(function(t){ return Object.assign({}, t, {_f: computeTaskFields(t, c)}); });
@@ -3383,16 +3385,13 @@ function renderAllDealsView(){
   var lateCnt = allTasks.filter(function(t){ return t._f.status==='late'; }).length;
   var blkCnt  = allTasks.filter(function(t){ return t.bloqueio==='Sim'; }).length;
   var pct = total ? Math.round(doneCnt/total*100) : 0;
-  var fc = {id:'__all__', name:'Todos os Deals', signDate:null, phases:[]};
-  var subView = renderDealTasks(fc, {}, allTasks);
-  subView.querySelectorAll('#addTask,#seed,[data-edit],[data-approve-task],[data-reject-task]').forEach(function(el){ el.style.display='none'; });
   var wrap = document.createElement('div');
   wrap.className = 'space-y-4';
   var hdr = document.createElement('div');
   hdr.className = 'flex items-center justify-between flex-wrap gap-3';
   hdr.innerHTML = '<div><div class="text-xs text-gray-500"><button class="hover:underline" id="back">← Empresas</button></div>'
     + '<h1 class="text-xl font-bold">Todos os Deals</h1>'
-    + '<div class="text-sm text-gray-500">' + total + ' tarefas • ' + pct + '% concluído</div></div>';
+    + '<div class="text-sm text-gray-500">' + total + ' tarefas • ' + pct + '% concluído</div></div>';
   var selWrap = document.createElement('div');
   selWrap.className = 'flex gap-2 items-start';
   var sel = document.createElement('select');
@@ -3413,9 +3412,31 @@ function renderAllDealsView(){
     + '<div class="mini-stat"><div class="lbl">Atrasadas</div><div class="val" style="color:var(--bhub-red)">' + lateCnt + '</div></div>'
     + '<div class="mini-stat"><div class="lbl">Bloqueios</div><div class="val" style="color:#92400e">' + blkCnt + '</div></div>';
   wrap.appendChild(statsRow);
-  var sv = document.createElement('div');
-  sv.appendChild(subView);
-  wrap.appendChild(sv);
+  state.companies.forEach(function(c){
+    var d = dealOf(c.id);
+    var cTasks = d.tasks.map(function(t){ return Object.assign({}, t, {_f: computeTaskFields(t, c)}); });
+    var matchCnt = cTasks.filter(function(t){
+      if(sf && t._f.status !== sf) return false;
+      if(bf && t.bloqueio !== bf) return false;
+      return true;
+    }).length;
+    if((sf || bf) && matchCnt === 0) return;
+    var det = document.createElement('details');
+    det.className = 'border border-gray-200 rounded-lg overflow-hidden mb-2';
+    det.open = true;
+    var sumEl = document.createElement('summary');
+    sumEl.className = 'px-4 py-2 bg-gray-50 font-semibold text-sm cursor-pointer select-none';
+    sumEl.textContent = c.name + (sf || bf ? ' (' + matchCnt + ')' : '');
+    var body = document.createElement('div');
+    var subView = renderDealTasks(c, {}, cTasks);
+    subView.querySelectorAll('#addTask,#seed,[data-edit],[data-approve-task],[data-reject-task]').forEach(function(el){ el.style.display='none'; });
+    var fs = subView.querySelector('select');
+    if(fs){ var fb=fs.parentElement; while(fb && fb.parentElement !== subView){ fb=fb.parentElement; } if(fb) fb.style.display='none'; }
+    body.appendChild(subView);
+    det.appendChild(sumEl);
+    det.appendChild(body);
+    wrap.appendChild(det);
+  });
   hdr.querySelector('#back').onclick = function(){
     view.tab='empresas'; view.dealId=null; view.dealTab='tarefas';
     view.dealTaskOwnerFilter=''; view.dealTaskAreaFilter=''; view.dealTaskStatusFilter=''; view.dealTaskBloqueioFilter='';
