@@ -6271,6 +6271,7 @@ function renderPMO(){
   }
   function parseDate(s){
     if(!s) return null;
+    if(typeof s !== 'string') s = String(s);
     // dd/mm/yyyy
     const p = s.trim().split('/');
     if(p.length===3) return new Date(+p[2], +p[1]-1, +p[0]);
