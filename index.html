@@ -6269,13 +6269,23 @@ function renderPMO(){
     if(pct <= 30) return 'Em Risco';
     return 'Crítico';
   }
+  // [parseDate-robust-v1]
   function parseDate(s){
+    if(s==null||s===''||s===undefined) return null;
+    if(s instanceof Date) return isNaN(s)?null:s;
+    if(typeof s==='number') return new Date(s);
+    s=String(s).trim();
     if(!s) return null;
-    if(typeof s !== 'string') s = String(s);
-    // dd/mm/yyyy
-    const p = s.trim().split('/');
-    if(p.length===3) return new Date(+p[2], +p[1]-1, +p[0]);
-    return new Date(s);
+    // dd/mm/yyyy ou dd/mm/yy
+    var p=s.split('/');
+    if(p.length===3){
+      var yr=+p[2]; if(yr<100) yr+=2000;
+      var d=new Date(yr,+p[1]-1,+p[0]);
+      return isNaN(d)?null:d;
+    }
+    // ISO ou outro formato
+    var d=new Date(s);
+    return isNaN(d)?null:d;
   }
   function fmtDate(d){
     if(!d) return '—';
