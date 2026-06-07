@@ -6348,6 +6348,70 @@ function renderPMO(){
   function saveWL(arr){ localStorage.setItem(WL_KEY, JSON.stringify(arr)); }
 
   function buildWatchlist(){
+
+// [hb-debug-applied]
+(function(){
+  if(document.getElementById('hb-debug-panel')) return;
+  // Atrasar para garantir que state esteja carregado
+  setTimeout(function(){
+    var html='<div id="hb-debug-panel" style="background:#1e1b4b;color:#e0e7ff;padding:16px;border-radius:8px;margin-bottom:16px;font-family:monospace;font-size:11px;max-height:500px;overflow:auto;">';
+    html+='<b style="font-size:13px;color:#a5b4fc">🔬 HB DEBUG — status reais dos tasks</b>';
+    html+=' <button onclick="document.getElementById('hb-debug-panel').remove()" style="float:right;background:#dc2626;color:#fff;border:none;border-radius:4px;padding:2px 8px;cursor:pointer">✕</button><br><br>';
+
+    var cos=state&&state.companies||[];
+    if(!cos.length){ html+='<span style="color:#f87171">state.companies vazio ou não carregado ainda</span></div>'; }
+
+    cos.slice(0,5).forEach(function(co){
+      var dd=state.deals&&(state.deals[co.id]||state.deals[co.company_id]);
+      var tasks=(dd&&dd.tasks)||[];
+      var health=(dd&&dd.health)||{};
+      html+='<div style="border-top:1px solid #3730a3;padding-top:8px;margin-top:8px;">';
+      html+='<b style="color:#818cf8">'+((co.empresa||co.name||co.nome||co.id)+'').substring(0,30)+'</b>';
+      html+=' — '+tasks.length+' tasks';
+      html+=' | health: '+JSON.stringify(health).substring(0,80);
+      html+='<br>';
+      tasks.slice(0,8).forEach(function(t,i){
+        var fields={
+          status: t.status,
+          prazo: t.prazo,
+          prevista: t.prevista,
+          data_prevista: t.data_prevista,
+          percentual: t.percentual,
+          concluido: t.concluido,
+          completado: t.completado,
+          situacao: t.situacao,
+          state: t.state,
+          fase: t.fase
+        };
+        // Mostrar só campos não-nulos
+        var nonNull=Object.entries(fields).filter(function(kv){ return kv[1]!=null&&kv[1]!==''&&kv[1]!==undefined; });
+        html+='  <span style="color:#6ee7b7">#'+i+'</span> '+(t.nome||t.name||t.tarefa||t.titulo||'?').substring(0,25)+' → ';
+        if(nonNull.length===0){
+          html+='<span style="color:#f87171">NENHUM campo relevante encontrado!</span>';
+          // Mostrar todos os campos do objeto
+          html+=' keys='+Object.keys(t).join(',').substring(0,100);
+        } else {
+          html+=nonNull.map(function(kv){ return '<b style="color:#fcd34d">'+kv[0]+'</b>='+JSON.stringify(kv[1]); }).join(' | ');
+        }
+        html+='<br>';
+      });
+      html+='</div>';
+    });
+    html+='</div>';
+
+    // Inserir no início do container do renderPMO
+    var container=document.querySelector('#main-content')||document.querySelector('.content')||document.querySelector('main')||document.body;
+    var tmp=document.createElement('div');
+    tmp.innerHTML=html;
+    // Tentar inserir logo após o título PMO·Cockpit
+    var h2s=document.querySelectorAll('h2,h3');
+    var target=null;
+    for(var i=0;i<h2s.length;i++){ if(h2s[i].textContent.includes('PMO')||h2s[i].textContent.includes('Cockpit')||h2s[i].textContent.includes('HB')){ target=h2s[i]; break; } }
+    if(target) target.parentNode.insertBefore(tmp.firstChild,target.nextSibling);
+    else container.prepend(tmp.firstChild);
+  }, 800);
+})();
+
     const sec = document.createElement('div');
     sec.style.cssText = 'margin-bottom:32px';
     sec.innerHTML = '<h2 style="font-size:16px;font-weight:700;color:#1e3a5f;margin:0 0 12px;display:flex;align-items:center;gap:8px">' +
