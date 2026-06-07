@@ -6249,40 +6249,48 @@ function renderHoje(){
 }
 
 // [pmo-v1] renderPMO function
+// [fix6-applied]
 // [fix5-applied]
 // [pmo-v2-applied]
 function renderPMO(){
-// [fix5-classifiers]
-    // Classificadores robustos — batem com o dashboard
+// [fix6-classifiers]
+    // Classificadores — usam f_status (campo calculado pelo dashboard via taskFromDb)
+    // Valores: 'late' | 'done' | 'at-risk' | 'on-track' | string vazia
     function isTaskDone(t){
       if(!t) return false;
+      // Primário: f_status (campo calculado, mesmo que o dashboard usa)
+      var fs=String(t.f_status||'').toLowerCase().trim();
+      if(fs==='done'||fs==='completed'||fs==='concluido'||fs==='concluida') return true;
+      // Secundário: status string direto
       var st=String(t.status||'').toLowerCase().trim();
       if(st==='concluída'||st==='concluida'||st==='concluido'||st==='done'||st==='completed') return true;
-      // fallback: completado numérico >= 100 (campo de progresso)
+      // Terciário: campo numérico >= 100
       if(typeof t.completado==='number' && t.completado>=100) return true;
       if(typeof t.percentual==='number' && t.percentual>=100) return true;
       return false;
     }
     function isTaskLate(t){
       if(!t) return false;
-      if(isTaskDone(t)) return false; // concluída não é atrasada
+      if(isTaskDone(t)) return false;
+      // Primário: f_status (campo calculado, mesmo que o dashboard usa)
+      var fs=String(t.f_status||'').toLowerCase().trim();
+      if(fs==='late'||fs==='delayed'||fs==='overdue'||fs==='atrasado'||fs==='atrasada') return true;
+      // Secundário: status string direto
       var st=String(t.status||'').toLowerCase().trim();
       if(st==='atrasada'||st==='atrasado'||st==='late'||st==='overdue'||st==='delayed') return true;
-      // fallback: tem prazo e prazo já passou
-      var prazo=parseDate(t.prazo||t.deadline||t.due_date);
+      // Terciário: comparação de data (usando todos os campos de data possíveis)
+      var prazo=parseDate(t.prazo||t.prevista||t.data_prevista||t.deadline||t.due_date);
       if(prazo && prazo < new Date()) return true;
       return false;
     }
     function isTaskAtRisk(t){
       if(!t||isTaskDone(t)||isTaskLate(t)) return false;
+      var fs=String(t.f_status||'').toLowerCase().trim();
+      if(fs==='at-risk'||fs==='risk'||fs==='risco'||fs==='alerta'||fs==='warning') return true;
       var st=String(t.status||'').toLowerCase().trim();
-      if(st==='risco'||st==='em risco'||st==='at risk'||st==='alerta'||st==='warning') return true;
-      // prazo nos próximos 14 dias
-      var prazo=parseDate(t.prazo||t.deadline||t.due_date);
-      if(prazo){
-        var diff=(prazo-new Date())/(1000*60*60*24);
-        if(diff>=0 && diff<=14) return true;
-      }
+      if(st==='risco'||st==='em risco'||st==='at risk'||st==='alerta') return true;
+      var prazo=parseDate(t.prazo||t.prevista||t.data_prevista||t.deadline||t.due_date);
+      if(prazo){ var diff=(prazo-new Date())/(1000*60*60*24); if(diff>=0&&diff<=14) return true; }
       return false;
     }
     function isTaskOnTrack(t){
@@ -6594,9 +6602,7 @@ function renderPMO(){
       });
     });
 
-    function tasksLate(){
-      return allTasks.filter(function(x){ return x.task.status==='atrasada'||x.task.status==='atrasado'; });
-    }
+    function tasksLate(){ return allTasks.filter(function(x){ return isTaskLate(x.task||x); }); }
     function tasksInWindow(days){
       return allTasks.filter(function(x){
         const d = parseDate(x.task.prevista||x.task.data_prevista||x.task.prazo);
