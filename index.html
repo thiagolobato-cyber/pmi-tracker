@@ -6249,8 +6249,45 @@ function renderHoje(){
 }
 
 // [pmo-v1] renderPMO function
+// [fix5-applied]
 // [pmo-v2-applied]
 function renderPMO(){
+// [fix5-classifiers]
+    // Classificadores robustos — batem com o dashboard
+    function isTaskDone(t){
+      if(!t) return false;
+      var st=String(t.status||'').toLowerCase().trim();
+      if(st==='concluída'||st==='concluida'||st==='concluido'||st==='done'||st==='completed') return true;
+      // fallback: completado numérico >= 100 (campo de progresso)
+      if(typeof t.completado==='number' && t.completado>=100) return true;
+      if(typeof t.percentual==='number' && t.percentual>=100) return true;
+      return false;
+    }
+    function isTaskLate(t){
+      if(!t) return false;
+      if(isTaskDone(t)) return false; // concluída não é atrasada
+      var st=String(t.status||'').toLowerCase().trim();
+      if(st==='atrasada'||st==='atrasado'||st==='late'||st==='overdue'||st==='delayed') return true;
+      // fallback: tem prazo e prazo já passou
+      var prazo=parseDate(t.prazo||t.deadline||t.due_date);
+      if(prazo && prazo < new Date()) return true;
+      return false;
+    }
+    function isTaskAtRisk(t){
+      if(!t||isTaskDone(t)||isTaskLate(t)) return false;
+      var st=String(t.status||'').toLowerCase().trim();
+      if(st==='risco'||st==='em risco'||st==='at risk'||st==='alerta'||st==='warning') return true;
+      // prazo nos próximos 14 dias
+      var prazo=parseDate(t.prazo||t.deadline||t.due_date);
+      if(prazo){
+        var diff=(prazo-new Date())/(1000*60*60*24);
+        if(diff>=0 && diff<=14) return true;
+      }
+      return false;
+    }
+    function isTaskOnTrack(t){
+      return t && !isTaskDone(t) && !isTaskLate(t) && !isTaskAtRisk(t);
+    }
   const node = document.createElement('div');
   node.style.cssText = 'padding:20px;max-width:1100px;margin:0 auto;font-family:inherit';
 
@@ -6269,23 +6306,30 @@ function renderPMO(){
     if(pct <= 30) return 'Em Risco';
     return 'Crítico';
   }
-  // [parseDate-robust-v1]
+// [parseDate-robust-v2]
   function parseDate(s){
     if(s==null||s===''||s===undefined) return null;
-    if(s instanceof Date) return isNaN(s)?null:s;
-    if(typeof s==='number') return new Date(s);
+    if(s instanceof Date) return isNaN(s.getTime())?null:s;
+    if(typeof s==='number'){
+      if(s<=0) return null;
+      var d=s>1e12?new Date(s):new Date(s*1000);
+      return d.getFullYear()>=2000?d:null;
+    }
     s=String(s).trim();
     if(!s) return null;
-    // dd/mm/yyyy ou dd/mm/yy
+    if(/^\d{10,}$/.test(s)){
+      var ts=Number(s);
+      var d2=ts>1e12?new Date(ts):new Date(ts*1000);
+      return d2.getFullYear()>=2000?d2:null;
+    }
     var p=s.split('/');
     if(p.length===3){
       var yr=+p[2]; if(yr<100) yr+=2000;
-      var d=new Date(yr,+p[1]-1,+p[0]);
-      return isNaN(d)?null:d;
+      var d3=new Date(yr,+p[1]-1,+p[0]);
+      return isNaN(d3.getTime())?null:d3;
     }
-    // ISO ou outro formato
-    var d=new Date(s);
-    return isNaN(d)?null:d;
+    var d4=new Date(s);
+    return isNaN(d4.getTime())||d4.getFullYear()<2000?null:d4;
   }
   function fmtDate(d){
     if(!d) return '—';
@@ -6325,7 +6369,7 @@ function renderPMO(){
       wl.forEach(function(name, i){
         const deal = deals.find(function(d){ return (d.empresa||d.name||d.nome||'') === name; });
         const tasks = deal ? getTasks(deal) : [];
-        const late = tasks.filter(function(t){ return t.status==='late'; }).length;
+        const late = tasks.filter(function(t){ return isTaskLate(t); }).length;
         const pct = tasks.length ? Math.round(late/tasks.length*100) : 0;
         const card = document.createElement('div');
         card.style.cssText = 'background:#fff;border:1.5px solid ' + healthColor(pct) + ';border-radius:10px;padding:10px 14px;min-width:140px;max-width:180px;cursor:pointer;position:relative;box-shadow:0 1px 3px rgba(0,0,0,.06)';
@@ -6411,8 +6455,8 @@ function renderPMO(){
     // Gather all deals with prevista date
     const rows = deals.map(function(d){
       const tasks = getTasks(d);
-      const late = tasks.filter(function(t){ return t.status==='late'; }).length;
-      const done = tasks.filter(function(t){ return t.status==='done'; }).length;
+      const late = tasks.filter(function(t){ return isTaskLate(t); }).length;
+      const done = tasks.filter(function(t){ return isTaskDone(t); }).length;
       const pct = tasks.length ? Math.round(late/tasks.length*100) : 0;
       var _tdates=getTasks(d).map(function(t){return parseDate(t.prazo);}).filter(Boolean); var prevista=_tdates.length?new Date(Math.max.apply(null,_tdates)):null;
       return { name: d.empresa||d.name||d.nome||'—', tasks: tasks.length, late, done, pct, prevista, d };
