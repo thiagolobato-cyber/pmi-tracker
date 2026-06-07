@@ -1503,6 +1503,7 @@ function renderShell(){
   else if(view.tab==='raid') content.appendChild(renderRaidPortfolio());
   else if(view.tab==='template') content.appendChild(renderTemplate());
   else if(view.tab==='deal') content.appendChild(renderDeal());
+  else if(view.tab==='pmo') content.appendChild(renderPMO());
   else if(view.tab==='usuarios') content.appendChild(renderUsuarios());
   mainArea.appendChild(content);
 
@@ -1527,6 +1528,7 @@ function renderSidebar(){
   ];
   const configTabs = [
     ['template', 'Template',  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="13" y2="16"/></svg>'],
+    ['pmo', 'PMO', '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="14" x2="8" y2="14"/><line x1="12" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="8" y2="18"/><line x1="12" y1="18" x2="16" y2="18"/></svg>'],
     ['usuarios', 'Usuários',  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9.5" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>'],
   ];
   const collapsed = view.sidebarCollapsed ? 'collapsed' : '';
@@ -1545,7 +1547,7 @@ function renderSidebar(){
         <div class="sidebar-group-label">Portfólio</div>
         ${tabHtml(portfolioTabs)}
         <div class="sidebar-group-label" style="margin-top:.5rem">Configurações</div>
-        ${tabHtml(configTabs.filter(([k])=> k!=='usuarios' || canAdmin()))}
+        ${tabHtml(configTabs.filter(([k])=> (k!=='usuarios' && k!=='pmo') || canAdmin()))}
         <button class="sidebar-collapse-btn" id="sidebarToggle" title="Recolher / expandir sidebar (tecla [)">${view.sidebarCollapsed ? chevronExpand : chevronCollapse}</button>
       </nav>
       <div class="sidebar-footer">
@@ -6243,6 +6245,413 @@ function renderHoje(){
     }
   }
 
+  return node;
+}
+
+// [pmo-v1] renderPMO function
+function renderPMO(){
+  const node = document.createElement('div');
+  node.style.cssText = 'padding:20px;max-width:1100px;margin:0 auto;font-family:inherit';
+
+  // ── Helpers ──────────────────────────────────────────────────────────────
+  function getDeals(){ return state.data ? (state.data.deals || state.data.rows || []) : []; }
+  function getTasks(deal){ return (deal.tarefas || deal.tasks || []); }
+  function getMitigacoes(deal){ return (deal.mitigacoes || deal.acoes_mitigacao || deal['ações de mitigação'] || []); }
+
+  function healthColor(pct){
+    if(pct <= 15) return '#16a34a';
+    if(pct <= 30) return '#d97706';
+    return '#dc2626';
+  }
+  function healthLabel(pct){
+    if(pct <= 15) return 'On Track';
+    if(pct <= 30) return 'Em Risco';
+    return 'Crítico';
+  }
+  function parseDate(s){
+    if(!s) return null;
+    // dd/mm/yyyy
+    const p = s.trim().split('/');
+    if(p.length===3) return new Date(+p[2], +p[1]-1, +p[0]);
+    return new Date(s);
+  }
+  function fmtDate(d){
+    if(!d) return '—';
+    return d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'});
+  }
+  function daysUntil(d){
+    if(!d) return null;
+    return Math.ceil((d - new Date()) / 86400000);
+  }
+
+  const deals = getDeals();
+
+  // ── SECTION 1: WATCHLIST ─────────────────────────────────────────────────
+  const WL_KEY = 'pmo_watchlist_v1';
+  function loadWL(){ try{ return JSON.parse(localStorage.getItem(WL_KEY)||'[]'); }catch(e){ return []; } }
+  function saveWL(arr){ localStorage.setItem(WL_KEY, JSON.stringify(arr)); }
+
+  function buildWatchlist(){
+    const sec = document.createElement('div');
+    sec.style.cssText = 'margin-bottom:32px';
+    sec.innerHTML = '<h2 style="font-size:16px;font-weight:700;color:#1e3a5f;margin:0 0 12px;display:flex;align-items:center;gap:8px">' +
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0171E4" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>' +
+      'Watchlist</h2>';
+
+    let wl = loadWL();
+
+    // Board row
+    const board = document.createElement('div');
+    board.style.cssText = 'display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px;min-height:60px;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:10px;padding:10px;align-items:flex-start';
+
+    function renderWLCards(){
+      board.innerHTML = '';
+      if(wl.length === 0){
+        board.innerHTML = '<span style="color:#94a3b8;font-size:13px;margin:auto">Nenhuma empresa na watchlist. Adicione abaixo ↓</span>';
+        return;
+      }
+      wl.forEach(function(name, i){
+        const deal = deals.find(function(d){ return (d.empresa||d.name||d.nome||'') === name; });
+        const tasks = deal ? getTasks(deal) : [];
+        const late = tasks.filter(function(t){ return t.status==='atrasada'||t.status==='atrasado'; }).length;
+        const pct = tasks.length ? Math.round(late/tasks.length*100) : 0;
+        const card = document.createElement('div');
+        card.style.cssText = 'background:#fff;border:1.5px solid ' + healthColor(pct) + ';border-radius:10px;padding:10px 14px;min-width:140px;max-width:180px;cursor:pointer;position:relative;box-shadow:0 1px 3px rgba(0,0,0,.06)';
+        card.title = 'Clique para abrir o deal';
+        const removeBtn = document.createElement('button');
+        removeBtn.textContent = '×';
+        removeBtn.style.cssText = 'position:absolute;top:4px;right:6px;background:none;border:none;cursor:pointer;font-size:16px;color:#94a3b8;line-height:1;padding:0';
+        removeBtn.onclick = function(e){
+          e.stopPropagation();
+          wl.splice(i, 1);
+          saveWL(wl);
+          renderWLCards();
+          renderDropdown();
+        };
+        const dot = document.createElement('div');
+        dot.style.cssText = 'width:8px;height:8px;border-radius:50%;background:' + healthColor(pct) + ';display:inline-block;margin-right:6px';
+        const nameSpan = document.createElement('span');
+        nameSpan.style.cssText = 'font-size:13px;font-weight:600;color:#1e293b';
+        nameSpan.textContent = name;
+        const info = document.createElement('div');
+        info.style.cssText = 'margin-top:6px;font-size:11px;color:#64748b';
+        info.textContent = tasks.length + ' tarefas · ' + pct + '% atrasadas';
+        const badge = document.createElement('div');
+        badge.style.cssText = 'margin-top:4px;font-size:10px;font-weight:700;color:' + healthColor(pct);
+        badge.textContent = healthLabel(pct);
+        card.appendChild(removeBtn);
+        card.appendChild(dot);
+        card.appendChild(nameSpan);
+        card.appendChild(info);
+        card.appendChild(badge);
+        card.onclick = function(){
+          if(deal){
+            view.dealId = deal.id || deal._id || '';
+            view.tab = 'deal';
+            render();
+          }
+        };
+        board.appendChild(card);
+      });
+    }
+
+    // Add dropdown
+    const addRow = document.createElement('div');
+    addRow.style.cssText = 'display:flex;gap:8px;align-items:center';
+    const sel = document.createElement('select');
+    sel.style.cssText = 'border:1px solid #cbd5e1;border-radius:6px;padding:6px 10px;font-size:13px;color:#334155;background:#fff';
+    function renderDropdown(){
+      sel.innerHTML = '<option value="">+ Adicionar empresa...</option>';
+      deals.forEach(function(d){
+        const name = d.empresa||d.name||d.nome||'';
+        if(!name || wl.includes(name)) return;
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        sel.appendChild(opt);
+      });
+    }
+    sel.onchange = function(){
+      if(!sel.value) return;
+      wl.push(sel.value);
+      saveWL(wl);
+      renderWLCards();
+      renderDropdown();
+      sel.value = '';
+    };
+    addRow.appendChild(sel);
+    sec.appendChild(board);
+    sec.appendChild(addRow);
+    renderWLCards();
+    renderDropdown();
+    return sec;
+  }
+
+  // ── SECTION 2: TIMELINE ──────────────────────────────────────────────────
+  function buildTimeline(){
+    const sec = document.createElement('div');
+    sec.style.cssText = 'margin-bottom:32px';
+    sec.innerHTML = '<h2 style="font-size:16px;font-weight:700;color:#1e3a5f;margin:0 0 12px;display:flex;align-items:center;gap:8px">' +
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0171E4" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>' +
+      'Timeline — Cronograma</h2>';
+
+    const now = new Date();
+    // Gather all deals with prevista date
+    const rows = deals.map(function(d){
+      const tasks = getTasks(d);
+      const late = tasks.filter(function(t){ return t.status==='atrasada'||t.status==='atrasado'; }).length;
+      const done = tasks.filter(function(t){ return t.status==='concluida'||t.status==='concluído'||t.status==='concluida'; }).length;
+      const pct = tasks.length ? Math.round(late/tasks.length*100) : 0;
+      const prevista = parseDate(d.prevista || d.data_prevista || d.conclusao_prevista);
+      return { name: d.empresa||d.name||d.nome||'—', tasks: tasks.length, late, done, pct, prevista, d };
+    }).filter(function(r){ return r.tasks > 0; });
+
+    if(rows.length === 0){
+      sec.innerHTML += '<p style="color:#64748b;font-size:13px">Nenhum deal com tarefas encontrado.</p>';
+      return sec;
+    }
+
+    // Find date range
+    const dates = rows.map(function(r){ return r.prevista; }).filter(Boolean);
+    const minD = dates.length ? new Date(Math.min.apply(null, dates)) : now;
+    const maxD = dates.length ? new Date(Math.max.apply(null, dates)) : new Date(now.getFullYear(), now.getMonth()+3, 1);
+    if(maxD <= now) maxD.setMonth(maxD.getMonth()+1);
+
+    const totalMs = maxD - minD || 1;
+
+    function pctPos(d){
+      if(!d) return null;
+      return Math.max(0, Math.min(100, (d - minD) / totalMs * 100));
+    }
+    const nowPct = pctPos(now);
+
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px;overflow-x:auto';
+
+    // Header dates
+    const headerRow = document.createElement('div');
+    headerRow.style.cssText = 'display:flex;margin-left:200px;margin-bottom:6px;position:relative;height:20px';
+    const months = [];
+    const cur = new Date(minD.getFullYear(), minD.getMonth(), 1);
+    while(cur <= maxD){
+      months.push(new Date(cur));
+      cur.setMonth(cur.getMonth()+1);
+    }
+    months.forEach(function(m){
+      const lbl = document.createElement('div');
+      const lp = pctPos(m);
+      lbl.style.cssText = 'position:absolute;left:' + lp + '%;font-size:10px;color:#64748b;transform:translateX(-50%);white-space:nowrap';
+      lbl.textContent = m.toLocaleDateString('pt-BR',{month:'short',year:'2-digit'});
+      headerRow.appendChild(lbl);
+    });
+    wrap.appendChild(headerRow);
+
+    // Rows
+    rows.forEach(function(r){
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;margin-bottom:10px;gap:10px';
+
+      const label = document.createElement('div');
+      label.style.cssText = 'width:190px;flex-shrink:0;font-size:12px;font-weight:600;color:#334155;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer';
+      label.title = r.name;
+      label.textContent = r.name;
+      label.onclick = function(){
+        view.dealId = r.d.id || r.d._id || '';
+        view.tab = 'deal';
+        render();
+      };
+
+      const track = document.createElement('div');
+      track.style.cssText = 'flex:1;height:28px;background:#f1f5f9;border-radius:8px;position:relative;min-width:200px';
+
+      // Bar from start to prevista
+      if(r.prevista){
+        const barEnd = pctPos(r.prevista);
+        const bar = document.createElement('div');
+        bar.style.cssText = 'position:absolute;left:0;top:4px;height:20px;width:' + barEnd + '%;background:' + healthColor(r.pct) + ';border-radius:6px;opacity:.85;transition:width .3s';
+        track.appendChild(bar);
+
+        // Progress within bar (done tasks)
+        const donePct = r.tasks ? r.done/r.tasks : 0;
+        const prog = document.createElement('div');
+        prog.style.cssText = 'position:absolute;left:0;top:8px;height:12px;width:' + (barEnd*donePct) + '%;background:rgba(255,255,255,.45);border-radius:4px';
+        track.appendChild(prog);
+
+        // Prevista marker
+        const marker = document.createElement('div');
+        marker.style.cssText = 'position:absolute;left:' + barEnd + '%;top:2px;width:2px;height:24px;background:#1e3a5f;border-radius:2px';
+        marker.title = 'Prevista: ' + fmtDate(r.prevista);
+        track.appendChild(marker);
+
+        // Label on bar
+        const bLbl = document.createElement('div');
+        bLbl.style.cssText = 'position:absolute;left:4px;top:6px;font-size:10px;color:#fff;font-weight:600;pointer-events:none;white-space:nowrap';
+        bLbl.textContent = r.done + '/' + r.tasks + ' · ' + healthLabel(r.pct);
+        track.appendChild(bLbl);
+      }
+
+      // TODAY line
+      const todayLine = document.createElement('div');
+      todayLine.style.cssText = 'position:absolute;left:' + nowPct + '%;top:0;width:2px;height:100%;background:#ef4444;border-radius:2px;z-index:2';
+      todayLine.title = 'Hoje';
+      track.appendChild(todayLine);
+
+      row.appendChild(label);
+      row.appendChild(track);
+      wrap.appendChild(row);
+    });
+
+    // Legend
+    const legend = document.createElement('div');
+    legend.style.cssText = 'margin-top:12px;display:flex;gap:16px;font-size:11px;color:#64748b;align-items:center';
+    legend.innerHTML = '<span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:3px;background:#16a34a;display:inline-block"></span>On Track ≤15%</span>' +
+      '<span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:3px;background:#d97706;display:inline-block"></span>Em Risco 15-30%</span>' +
+      '<span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:3px;background:#dc2626;display:inline-block"></span>Crítico >30%</span>' +
+      '<span style="display:flex;align-items:center;gap:4px"><span style="width:2px;height:14px;background:#ef4444;display:inline-block"></span>Hoje</span>' +
+      '<span style="display:flex;align-items:center;gap:4px"><span style="width:2px;height:14px;background:#1e3a5f;display:inline-block"></span>Prevista</span>';
+
+    sec.appendChild(wrap);
+    sec.appendChild(legend);
+    return sec;
+  }
+
+  // ── SECTION 3: HOT LIST ───────────────────────────────────────────────────
+  function buildHotList(){
+    const sec = document.createElement('div');
+    sec.style.cssText = 'margin-bottom:32px';
+    sec.innerHTML = '<h2 style="font-size:16px;font-weight:700;color:#1e3a5f;margin:0 0 12px;display:flex;align-items:center;gap:8px">' +
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><path d="M12 2c0 0-4 5-4 9a4 4 0 0 0 8 0c0-4-4-9-4-9z"/><path d="M12 12c0 0-2 2-2 4a2 2 0 0 0 4 0c0-2-2-4-2-4z"/></svg>' +
+      'Hot List — Vencimentos &amp; Atrasos</h2>';
+
+    const now = new Date();
+
+    // Collect all tasks across all deals with metadata
+    const allTasks = [];
+    const allMit = [];
+    deals.forEach(function(d){
+      const empresa = d.empresa||d.name||d.nome||'—';
+      getTasks(d).forEach(function(t){
+        allTasks.push({ empresa, task: t, deal: d });
+      });
+      getMitigacoes(d).forEach(function(m){
+        allMit.push({ empresa, mit: m, deal: d });
+      });
+    });
+
+    function tasksLate(){
+      return allTasks.filter(function(x){ return x.task.status==='atrasada'||x.task.status==='atrasado'; });
+    }
+    function tasksInWindow(days){
+      return allTasks.filter(function(x){
+        const d = parseDate(x.task.prevista||x.task.data_prevista||x.task.prazo);
+        if(!d) return false;
+        const u = daysUntil(d);
+        return u !== null && u >= 0 && u <= days;
+      });
+    }
+    function mitInWindow(days){
+      return allMit.filter(function(x){
+        const d = parseDate(x.mit.prazo||x.mit.data_prazo||x.mit.vencimento);
+        if(!d) return false;
+        const u = daysUntil(d);
+        return u !== null && u >= 0 && u <= days;
+      });
+    }
+
+    function taskRow(x){
+      const t = x.task;
+      const name = t.nome||t.name||t.tarefa||t.titulo||'Tarefa';
+      const d = parseDate(t.prevista||t.data_prevista||t.prazo);
+      const u = daysUntil(d);
+      const urgColor = u !== null ? (u <= 0 ? '#dc2626' : u <= 15 ? '#d97706' : '#16a34a') : '#64748b';
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;border-radius:6px;background:#fff;margin-bottom:4px;border:1px solid #e2e8f0">' +
+        '<span style="font-size:12px;color:#334155"><b style="color:#1e3a5f">' + x.empresa + '</b> · ' + name + '</span>' +
+        '<span style="font-size:11px;font-weight:700;color:' + urgColor + ';white-space:nowrap;margin-left:10px">' +
+          (d ? fmtDate(d) + (u!==null?' ('+u+'d)':'') : '—') +
+        '</span></div>';
+    }
+    function mitRow(x){
+      const m = x.mit;
+      const name = m.acao||m.nome||m.descricao||m.titulo||'Ação';
+      const d = parseDate(m.prazo||m.data_prazo||m.vencimento);
+      const u = daysUntil(d);
+      const urgColor = u !== null ? (u <= 0 ? '#dc2626' : u <= 15 ? '#d97706' : '#16a34a') : '#64748b';
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;border-radius:6px;background:#fff5f5;margin-bottom:4px;border:1px solid #fecaca">' +
+        '<span style="font-size:12px;color:#334155">🔔 <b style="color:#1e3a5f">' + x.empresa + '</b> · ' + name + '</span>' +
+        '<span style="font-size:11px;font-weight:700;color:' + urgColor + ';white-space:nowrap;margin-left:10px">' +
+          (d ? fmtDate(d) + (u!==null?' ('+u+'d)':'') : '—') +
+        '</span></div>';
+    }
+
+    const buckets = [
+      {
+        key: 'late', label: '🔴 Tarefas Atrasadas', color: '#dc2626',
+        fn: function(){ return tasksLate(); },
+        rowFn: taskRow
+      },
+      {
+        key: 'mit', label: '🔔 Ações de Mitigação vencendo (30d)', color: '#7c3aed',
+        fn: function(){ return mitInWindow(30); },
+        rowFn: mitRow
+      },
+      {
+        key: 'd15', label: '⚡ Tarefas vencendo em 15 dias', color: '#d97706',
+        fn: function(){ return tasksInWindow(15); },
+        rowFn: taskRow
+      },
+      {
+        key: 'd30', label: '📅 Tarefas vencendo em 30 dias', color: '#0171E4',
+        fn: function(){ return tasksInWindow(30); },
+        rowFn: taskRow
+      },
+      {
+        key: 'd45', label: '📆 Tarefas vencendo em 45 dias', color: '#0891b2',
+        fn: function(){ return tasksInWindow(45); },
+        rowFn: taskRow
+      },
+      {
+        key: 'd60', label: '🗓️ Tarefas vencendo em 60 dias', color: '#16a34a',
+        fn: function(){ return tasksInWindow(60); },
+        rowFn: taskRow
+      }
+    ];
+
+    buckets.forEach(function(b){
+      const items = b.fn();
+      const details = document.createElement('details');
+      details.style.cssText = 'background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;margin-bottom:10px;overflow:hidden';
+      const summary = document.createElement('summary');
+      summary.style.cssText = 'padding:12px 16px;cursor:pointer;font-size:13px;font-weight:700;color:#1e293b;display:flex;justify-content:space-between;align-items:center;list-style:none;user-select:none';
+      summary.innerHTML = '<span>' + b.label + '</span>' +
+        '<span style="background:' + b.color + ';color:#fff;border-radius:20px;padding:2px 10px;font-size:12px;min-width:24px;text-align:center">' + items.length + '</span>';
+      const body = document.createElement('div');
+      body.style.cssText = 'padding:0 12px 12px';
+      if(items.length === 0){
+        body.innerHTML = '<p style="color:#94a3b8;font-size:12px;margin:8px 0">Nenhum item nesta janela.</p>';
+      } else {
+        body.innerHTML = items.map(b.rowFn).join('');
+      }
+      details.appendChild(summary);
+      details.appendChild(body);
+      sec.appendChild(details);
+    });
+
+    return sec;
+  }
+
+  // ── Assemble ──────────────────────────────────────────────────────────────
+  const header = document.createElement('div');
+  header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;padding-bottom:16px;border-bottom:2px solid #e2e8f0';
+  header.innerHTML = '<div>' +
+    '<h1 style="margin:0;font-size:22px;font-weight:800;color:#1e3a5f">PMO · Cockpit</h1>' +
+    '<p style="margin:4px 0 0;font-size:13px;color:#64748b">Visão exclusiva de administradores · Dados em tempo real</p>' +
+    '</div>' +
+    '<span style="background:#0171E4;color:#fff;font-size:11px;font-weight:700;border-radius:6px;padding:4px 10px">ADMIN</span>';
+
+  node.appendChild(header);
+  node.appendChild(buildWatchlist());
+  node.appendChild(buildTimeline());
+  node.appendChild(buildHotList());
   return node;
 }
 
