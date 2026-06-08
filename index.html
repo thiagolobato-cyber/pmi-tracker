@@ -6249,11 +6249,80 @@ function renderHoje(){
 }
 
 // [pmo-v1] renderPMO function
+// [fix7-applied]
 // [fix6-applied]
 // [fix5-applied]
 // [pmo-v2-applied]
 function renderPMO(){
-// [fix6-classifiers]
+// [fix7-precompute]
+    (function fix7Precompute(){
+      try {
+        if(!state||!state.companies||!state.deals) return;
+
+        // ── Estratégia 0: aggregateData() já retorna tasks com f_status calculado ──
+        // Fazemos match pelo campo ref ou id e copiamos o f_status de volta.
+        try {
+          if(typeof aggregateData==='function'){
+            var allComp=aggregateData();
+            if(allComp&&allComp.length){
+              // Montar índice: ref → f_status  +  id → f_status
+              var byRef={}, byId={};
+              allComp.forEach(function(t){
+                if(t.ref!=null)      byRef[String(t.ref)]=t.f_status;
+                if(t.id!=null)       byId[String(t.id)]=t.f_status;
+              });
+              state.companies.forEach(function(co){
+                var deal=state.deals[co.id]||state.deals[co.company_id];
+                if(!deal||!deal.tasks) return;
+                deal.tasks.forEach(function(t){
+                  var fs=byRef[String(t.ref)]||byId[String(t.id)];
+                  if(fs!=null) t.f_status=fs;
+                });
+              });
+              return; // S0 concluída
+            }
+          }
+        } catch(eS0){ console.warn('[fix7-S0]',eS0); }
+
+        // ── Estratégias 1 e 2: computeTaskFields por empresa ─────────────────────
+        if(typeof computeTaskFields!=='function') return;
+
+        state.companies.forEach(function(co){
+          var deal=state.deals[co.id]||state.deals[co.company_id];
+          if(!deal||!deal.tasks||!deal.tasks.length) return;
+
+          // S1: chamar com array completo
+          try {
+            var res=computeTaskFields(co, deal.tasks);
+            if(Array.isArray(res)&&res.length){
+              res.forEach(function(r,i){
+                if(r&&r.f_status!=null&&deal.tasks[i]) deal.tasks[i].f_status=r.f_status;
+              });
+              return;
+            }
+            // Se retornou objeto único com f_status, também serve (array de 1)
+            if(res&&!Array.isArray(res)&&res.f_status!=null&&deal.tasks[0]){
+              deal.tasks[0].f_status=res.f_status;
+              return;
+            }
+          } catch(eS1){}
+
+          // S2: uma task por vez
+          deal.tasks.forEach(function(t){
+            if(t.f_status) return; // já calculado (S0 ou run anterior)
+            try {
+              var r=computeTaskFields(co, t);
+              if(!r) return;
+              if(Array.isArray(r)) r=r[0];
+              if(r&&r.f_status!=null) t.f_status=r.f_status;
+            } catch(eS2){}
+          });
+        });
+
+      } catch(eOuter){ console.warn('[fix7-outer]',eOuter); }
+    })();
+
+    // [fix6-classifiers]
     // Classificadores — usam f_status (campo calculado pelo dashboard via taskFromDb)
     // Valores: 'late' | 'done' | 'at-risk' | 'on-track' | string vazia
     function isTaskDone(t){
