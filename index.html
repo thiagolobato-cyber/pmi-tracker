@@ -2265,22 +2265,22 @@ function renderDashboard(){
             <div class="kpi-value">${data.length}</div>
             <div class="kpi-sub">em acompanhamento</div>
           </div>
-          <div class="kpi" data-kpi-nav="empresas" data-kpi-sort="done" style="cursor:pointer" title="Ver deals ordenados por tarefas concluídas">
+          <div class="kpi" data-kpi-nav="empresas" data-kpi-sort="done" data-kpi-filter="done" style="cursor:pointer" title="Ver deals com tasks concluídas">
             <div class="kpi-head"><div class="kpi-label">Tasks Done</div><div class="kpi-icon kpi-icon-green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div></div>
             <div class="kpi-value">${done} <span style="font-size:1rem;font-weight:500;color:var(--bhub-muted)">/ ${total}</span></div>
             <div class="kpi-sub">tarefas concluídas</div>
           </div>
-          <div class="kpi" data-kpi-nav="empresas" data-kpi-sort="pct" style="cursor:pointer" title="Ver deals ordenados por % de conclusão">
+          <div class="kpi" data-kpi-nav="empresas" data-kpi-sort="pct" data-kpi-filter="ontrack" style="cursor:pointer" title="Ver deals on track">
             <div class="kpi-head"><div class="kpi-label">On Track</div><div class="kpi-icon kpi-icon-blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></div></div>
             <div class="kpi-value tone-blue">${ontrack}</div>
             <div class="kpi-sub">dentro do prazo</div>
           </div>
-          <div class="kpi" data-kpi-nav="empresas" data-kpi-sort="late" style="cursor:pointer" title="Ver deals ordenados por tarefas atrasadas">
+          <div class="kpi" data-kpi-nav="empresas" data-kpi-sort="late" data-kpi-filter="late" style="cursor:pointer" title="Ver deals com tarefas atrasadas">
             <div class="kpi-head"><div class="kpi-label">⚠ Atrasadas</div><div class="kpi-icon kpi-icon-red"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div></div>
             <div class="kpi-value tone-red">${late}</div>
             <div class="kpi-sub">${total>0?Math.round(late/total*100):0}% do portfólio</div>
           </div>
-          <div class="kpi" data-kpi-nav="empresas" data-kpi-sort="blocked" style="cursor:pointer" title="Ver deals ordenados por bloqueios">
+          <div class="kpi" data-kpi-nav="empresas" data-kpi-sort="blocked" data-kpi-filter="blocked" style="cursor:pointer" title="Ver deals com bloqueios">
             <div class="kpi-head"><div class="kpi-label">Bloqueios</div><div class="kpi-icon kpi-icon-amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div></div>
             <div class="kpi-value tone-amber">${blocked}</div>
             <div class="kpi-sub">tarefas bloqueadas</div>
@@ -2548,10 +2548,12 @@ function renderDashboard(){
   node.querySelectorAll('[data-kpi-nav]').forEach(card => {
     card.addEventListener('click', ()=>{
       view.tab = card.dataset.kpiNav;
+      view.dealId = null; // garante que não abre deal individual
       if(card.dataset.kpiSort){
         view.empresasSortCol = card.dataset.kpiSort;
         view.empresasSortDir = 'desc';
       }
+      view.empresasStatusFilter = card.dataset.kpiFilter || null;
       render();
     });
   });
@@ -2886,6 +2888,18 @@ function renderExecutiva(){
 function renderEmpresas(){
   let raw = aggregate();
 
+  // ---- Status filter (from KPI card navigation) ----
+  const statusFilter = view.empresasStatusFilter || null;
+  const STATUS_META = {
+    done:    { label: 'Tasks Concluídas',   color: '#16a34a', bg: '#dcfce7', field: 'done' },
+    ontrack: { label: 'On Track',           color: '#2563eb', bg: '#dbeafe', field: 'ontrack' },
+    late:    { label: 'Tarefas Atrasadas',  color: '#dc2626', bg: '#fee2e2', field: 'late' },
+    blocked: { label: 'Bloqueios',          color: '#d97706', bg: '#fef3c7', field: 'blocked' },
+  };
+  if(statusFilter && STATUS_META[statusFilter]){
+    raw = raw.filter(d => (d[STATUS_META[statusFilter].field]||0) > 0);
+  }
+
   // ---- Search ----
   const searchQ = (view.empresasSearch||'').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
   if(searchQ){
@@ -2920,8 +2934,19 @@ function renderEmpresas(){
     </div>`;
   }
 
+  const statusBanner = (() => {
+    if(!statusFilter || !STATUS_META[statusFilter]) return '';
+    const m = STATUS_META[statusFilter];
+    return `<div id="statusFilterBanner" style="display:flex;align-items:center;gap:.6rem;padding:.5rem .85rem;border-radius:.5rem;background:${m.bg};border:1px solid ${m.color}33;margin-bottom:.25rem">
+      <span style="font-size:.8rem;font-weight:600;color:${m.color}">Filtro ativo: ${m.label}</span>
+      <span style="font-size:.75rem;color:#6b7280">${raw.length} deal${raw.length!==1?'s':''} encontrado${raw.length!==1?'s':''}</span>
+      <button id="clearStatusFilter" style="margin-left:auto;font-size:.72rem;color:${m.color};background:none;border:1px solid ${m.color}66;border-radius:.35rem;padding:.15rem .5rem;cursor:pointer">✕ Limpar filtro</button>
+    </div>`;
+  })();
+
   const node = el(`
     <div class="space-y-4">
+      ${statusBanner}
       <div class="flex items-center justify-between flex-wrap gap-2">
         <div>
           <h1 class="text-xl font-bold">Deals</h1>
@@ -2984,6 +3009,10 @@ function renderEmpresas(){
   if(addCo) addCo.addEventListener('click', ()=>openCompanyModal());
   const emptyAddCo = node.querySelector('#emptyAddCo');
   if(emptyAddCo) emptyAddCo.addEventListener('click', ()=>openCompanyModal());
+
+  // Clear status filter banner
+  const clearSF = node.querySelector('#clearStatusFilter');
+  if(clearSF) clearSF.addEventListener('click', ()=>{ view.empresasStatusFilter = null; view.empresasSortCol = 'date'; view.empresasSortDir = 'desc'; render(); });
 
   // Search input (debounced re-render)
   const empSearch = node.querySelector('#empSearch');
