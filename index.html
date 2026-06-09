@@ -2120,7 +2120,7 @@ function renderDashboard(){
   top.sort((a,b)=>b.dias-a.dias);
 
   // Heatmap: area x deal
-  const areas = Array.from(new Set([...DEFAULT_AREAS.map(a=>a.name), ...state.template.map(t=>t.area), ...Object.values(state.deals).flatMap(d=>d.tasks.map(t=>t.area))].filter(Boolean)));
+  const areas = Array.from(new Set(Object.values(state.deals).flatMap(d=>d.tasks.map(t=>t.area)).filter(Boolean)));
   function cellStatus(deal, area){
     const ts = deal.tasks.filter(t=>t.area===area);
     if(!ts.length) return 'empty';
