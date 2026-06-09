@@ -1578,7 +1578,7 @@ function renderShell(){
   else if(view.tab==='empresas') content.appendChild(renderEmpresas());
   else if(view.tab==='raid') content.appendChild(renderRaidPortfolio());
   else if(view.tab==='homebroker') content.appendChild(renderHomebroker());
-  else if(view.tab==='cobranca' && canEdit()) content.appendChild(renderCobranca());
+  else if(view.tab==='cobranca' && canAdmin()) content.appendChild(renderCobranca());
   else if(view.tab==='template') content.appendChild(renderTemplate());
   else if(view.tab==='deal') content.appendChild(renderDeal());
   else if(view.tab==='usuarios') content.appendChild(renderUsuarios());
@@ -1596,7 +1596,7 @@ function renderShell(){
 }
 
 function renderSidebar(){
-  const pmoTabs = canEdit() ? [
+  const pmoTabs = canAdmin() ? [
     ['homebroker', 'HB',      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>'],
     ['cobranca',   'Cobrança','<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>'],
   ] : [];
@@ -5212,7 +5212,7 @@ function openChangeRoleModal(user){
    HOMEBROKER — visão PMO executiva de integração (McKinsey style)
    ================================================================ */
 function renderHomebroker(){
-  if(!canEdit()) return el('<div></div>');
+  if(!canAdmin()) return el('<div></div>');
   const today = new Date(); today.setHours(0,0,0,0);
   const data = aggregate();
   if(!view.hbWatchlist) view.hbWatchlist = [];
