@@ -3642,7 +3642,7 @@ function renderDeal(){
   `);
   node.querySelector('#subview').appendChild(subView);
   node.querySelector('#back').onclick = ()=>{ view.tab='empresas'; view.dealId=null; view.dealTab='tarefas'; render(); };
-  node.querySelector('#dealSel').onchange = e=>{ view.dealId=e.target.value; render(); };
+  node.querySelector('#dealSel').onchange = e=>{ view.dealId=e.target.value; view.dealTaskAreaFilter=''; view.dealTaskOwnerFilter=''; view.dealTaskStatusFilter='all'; render(); };
   const editCo = node.querySelector('#editCo');
   if(editCo) editCo.onclick = ()=>openCompanyModal(company);
   node.querySelectorAll('[data-subtab]').forEach(b=>b.onclick = ()=>{ view.dealTab=b.dataset.subtab; render(); });
@@ -3652,21 +3652,34 @@ function renderDeal(){
 function renderDealTasks(company, deal, tasks){
   const total = tasks.length;
 
-  // ---- Status filter pills ----
-  const SF = view.dealTaskStatusFilter || 'all';
-  const filteredTasks = SF === 'all' ? tasks
-    : SF === 'done'    ? tasks.filter(t => t._f.status === 'done')
-    : SF === 'ontrack' ? tasks.filter(t => t._f.status === 'ontrack')
-    : SF === 'late'    ? tasks.filter(t => t._f.status === 'late')
-    : SF === 'blocked' ? tasks.filter(t => t.bloqueio === 'Sim')
-    : tasks;
+  // ---- Filter state ----
+  const SF      = view.dealTaskStatusFilter || 'all';
+  const FA      = view.dealTaskAreaFilter   || '';
+  const FO      = view.dealTaskOwnerFilter  || '';
+
+  // unique areas & owners for dropdowns
+  const allAreas  = sortAreaNames(Array.from(new Set(tasks.map(t=>t.area||'(sem área)'))));
+  const allOwners = Array.from(new Set(tasks.map(t=>t.owner||'').filter(Boolean))).sort();
+
+  // apply filters
+  let filteredTasks = tasks;
+  if(SF !== 'all'){
+    filteredTasks = filteredTasks.filter(t =>
+      SF === 'done'    ? t._f.status === 'done'    :
+      SF === 'ontrack' ? t._f.status === 'ontrack' :
+      SF === 'late'    ? t._f.status === 'late'    :
+      SF === 'blocked' ? t.bloqueio  === 'Sim'     : true
+    );
+  }
+  if(FA) filteredTasks = filteredTasks.filter(t => (t.area||'(sem área)') === FA);
+  if(FO) filteredTasks = filteredTasks.filter(t => t.owner === FO);
 
   const sfPills = [
-    { key:'all',     label:'Todas',    count: total },
-    { key:'done',    label:'Done',     count: tasks.filter(t=>t._f.status==='done').length,    color:'#16a34a', bg:'#dcfce7' },
-    { key:'ontrack', label:'On Track', count: tasks.filter(t=>t._f.status==='ontrack').length, color:'#2563eb', bg:'#dbeafe' },
-    { key:'late',    label:'Atrasadas',count: tasks.filter(t=>t._f.status==='late').length,    color:'#dc2626', bg:'#fee2e2' },
-    { key:'blocked', label:'Bloqueio', count: tasks.filter(t=>t.bloqueio==='Sim').length,      color:'#d97706', bg:'#fef3c7' },
+    { key:'all',     label:'Todas',    count: tasks.filter(t=>true).length },
+    { key:'done',    label:'Done',     count: tasks.filter(t=>t._f.status==='done').length,    color:'#16a34a' },
+    { key:'ontrack', label:'On Track', count: tasks.filter(t=>t._f.status==='ontrack').length, color:'#2563eb' },
+    { key:'late',    label:'Atrasadas',count: tasks.filter(t=>t._f.status==='late').length,    color:'#dc2626' },
+    { key:'blocked', label:'Bloqueio', count: tasks.filter(t=>t.bloqueio==='Sim').length,      color:'#d97706' },
   ].map(p => {
     const active = SF === p.key;
     const base = active
@@ -3674,6 +3687,16 @@ function renderDealTasks(company, deal, tasks){
       : `background:#fff;color:var(--bhub-navy);border-color:var(--bhub-border)`;
     return `<button class="sf-pill" data-sf="${p.key}" style="font-size:.73rem;padding:.22rem .65rem;border-radius:9999px;border:1px solid;cursor:pointer;white-space:nowrap;transition:all .12s;${base}">${p.label} <span style="opacity:.75">${p.count}</span></button>`;
   }).join('');
+
+  const selStyle = `font-size:.75rem;padding:.25rem .55rem;border:1px solid var(--bhub-border);border-radius:.4rem;background:#fff;color:var(--bhub-navy);cursor:pointer;max-width:170px`;
+  const areaSelHtml = `<select id="dtAreaFilter" style="${selStyle}">
+    <option value="">Todas as áreas</option>
+    ${allAreas.map(a=>`<option value="${escapeHtml(a)}" ${FA===a?'selected':''}>${escapeHtml(a)}</option>`).join('')}
+  </select>`;
+  const ownerSelHtml = `<select id="dtOwnerFilter" style="${selStyle}">
+    <option value="">Todos os owners</option>
+    ${allOwners.map(o=>`<option value="${escapeHtml(o)}" ${FO===o?'selected':''}>${escapeHtml(o)}</option>`).join('')}
+  </select>`;
 
   // group by area, sorted by ref within each group, areas in canonical order
   const grouped = {};
@@ -3691,7 +3714,12 @@ function renderDealTasks(company, deal, tasks){
   const node = el(`
     <div class="space-y-3">
       <div class="flex items-center justify-between flex-wrap gap-2">
-        <div style="display:flex;flex-wrap:wrap;gap:.35rem;align-items:center">${sfPills}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:.35rem;align-items:center">
+          ${sfPills}
+          <span style="color:var(--bhub-border);margin:0 .1rem">|</span>
+          ${areaSelHtml}
+          ${ownerSelHtml}
+        </div>
         <div style="display:flex;gap:.5rem">
           ${canEdit() && total===0 ? `<button id="seed" class="btn btn-primary">Criar a partir do Template</button>`:''}
           ${canEdit() ? `<button id="addTask" class="btn btn-primary">+ Tarefa</button>`:''}
@@ -3749,6 +3777,11 @@ function renderDealTasks(company, deal, tasks){
     view.dealTaskStatusFilter = b.dataset.sf;
     render();
   }));
+  // Area & owner dropdowns
+  const dtArea = node.querySelector('#dtAreaFilter');
+  if(dtArea) dtArea.addEventListener('change', ()=>{ view.dealTaskAreaFilter = dtArea.value; render(); });
+  const dtOwner = node.querySelector('#dtOwnerFilter');
+  if(dtOwner) dtOwner.addEventListener('change', ()=>{ view.dealTaskOwnerFilter = dtOwner.value; render(); });
 
   const addTask = node.querySelector('#addTask');
   if(addTask) addTask.onclick = ()=>openTaskModal(company);
@@ -5489,7 +5522,7 @@ function renderHomebroker(){
       +'<div class="hb-hot-hdr" data-hot-key="'+key+'" style="display:flex;align-items:center;justify-content:space-between;padding:.6rem .85rem;cursor:pointer;border-bottom:1px solid #f3f4f6;background:'+hdrBg+';user-select:none">'
       +'<div style="font-size:.8rem;font-weight:600;color:var(--bhub-navy)">'+icon+' '+label+'</div>'
       +'<div style="display:flex;align-items:center;gap:.5rem">'
-      +'<span style="background:'+badgeColor+';color:#fff;font-size:.65rem;font-weight:700;border-radius:9999px;padding:.1rem .5rem;min-width:1.6rem;text-align:center">'+count+'</span>'
+      +'<span style="background:#1e293b;color:#fff;font-size:.65rem;font-weight:700;border-radius:9999px;padding:.1rem .5rem;min-width:1.6rem;text-align:center">'+count+'</span>'
       +'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="transition:transform .15s;transform:rotate('+chevron+'deg)"><polyline points="6 9 12 15 18 9"/></svg>'
       +'</div></div>'
       +(isOpen ? body : '')
