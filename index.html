@@ -510,35 +510,7 @@ const STORE_KEY = 'bhub_pmi_state_v1'; // mantido apenas para import do localSto
 /* ---------- Supabase ---------- */
 const SUPABASE_URL = 'https://vscrdxwgtbokgjaiging.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZzY3JkeHdndGJva2dqYWlnaW5nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkzNjczNzIsImV4cCI6MjA5NDk0MzM3Mn0.vm2M_eJndTUsVXl8pIjkrDNY8Zo9INTVdh6r-Z7usdQ';
-// [gatilhos-applied]
 const SUPABASE_FUNCTIONS_URL = `${SUPABASE_URL}/functions/v1`;
-
-const GATILHOS = {
-  'Financeiro':                      'Thiago Lobato / Vinicius Cavalcanti',
-  'P&C':                             'Thiago Lobato / Vinicius Cavalcanti',
-  'Marketing & Comunicação':         'Thiago Lobato / Vinicius Cavalcanti',
-  'Comercial':                       'Thiago Lobato / Vinicius Cavalcanti',
-  'PMI/M&A':                         'Thiago Lobato / Vinicius Cavalcanti',
-  'Cexp':                            'Rodrigo Papa / Tatiane Steffani',
-  'System Integration':              'Rodrigo Papa / Tatiane Steffani',
-  'TI':                              'Rodrigo Papa / Tatiane Steffani',
-  'Digital Workplace':               'Rodrigo Papa / Tatiane Steffani',
-  'Operações':                       'Rodrigo Papa / Tatiane Steffani',
-  'Tech':                            'Rodrigo Papa / Tatiane Steffani',
-  'Treinamentos para Colaboradores': 'Rodrigo Papa / Tatiane Steffani',
-};
-function getGatilho(area){
-  if(!area) return '';
-  var a = (area||'').trim();
-  if(GATILHOS[a]) return GATILHOS[a];
-  // fuzzy: checa se alguma chave está contida na área ou vice-versa
-  for(var k in GATILHOS){
-    if(a.toLowerCase().includes(k.toLowerCase()) || k.toLowerCase().includes(a.toLowerCase()))
-      return GATILHOS[k];
-  }
-  return '';
-}
-
 const supa = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 /* ---------- Indicador global "salvando…" ---------- */
@@ -2005,37 +1977,6 @@ function dashExpandTable(id, rows, headers, rowFn){
   return html;
 }
 
-
-function buildGatilhosCard(){
-  var rows = [
-    { areas: 'Financeiro · P&C · Marketing & Comunicação · Comercial · PMI/M&A',
-      resp:  'Thiago Lobato / Vinicius Cavalcanti' },
-    { areas: 'Cexp · System Integration · TI · Digital Workplace · Operações · Tech · Treinamentos para Colaboradores',
-      resp:  'Rodrigo Papa / Tatiane Steffani' }
-  ];
-  var rowsHtml = rows.map(function(r){
-    return '<tr>' +
-      '<td style="padding:8px 12px;font-size:12px;color:#334155;border-bottom:1px solid #f1f5f9">' + r.areas + '</td>' +
-      '<td style="padding:8px 12px;font-size:12px;font-weight:600;color:#1e3a5f;white-space:nowrap;border-bottom:1px solid #f1f5f9">' + r.resp + '</td>' +
-    '</tr>';
-  }).join('');
-  return '<details style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;margin-bottom:20px;overflow:hidden">' +
-    '<summary style="padding:12px 16px;cursor:pointer;font-size:13px;font-weight:700;color:#1e3a5f;display:flex;align-items:center;gap:8px;list-style:none;user-select:none">' +
-      '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0171E4" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>' +
-      'Gatilhos por Área' +
-    '</summary>' +
-    '<div style="padding:0 0 4px">' +
-      '<table style="width:100%;border-collapse:collapse">' +
-        '<thead><tr>' +
-          '<th style="padding:8px 12px;font-size:11px;text-transform:uppercase;color:#64748b;text-align:left;background:#f8fafc">Áreas</th>' +
-          '<th style="padding:8px 12px;font-size:11px;text-transform:uppercase;color:#64748b;text-align:left;background:#f8fafc;white-space:nowrap">Responsável</th>' +
-        '</tr></thead>' +
-        '<tbody>' + rowsHtml + '</tbody>' +
-      '</table>' +
-    '</div>' +
-  '</details>';
-}
-
 function renderDashboard(){
   const rawData = aggregate();
   const data = applyDashFilters(rawData);
@@ -2121,8 +2062,7 @@ function renderDashboard(){
     <div class="space-y-6">
       <div class="page-header">
         <div>
-          <h1>Dashboard de Integração M&amp;
-  node.insertAdjacentHTML('afterbegin', buildGatilhosCard());A</h1>
+          <h1>Dashboard de Integração M&amp;A</h1>
           <p class="subtitle">Visão consolidada do portfólio • Atualização automática</p>
         </div>
         <div class="flex gap-2 flex-wrap items-center">
@@ -5902,7 +5842,7 @@ function renderHoje(){
         <div class="hoje-row-task" title="${escapeHtml(t.task)}">${escapeHtml(t.task)}${hasPendingDel?` <span title="Exclusão aguardando aprovação do admin" style="display:inline-block;font-size:.65rem;padding:.1rem .35rem;border-radius:.75rem;background:#fef3c7;color:#92400e;border:1px solid #fde68a;font-weight:600;white-space:nowrap">⏳ Excl. pendente</span>`:''}</div>
         <div class="hoje-row-meta">
           <span>${escapeHtml(t._deal.name)}</span><span class="sep">·</span>
-          <span title="${getGatilho(t.area)?'Gatilho: '+getGatilho(t.area):''}">${escapeHtml(t.area||'—')}</span>
+          <span>${escapeHtml(t.area||'—')}</span>
           ${t.ref?`<span class="sep">·</span><span>${escapeHtml(t.ref)}</span>`:''}
           ${t.owner?`<span class="sep">·</span><span style="color:#1e40af;font-size:11px">@ ${escapeHtml(t.owner)}</span>`:''}
         </div>
