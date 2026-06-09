@@ -1438,7 +1438,8 @@ function renderLogin(){
 function renderCobranca(){
   // Collect all late tasks across all deals
   const today = new Date(); today.setHours(0,0,0,0);
-  const lateTasks = [];
+  if(!view.cobrancaFilters) view.cobrancaFilters = { trigger:'', dealId:'' };
+  const allLateTasks = [];
   state.companies.forEach(c => {
     const deal = state.deals[c.id];
     if(!deal) return;
@@ -1446,10 +1447,28 @@ function renderCobranca(){
       const f = computeTaskFields(t, c);
       if(f.status !== 'late') return;
       const dias = f.dataPrevista ? businessDaysBetween(f.dataPrevista, today) : null;
-      lateTasks.push({ dealId:c.id, deal:c.name, area:t.area||'Sem área', owner:t.owner||'Sem responsável', task:t.task||'', dataPrevista:f.dataPrevista, dias: dias !== null ? dias : '?' });
+      allLateTasks.push({ dealId:c.id, deal:c.name, area:t.area||'Sem área', owner:t.owner||'Sem responsável', task:t.task||'', dataPrevista:f.dataPrevista, dias: dias !== null ? dias : '?' });
     });
   });
-  lateTasks.sort((a,b) => (b.dias||0) - (a.dias||0));
+  allLateTasks.sort((a,b) => (b.dias||0) - (a.dias||0));
+
+  // Filter options
+  const uniqueTriggers = Array.from(new Set(
+    allLateTasks.map(t=>AREA_TRIGGERS[t.area]).filter(Boolean)
+  )).sort();
+  const uniqueDeals = Array.from(new Set(allLateTasks.map(t=>t.dealId)))
+    .map(id=>allLateTasks.find(t=>t.dealId===id))
+    .map(t=>({id:t.dealId, name:t.deal}))
+    .sort((a,b)=>a.name.localeCompare(b.name));
+
+  // Apply filters
+  const fTrigger = view.cobrancaFilters.trigger;
+  const fDealId  = view.cobrancaFilters.dealId;
+  const lateTasks = allLateTasks.filter(t => {
+    if(fTrigger && AREA_TRIGGERS[t.area] !== fTrigger) return false;
+    if(fDealId  && t.dealId !== fDealId) return false;
+    return true;
+  });
 
   // Group: area → owner → tasks
   const byArea = {};
@@ -1478,6 +1497,8 @@ function renderCobranca(){
   }
 
   const totalLate = lateTasks.length;
+  const totalAll  = allLateTasks.length;
+  const isFiltered = fTrigger || fDealId;
   const node = el(`
     <div class="space-y-5">
       <div class="page-header">
@@ -1488,12 +1509,26 @@ function renderCobranca(){
             </span>
             Cobrança
           </h1>
-          <p class="subtitle">Tarefas atrasadas por área e responsável — ${totalLate} tarefa${totalLate!==1?'s':''} em atraso</p>
+          <p class="subtitle">Tarefas atrasadas por área e responsável — ${isFiltered ? totalLate+' de '+totalAll : totalAll} tarefa${totalAll!==1?'s':''} em atraso</p>
         </div>
-        ${totalLate > 0 ? `<button id="cobrancaCopyBtn" class="btn btn-primary" style="gap:.4rem">
+        ${totalAll > 0 ? `<button id="cobrancaCopyBtn" class="btn btn-primary" style="gap:.4rem">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
           Copiar lista
         </button>` : ''}
+      </div>
+
+      <!-- Filtros -->
+      <div class="bhub-card" style="padding:.65rem 1rem;display:flex;flex-wrap:wrap;align-items:center;gap:.75rem">
+        <span style="font-size:.75rem;font-weight:700;color:var(--bhub-muted);text-transform:uppercase;letter-spacing:.07em">Filtros</span>
+        <select id="cobrFiltroGatilho" style="font-size:.78rem;padding:.3rem .6rem;border:1px solid var(--bhub-border);border-radius:.4rem;background:#fff;min-width:180px">
+          <option value="">Todos os gatilhos</option>
+          ${uniqueTriggers.map(t=>`<option value="${escapeHtml(t)}" ${fTrigger===t?'selected':''}>${escapeHtml(t)}</option>`).join('')}
+        </select>
+        <select id="cobrFiltroDeal" style="font-size:.78rem;padding:.3rem .6rem;border:1px solid var(--bhub-border);border-radius:.4rem;background:#fff;min-width:180px">
+          <option value="">Todos os deals</option>
+          ${uniqueDeals.map(d=>`<option value="${escapeHtml(d.id)}" ${fDealId===d.id?'selected':''}>${escapeHtml(d.name)}</option>`).join('')}
+        </select>
+        ${isFiltered ? `<button id="cobrClearFilters" style="font-size:.73rem;padding:.3rem .65rem;border:1px solid var(--bhub-border);border-radius:.4rem;background:#fff;cursor:pointer;color:var(--bhub-muted)">✕ Limpar filtros</button>` : ''}
       </div>
 
       ${totalLate === 0 ? `
@@ -1548,6 +1583,14 @@ function renderCobranca(){
         }).join('')}
     </div>
   `);
+
+  // Filtros
+  const selGatilho = node.querySelector('#cobrFiltroGatilho');
+  const selDeal    = node.querySelector('#cobrFiltroDeal');
+  const btnClear   = node.querySelector('#cobrClearFilters');
+  if(selGatilho) selGatilho.addEventListener('change', ()=>{ view.cobrancaFilters.trigger=selGatilho.value; render(); });
+  if(selDeal)    selDeal.addEventListener('change',    ()=>{ view.cobrancaFilters.dealId=selDeal.value; render(); });
+  if(btnClear)   btnClear.addEventListener('click',    ()=>{ view.cobrancaFilters={trigger:'',dealId:''}; render(); });
 
   // Copy button
   const copyBtn = node.querySelector('#cobrancaCopyBtn');
@@ -5252,7 +5295,7 @@ function renderHomebroker(){
   const allDates = [];
   data.forEach(d=>{
     if(d.company.signDate) allDates.push(new Date(d.company.signDate));
-    d.tasks.forEach(t=>{ if(t.dataPrevista) allDates.push(new Date(t.dataPrevista)); });
+    d.tasks.forEach(t=>{ if(t._f?.dataPrevista) allDates.push(t._f.dataPrevista); });
   });
   let tlMin, tlMax;
   if(allDates.length){
@@ -5279,7 +5322,7 @@ function renderHomebroker(){
   const todayPct = tlPct(today);
 
   const ganttRows = data.map(d=>{
-    const tds = d.tasks.map(t=>t.dataPrevista).filter(Boolean).map(s=>new Date(s));
+    const tds = d.tasks.map(t=>t._f?.dataPrevista).filter(Boolean);
     const dStart = d.company.signDate ? new Date(d.company.signDate) : (tds.length ? new Date(Math.min(...tds.map(x=>x.getTime()))) : null);
     const dEnd   = tds.length ? new Date(Math.max(...tds.map(x=>x.getTime()))) : null;
     if(!dStart || !dEnd) return '';
