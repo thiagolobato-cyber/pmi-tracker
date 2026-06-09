@@ -75,8 +75,8 @@
   .search-result-item{display:flex;align-items:center;justify-content:space-between;padding:.55rem .75rem;cursor:pointer;border-bottom:1px solid var(--bhub-border);transition:background .12s}
   .search-result-item:last-child{border-bottom:none}
   .search-result-item:hover{background:#f3f6fb}
-  input[type=text],input[type=email],input[type=number],input[type=date],input[type=password],input:not([type]),select,textarea{
-    border:1px solid var(--bhub-border);border-radius:.5rem;padding:.35rem .6rem;font-size:.85rem;width:100%;background:#fff;
+  input[type=text],input[type=email],input[type=number],input[type=date],input[type=password],select,textarea{
+    border:1px solid var(--bhub-border);border-radius:.625rem;padding:.45rem .7rem;font-size:.875rem;width:100%;background:#fff;
     font-family:inherit;color:var(--bhub-text);transition:border-color .2s,box-shadow .2s
   }
   input:focus,select:focus,textarea:focus{outline:none;border-color:var(--bhub-blue);box-shadow:0 0 0 3px rgba(1,113,228,.15)}
@@ -554,10 +554,23 @@ const BHUB_LOGO_ICON = `<svg viewBox="0 0 40 40" fill="currentColor" xmlns="http
 
 /* Constantes e utilitarios puros agora em js/pure.js (modulo ES). */
 
+/* ---------- Gatilhos por Área ---------- */
+// Mapeamento centralizado: área → gatilho (nome do responsável de contato)
+const AREA_TRIGGERS = {
+  'Financeiro':        'Thiago Lobato / Vinicius Cavalcanti',
+  'Pessoas & Cultura': 'Thiago Lobato / Vinicius Cavalcanti',
+  'Marketing':         'Thiago Lobato / Vinicius Cavalcanti',
+  'Comercial':         'Thiago Lobato / Vinicius Cavalcanti',
+  'PMO':               'Thiago Lobato / Vinicius Cavalcanti',
+  'Tecnologia':        'Rodrigo Papa / Tatiane Steffani',
+  'Operações':         'Rodrigo Papa / Tatiane Steffani',
+  'Jurídico':          '',
+};
+
 /* ---------- State ---------- */
 let state = defaultState();
 let session = null; // { id, email, username, role }
-let view = { tab:'dashboard', dealId:null, dealTab:'tarefas', executiveArea:'todas', raidFilter:'all', raidPortfolioFilter:'all', synergyFilter:'all', dashFilters:{deals:[],areas:[],owners:[]}, empresasSearch:'', empresasSortCol:'date', empresasSortDir:'desc', sidebarCollapsed:false, executivaDealSearch:'', execPdfDeals:null, dealTaskOwnerFilter:'', dealTaskBloqueioFilter:'', dealTaskAreaFilter:'', dealTaskStatusFilter:'' };
+let view = { tab:'dashboard', dealId:null, dealTab:'tarefas', executiveArea:'todas', raidFilter:'all', raidPortfolioFilter:'all', raidDealFilter:[], synergyFilter:'all', dashFilters:{deals:[],areas:[],owners:[]}, empresasSearch:'', empresasSortCol:'date', empresasSortDir:'desc', sidebarCollapsed:false, executivaDealSearch:'', execPdfDeals:null, triggersCardOpen:true };
 
 // Tooltip explicativo do acrônimo RAID dentro de Ações de Mitigação
 function raidTooltipLabel(text){
@@ -636,7 +649,6 @@ function raidFromDb(r){
     decisaoDesc: r.decisao_desc||'', premissaDesc: r.premissa_desc||'',
     severity: r.severity||'med', status: r.status||'open',
     owner: r.owner||'', dueDate: r.due_date||'', mitigation: r.mitigation||'',
-    participants: Array.isArray(r.participants) ? r.participants : [],
     createdAt: r.created_at,
     dealIds: []  // populated after loading raid_deal_links
   };
@@ -650,8 +662,7 @@ function raidToDb(r){
     risco_desc: r.riscoDesc||'', issue_desc: r.issueDesc||'',
     decisao_desc: r.decisaoDesc||'', premissa_desc: r.premissaDesc||'',
     severity: r.severity||'med', status: r.status||'open',
-    owner: r.owner||'', due_date: emptyDate(r.dueDate), mitigation: r.mitigation||'',
-    participants: Array.isArray(r.participants) ? r.participants : []
+    owner: r.owner||'', due_date: emptyDate(r.dueDate), mitigation: r.mitigation||''
   };
 }
 
@@ -746,7 +757,7 @@ async function logout(){
   // Limpa estado e renderiza ANTES de esperar a rede — usuário sai visualmente imediato
   session = null;
   state = defaultState();
-  view = { tab:'dashboard', dealId:null, dealTab:'tarefas', executiveArea:DEFAULT_AREAS[0]?.name||'', raidFilter:'all', raidPortfolioFilter:'all', synergyFilter:'all', dashFilters:{deals:[],areas:[],owners:[]}, empresasSearch:'', empresasSortCol:'date', empresasSortDir:'desc', sidebarCollapsed:false, executivaDealSearch:'', execPdfDeals:null, dealTaskOwnerFilter:'', dealTaskBloqueioFilter:'', dealTaskAreaFilter:'', dealTaskStatusFilter:'' };
+  view = { tab:'dashboard', dealId:null, dealTab:'tarefas', executiveArea:DEFAULT_AREAS[0]?.name||'', raidFilter:'all', raidPortfolioFilter:'all', raidDealFilter:[], synergyFilter:'all', dashFilters:{deals:[],areas:[],owners:[]}, empresasSearch:'', empresasSortCol:'date', empresasSortDir:'desc', sidebarCollapsed:false, executivaDealSearch:'', execPdfDeals:null, triggersCardOpen:true };
   render();
   // signOut com timeout de 3s para não travar
   try { await Promise.race([supa.auth.signOut({scope:'global'}), new Promise(r=>setTimeout(r,3000))]); } catch(e){}
@@ -869,11 +880,7 @@ async function reloadState(){
     item.dealIds = linksByRaid[r.id] || (r.company_id ? [r.company_id] : []);
     return item;
   });
-  state.deletionRequests = (delReqs.data||[]).map(r=>({
-    ...r,
-    requested_by_name: r.requested_by_name || (profiles.data||[]).find(p=>p.id===r.requested_by_id)?.username || '',
-    company_name: r.company_name || (companies.data||[]).find(c=>c.id===r.company_id)?.name || '',
-  }));
+  state.deletionRequests = (delReqs.data||[]);
   state.companies = (companies.data||[]).map(companyFromDb)
     .sort((a,b)=>{
       // Mais recente primeiro; sem data vai para o final
@@ -1277,76 +1284,12 @@ function exportXlsx(){
 /* ---------- Render ---------- */
 function el(html){ const t=document.createElement('template'); t.innerHTML=html.trim(); return t.content.firstChild; }
 
-// Badge clicável de bloqueios — só o badge, a linha inline é inserida pelo attachBlkListeners
-function blkDropdownHtml(id, blockedTasks){
-  return `<span data-blk-toggle="${escapeHtml(id)}" style="background:#fee2e2;color:#991b1b;padding:.1rem .5rem;border-radius:9999px;font-weight:700;cursor:pointer;display:inline-block;transition:background .15s" title="Clique para ver os bloqueios">${blockedTasks.length}</span>`;
-}
-
-// Registra os event listeners de blk-toggle num container — expande linha inline na tabela
-function attachBlkListeners(container){
-  container.querySelectorAll('[data-blk-toggle]').forEach(btn=>{
-    if(btn._blkBound) return;
-    btn._blkBound = true;
-    btn.addEventListener('click', e=>{
-      e.stopPropagation();
-      const raidId = btn.dataset.blkToggle;
-      const tr = btn.closest('tr');
-      if(!tr) return;
-      // Toggle: remove se já está aberto
-      const next = tr.nextElementSibling;
-      if(next && next.dataset.blkExpand === raidId){
-        next.remove();
-        btn.style.background = '#fee2e2';
-        return;
-      }
-      // Fecha qualquer outro expand aberto
-      document.querySelectorAll('[data-blk-expand]').forEach(el=>{
-        el.previousElementSibling?.querySelector('[data-blk-toggle]')?.style && (el.previousElementSibling.querySelector('[data-blk-toggle]').style.background='#fee2e2');
-        el.remove();
-      });
-      // Busca tarefas bloqueadas deste RAID no state
-      const raid = (state.raid||[]).find(r=>r.id===raidId);
-      if(!raid) return;
-      const blockedTasks = (raid.dealIds||[]).flatMap(cid=>{
-        const c = state.companies.find(x=>x.id===cid);
-        return (state.deals[cid]?.tasks||[])
-          .filter(t=>t.bloqueio==='Sim' && t.raidId===raidId)
-          .map(t=>({...t, dealName: c?.name||''}));
-      });
-      // Conta colunas da tabela para o colspan
-      const table = tr.closest('table');
-      const cols = table?.querySelector('thead tr')?.children.length || 10;
-      // Monta linhas de bloqueios — texto truncado + title para texto completo
-      const rows = blockedTasks.map(t=>{
-        const ref  = escapeHtml(t.ref||'');
-        const deal = escapeHtml(t.dealName);
-        const task = escapeHtml(t.task||'');
-        return `<div style="display:flex;align-items:center;gap:.6rem;padding:.22rem 0;border-bottom:1px solid #fecaca">
-          <span style="flex-shrink:0;font-size:.65rem;color:#9ca3af;white-space:nowrap">${ref} · ${deal}</span>
-          <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.75rem;font-weight:500;color:#1f2937" title="${task}">${task}</span>
-        </div>`;
-      }).join('');
-      // Insere a linha expandida após o tr atual
-      const expandTr = document.createElement('tr');
-      expandTr.dataset.blkExpand = raidId;
-      expandTr.style.cssText = 'background:#fff5f5';
-      expandTr.innerHTML = `<td colspan="${cols}" style="padding:.4rem 1rem .5rem">
-        <div style="font-size:.68rem;font-weight:700;color:#991b1b;margin-bottom:.15rem">🔒 ${blockedTasks.length} bloqueio${blockedTasks.length>1?'s':''} vinculado${blockedTasks.length>1?'s':''}</div>
-        <div>${rows}</div>
-      </td>`;
-      tr.after(expandTr);
-      btn.style.background = '#fecaca';
-    });
-  });
-}
-
 function render(){
   const root = document.getElementById('app');
   root.innerHTML = '';
   if(!session){ root.appendChild(renderLogin()); return; }
   root.appendChild(renderShell());
-  // Bloqueios expand — linha inline na tabela
-  attachBlkListeners(root);
+  // Delegação global: clique em nome de empresa/área/owner abre o snapshot correspondente
   root.querySelectorAll('[data-summary]').forEach(el=>{
     el.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); openCompanySummary(el.dataset.summary); });
   });
@@ -1488,6 +1431,136 @@ function renderLogin(){
   return node;
 }
 
+// ======== COBRANÇA ========
+function renderCobranca(){
+  // Collect all late tasks across all deals
+  const today = new Date(); today.setHours(0,0,0,0);
+  const lateTasks = [];
+  state.companies.forEach(c => {
+    const deal = state.deals[c.id];
+    if(!deal) return;
+    (deal.tasks||[]).forEach(t => {
+      const f = computeTaskFields(t, c);
+      if(f.status !== 'late') return;
+      const dias = f.dataPrevista ? businessDaysBetween(f.dataPrevista, today) : null;
+      lateTasks.push({ dealId:c.id, deal:c.name, area:t.area||'Sem área', owner:t.owner||'Sem responsável', task:t.task||'', dataPrevista:f.dataPrevista, dias: dias !== null ? dias : '?' });
+    });
+  });
+  lateTasks.sort((a,b) => (b.dias||0) - (a.dias||0));
+
+  // Group: area → owner → tasks
+  const byArea = {};
+  lateTasks.forEach(t => {
+    if(!byArea[t.area]) byArea[t.area] = {};
+    if(!byArea[t.area][t.owner]) byArea[t.area][t.owner] = [];
+    byArea[t.area][t.owner].push(t);
+  });
+
+  const areasSorted = Object.keys(byArea).sort((a,b)=>a.localeCompare(b));
+
+  // Build "Copiar lista" text (WhatsApp / email)
+  function buildCopyText(){
+    const lines = ['📋 *Cobrança PMI Tracker* — ' + today.toLocaleDateString('pt-BR'), ''];
+    areasSorted.forEach(area => {
+      lines.push('*' + area + '*');
+      Object.keys(byArea[area]).sort().forEach(owner => {
+        byArea[area][owner].forEach(t => {
+          const prazo = t.dataPrevista ? fmtDate(t.dataPrevista) : 'sem prazo';
+          lines.push(`• *${t.owner}* | ${t.deal} — ${t.task} (${t.dias} d.u. atrasado${t.dias!==1?'s':''}; venceu ${prazo})`);
+        });
+      });
+      lines.push('');
+    });
+    return lines.join('\n');
+  }
+
+  const totalLate = lateTasks.length;
+  const node = el(`
+    <div class="space-y-5">
+      <div class="page-header">
+        <div>
+          <h1 style="display:flex;align-items:center;gap:.5rem">
+            <span style="display:inline-flex;align-items:center;justify-content:center;width:1.8rem;height:1.8rem;border-radius:.45rem;background:#fee2e2;color:#991b1b">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r=".5" fill="currentColor"/></svg>
+            </span>
+            Cobrança
+          </h1>
+          <p class="subtitle">Tarefas atrasadas por área e responsável — ${totalLate} tarefa${totalLate!==1?'s':''} em atraso</p>
+        </div>
+        ${totalLate > 0 ? `<button id="cobrancaCopyBtn" class="btn btn-primary" style="gap:.4rem">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          Copiar lista
+        </button>` : ''}
+      </div>
+
+      ${totalLate === 0 ? `
+        <div class="bhub-card p-10 text-center text-gray-400">
+          <div style="font-size:2.5rem;margin-bottom:.6rem">✅</div>
+          <div class="font-medium text-gray-600">Nenhuma tarefa atrasada!</div>
+          <div class="text-xs mt-1">Todas as tarefas estão em dia ou concluídas.</div>
+        </div>` : areasSorted.map(area => {
+          const ownersSorted = Object.keys(byArea[area]).sort();
+          const areaTotal = ownersSorted.reduce((n,o)=>n+byArea[area][o].length, 0);
+          const gatilho = AREA_TRIGGERS[area];
+          return `
+          <section class="bhub-card overflow-hidden">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:.65rem 1rem;background:var(--bhub-beige-soft);border-bottom:1px solid var(--bhub-border)">
+              <div style="display:flex;align-items:center;gap:.55rem">
+                <span style="font-size:.9rem;font-weight:700;color:var(--bhub-navy)">${escapeHtml(area)}</span>
+                <span style="font-size:.72rem;padding:.1rem .5rem;border-radius:9999px;background:#fee2e2;color:#991b1b;font-weight:700">${areaTotal} atrasada${areaTotal!==1?'s':''}</span>
+                ${gatilho ? `<span style="font-size:.72rem;color:var(--bhub-muted)">Gatilho: <strong>${escapeHtml(gatilho)}</strong></span>` : ''}
+              </div>
+            </div>
+            <div style="padding:.5rem 0">
+              ${ownersSorted.map(owner => {
+                const tasks = byArea[area][owner];
+                return `
+                <div style="padding:.4rem 1rem">
+                  <div style="display:flex;align-items:center;gap:.4rem;margin-bottom:.3rem">
+                    <span style="font-size:.78rem;font-weight:700;color:var(--bhub-navy);padding:.15rem .55rem;border-radius:9999px;background:#ede9fe;cursor:pointer" class="cobr-owner-link" data-owner="${escapeHtml(owner)}">${escapeHtml(owner)}</span>
+                    <span style="font-size:.72rem;color:var(--bhub-muted)">${tasks.length} tarefa${tasks.length!==1?'s':''}</span>
+                  </div>
+                  <div class="scroll-x">
+                  <table class="w-full text-xs" style="margin-bottom:.3rem">
+                    <thead><tr>
+                      <th style="text-align:left;padding:.2rem .4rem;font-size:.68rem;color:var(--bhub-muted)">DEAL</th>
+                      <th style="text-align:left;padding:.2rem .4rem;font-size:.68rem;color:var(--bhub-muted)">TAREFA</th>
+                      <th style="text-align:right;padding:.2rem .4rem;font-size:.68rem;color:var(--bhub-muted)">VENCEU</th>
+                      <th style="text-align:right;padding:.2rem .4rem;font-size:.68rem;color:var(--bhub-muted)">D.U. ATRASO</th>
+                    </tr></thead>
+                    <tbody>
+                      ${tasks.map(t=>`<tr>
+                        <td style="padding:.2rem .4rem"><span class="deal-link text-xs" data-summary="${escapeHtml(t.dealId)}">${escapeHtml(t.deal)}</span></td>
+                        <td style="padding:.2rem .4rem;max-width:18rem">${escapeHtml(t.task)}</td>
+                        <td style="padding:.2rem .4rem;text-align:right;white-space:nowrap">${t.dataPrevista ? fmtDate(t.dataPrevista) : '—'}</td>
+                        <td style="padding:.2rem .4rem;text-align:right;font-weight:700;color:#a01923">${t.dias}</td>
+                      </tr>`).join('')}
+                    </tbody>
+                  </table>
+                  </div>
+                </div>`;
+              }).join('<hr style="border:none;border-top:1px solid var(--bhub-border);margin:.2rem 0">')}
+            </div>
+          </section>`;
+        }).join('')}
+    </div>
+  `);
+
+  // Copy button
+  const copyBtn = node.querySelector('#cobrancaCopyBtn');
+  if(copyBtn) copyBtn.addEventListener('click', ()=>{
+    navigator.clipboard.writeText(buildCopyText()).then(()=>{
+      copyBtn.textContent = '✓ Copiado!';
+      setTimeout(()=>{ copyBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copiar lista'; }, 2000);
+    }).catch(()=>{ alert(buildCopyText()); });
+  });
+  // Deal links
+  node.querySelectorAll('[data-summary]').forEach(b=>b.addEventListener('click',()=>{ view.tab='deal'; view.dealId=b.dataset.summary; render(); }));
+  // Owner links
+  node.querySelectorAll('.cobr-owner-link').forEach(b=>b.addEventListener('click',()=>openOwnerSummary(b.dataset.owner)));
+  return node;
+}
+
 function renderShell(){
   const wrap = el(`<div class="app-shell"></div>`);
   wrap.appendChild(renderSidebar());
@@ -1501,9 +1574,9 @@ function renderShell(){
   else if(view.tab==='executiva') content.appendChild(renderExecutiva());
   else if(view.tab==='empresas') content.appendChild(renderEmpresas());
   else if(view.tab==='raid') content.appendChild(renderRaidPortfolio());
+  else if(view.tab==='cobranca' && canEdit()) content.appendChild(renderCobranca());
   else if(view.tab==='template') content.appendChild(renderTemplate());
   else if(view.tab==='deal') content.appendChild(renderDeal());
-  else if(view.tab==='hb') content.appendChild(renderPMO());
   else if(view.tab==='usuarios') content.appendChild(renderUsuarios());
   mainArea.appendChild(content);
 
@@ -1519,15 +1592,13 @@ function renderShell(){
 }
 
 function renderSidebar(){
-  const pmoTabs = [
-    ['hb', 'HB', '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="14" x2="8" y2="14"/><line x1="12" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="8" y2="18"/><line x1="12" y1="18" x2="16" y2="18"/></svg>'],
-  ];
   const portfolioTabs = [
     ['dashboard','Dashboard',      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>'],
     ['hoje',     'Visão Usuário',  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L13.09 8.26L19 7L15.45 12L19 17L13.09 15.74L12 22L10.91 15.74L5 17L8.55 12L5 7L10.91 8.26L12 2Z"/></svg>'],
     ['executiva','Visão Executiva','<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l3-3 4 4 5-7"/></svg>'],
     ['empresas', 'Deals',          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="8" height="14" rx="1"/><rect x="13" y="3" width="8" height="17" rx="1"/><line x1="6" y1="10" x2="8" y2="10"/><line x1="6" y1="14" x2="8" y2="14"/><line x1="16" y1="7" x2="18" y2="7"/><line x1="16" y1="11" x2="18" y2="11"/><line x1="16" y1="15" x2="18" y2="15"/></svg>'],
     ['raid',     'Ação de Mitigação', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L3 6v6c0 5 4 9 9 10 5-1 9-5 9-10V6l-9-4z"/><path d="M12 8v4"/><circle cx="12" cy="16" r=".5" fill="currentColor"/></svg>'],
+    ...(canEdit() ? [['cobranca', 'Cobrança', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r=".5" fill="currentColor"/></svg>']] : []),
   ];
   const configTabs = [
     ['template', 'Template',  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="13" y2="16"/></svg>'],
@@ -1546,10 +1617,10 @@ function renderSidebar(){
         <div class="logo-text">PMI <span class="blue">Tracker</span></div>
       </div>
       <nav class="sidebar-nav">
-        ${canAdmin() ? `<div class="sidebar-group-label">PMO</div>${tabHtml(pmoTabs)}<div class="sidebar-group-label" style="margin-top:.5rem">Portfólio</div>` : '<div class="sidebar-group-label">Portfólio</div>'}
+        <div class="sidebar-group-label">Portfólio</div>
         ${tabHtml(portfolioTabs)}
         <div class="sidebar-group-label" style="margin-top:.5rem">Configurações</div>
-        ${tabHtml(configTabs.filter(([k])=> (k!=='usuarios') || canAdmin()))}
+        ${tabHtml(configTabs.filter(([k])=> k!=='usuarios' || canAdmin()))}
         <button class="sidebar-collapse-btn" id="sidebarToggle" title="Recolher / expandir sidebar (tecla [)">${view.sidebarCollapsed ? chevronExpand : chevronCollapse}</button>
       </nav>
       <div class="sidebar-footer">
@@ -1813,10 +1884,17 @@ function renderRaidPortfolio(){
   const open = allItems.filter(x=>x.status!=='closed');
   // Filter: 'all' = all open, 'risco/issue/decisao/premissa' = open items with that field filled, 'closed' = closed
   const aspectFilterMap = {risco:'riscoDesc', issue:'issueDesc', decisao:'decisaoDesc', premissa:'premissaDesc'};
-  const filtered = filter==='all' ? open
+  const byType = filter==='all' ? open
     : filter==='closed' ? allItems.filter(x=>x.status==='closed')
     : aspectFilterMap[filter] ? open.filter(x=>x[aspectFilterMap[filter]])
     : open;
+  // Deal filter: show only items that have at least one selected deal (cards still show ALL deals)
+  const dealFilter = view.raidDealFilter || [];
+  const filtered = dealFilter.length > 0
+    ? byType.filter(r => (r.dealIds||[]).some(id => dealFilter.includes(id)))
+    : byType;
+  // Deals that appear in at least one RAID item (for the filter dropdown)
+  const dealsWithRaid = state.companies.filter(c => allItems.some(r => (r.dealIds||[]).includes(c.id))).sort((a,b)=>a.name.localeCompare(b.name));
 
   // KPI counts: items with each aspect filled
   const kpiCounts = {
@@ -1858,6 +1936,19 @@ function renderRaidPortfolio(){
         <button class="btn ${filter==='closed'?'btn-primary':'btn-secondary'}" data-rf="closed">✓ Fechados (${allItems.filter(x=>x.status==='closed').length})</button>
       </div>
 
+      ${dealsWithRaid.length > 0 ? `
+      <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;padding:.55rem .75rem;background:var(--bhub-beige-soft);border-radius:.6rem;border:1px solid var(--bhub-border)">
+        <span style="font-size:.78rem;font-weight:600;color:var(--bhub-navy);white-space:nowrap">🔍 Filtrar por deal:</span>
+        <div style="display:flex;flex-wrap:wrap;gap:.35rem;flex:1">
+          ${dealsWithRaid.map(c=>{
+            const sel = dealFilter.includes(c.id);
+            return `<button data-deal-filter="${escapeHtml(c.id)}" style="font-size:.73rem;padding:.2rem .6rem;border-radius:9999px;border:1px solid ${sel?'#0171E4':'var(--bhub-border)'};background:${sel?'#0171E4':'#fff'};color:${sel?'#fff':'var(--bhub-navy)'};cursor:pointer;white-space:nowrap;transition:all .15s">${escapeHtml(c.name)}</button>`;
+          }).join('')}
+        </div>
+        ${dealFilter.length > 0 ? `<button id="clearDealFilter" style="font-size:.72rem;color:#6b7280;cursor:pointer;background:none;border:none;padding:.1rem .4rem;white-space:nowrap">✕ Limpar</button>` : ''}
+        ${dealFilter.length > 0 ? `<span style="font-size:.72rem;color:var(--bhub-muted)">${filtered.length} item${filtered.length!==1?'s':''} encontrado${filtered.length!==1?'s':''}</span>` : ''}
+      </div>` : ''}
+
       ${filtered.length ? `
       <div class="bhub-card overflow-hidden">
         <div class="scroll-x">
@@ -1870,7 +1961,6 @@ function renderRaidPortfolio(){
               <th>SEVERIDADE</th>
               <th>STATUS</th>
               <th>OWNER</th>
-              <th>PARTICIPANTES</th>
               <th>PRAZO</th>
               <th>BLOQUEIOS</th>
               ${canEdit()?'<th></th>':''}
@@ -1908,49 +1998,24 @@ function renderRaidPortfolio(){
         +'<td>'+(sev?'<span class="pill sev-'+r.severity+'">'+sev.label+'</span>':'')+'</td>'
         +'<td>'+(st?'<span class="pill">'+st.label+'</span>':'')+'</td>'
         +'<td class="text-xs">'+(r.owner?'<span class="deal-link" data-owner="'+escapeHtml(r.owner)+'">'+escapeHtml(r.owner)+'</span>':'<span class="text-red-500 font-semibold">sem owner</span>')+'</td>'
-        +(()=>{
-          const pts = r.participants||[];
-          if(!pts.length) return '<td class="text-xs"><span class="text-gray-400">—</span></td>';
-          const MAX=5, uid='gpp-'+r.id;
-          const visible = pts.slice(0,MAX).map(p=>'<span class="pill" style="font-size:.65rem;padding:.1rem .4rem;margin:.1rem">'+escapeHtml(p)+'</span>').join('');
-          const extra = pts.slice(MAX).map(p=>'<span class="pill" style="font-size:.65rem;padding:.1rem .4rem;margin:.1rem">'+escapeHtml(p)+'</span>').join('');
-          const toggle = pts.length>MAX?'<span id="'+uid+'" style="cursor:pointer;font-size:.65rem;padding:.1rem .4rem;border-radius:.75rem;background:#f3f4f6;color:#374151;border:1px solid #d1d5db;font-weight:600;white-space:nowrap;margin:.1rem" data-expanded="0">+'+(pts.length-MAX)+'</span>':'';
-          const extraDiv = pts.length>MAX?'<span id="'+uid+'-extra" style="display:none">'+extra+'</span>':'';
-          return '<td class="text-xs">'+visible+extraDiv+toggle+'</td>';
-        })()
         +'<td class="text-xs">'+(r.dueDate?fmtDate(parseDate(r.dueDate)):'<span class="text-red-500 font-semibold">sem prazo</span>')+'</td>'
-        +(()=>{
-          if(blockCount===0) return '<td class="text-center"><span class="text-gray-400 text-xs">0</span></td>';
-          // Coleta as tarefas bloqueadas associadas
-          const blockedTasks = (r.dealIds||[]).flatMap(cid=>{
-            const c = state.companies.find(x=>x.id===cid);
-            return (state.deals[cid]?.tasks||[])
-              .filter(t=>t.bloqueio==='Sim' && t.raidId===r.id)
-              .map(t=>({...t, dealName: c?.name||''}));
-          });
-          return `<td class="text-center" style="position:relative">${blkDropdownHtml(r.id, blockedTasks)}</td>`;
-        })()
+        +'<td class="text-center">'+(blockCount>0?'<span style="background:#fee2e2;color:#991b1b;padding:.1rem .45rem;border-radius:9999px;font-weight:700;font-size:.75rem">'+blockCount+'</span>':'<span class="text-gray-400 text-xs">0</span>')+'</td>'
         +(canEdit()?'<td><button class="btn btn-secondary" data-raid-edit="'+r.id+'">✎</button></td>':'');
       tbody.appendChild(tr);
     });
     node.querySelectorAll('[data-raid-edit]').forEach(b=>b.onclick=()=>openRaidModal(null, b.dataset.raidEdit));
-    // Listeners de bloqueios no nó local (complementa o attachBlkListeners do render)
-    attachBlkListeners(node);
-    // Toggle "+N" participantes na tabela global
-    tbody.querySelectorAll('[id^="gpp-"]:not([id$="-extra"])').forEach(btn=>{
-      btn.addEventListener('click', e=>{
-        e.stopPropagation();
-        const extraEl = document.getElementById(btn.id+'-extra');
-        const expanded = btn.dataset.expanded==='1';
-        if(extraEl) extraEl.style.display = expanded?'none':'inline';
-        const base = parseInt(btn.textContent)||0;
-        btn.textContent = expanded?'+'+base:'▲';
-        btn.dataset.expanded = expanded?'0':'1';
-      });
-    });
   }
 
   node.querySelectorAll('[data-rf]').forEach(b=>b.addEventListener('click',()=>{ view.raidPortfolioFilter=b.dataset.rf; render(); }));
+  // Deal filter pill buttons
+  node.querySelectorAll('[data-deal-filter]').forEach(b=>b.addEventListener('click',()=>{
+    const id = b.dataset.dealFilter;
+    const cur = view.raidDealFilter || [];
+    view.raidDealFilter = cur.includes(id) ? cur.filter(x=>x!==id) : [...cur, id];
+    render();
+  }));
+  const clearDealFilter = node.querySelector('#clearDealFilter');
+  if(clearDealFilter) clearDealFilter.addEventListener('click',()=>{ view.raidDealFilter=[]; render(); });
   const addBtn = node.querySelector('#addRaidGlobal');
   if(addBtn) addBtn.onclick = ()=>openRaidModal(null);
   node.querySelectorAll('[data-summary]').forEach(b=>b.addEventListener('click',()=>{ view.tab='deal'; view.dealId=b.dataset.summary; render(); }));
@@ -1960,7 +2025,13 @@ function renderRaidPortfolio(){
 }
 
 function dealLink(id, name){ return id ? '<span class="deal-link" data-summary="'+id+'">'+escapeHtml(name)+'</span>' : escapeHtml(name||''); }
-function areaLink(a){ return a ? '<span class="deal-link" data-area="'+escapeHtml(a)+'">'+escapeHtml(a)+'</span>' : ''; }
+function areaLink(a){
+  if(!a) return '';
+  const gatilho = AREA_TRIGGERS[a];
+  const tip = gatilho ? ` title="Gatilho: ${escapeHtml(gatilho)}"` : '';
+  const badge = gatilho ? `<span style="display:inline-block;margin-left:.3rem;font-size:.6rem;padding:.05rem .35rem;border-radius:9999px;background:#ede9fe;color:#5b21b6;font-weight:700;vertical-align:middle;cursor:default" title="Gatilho: ${escapeHtml(gatilho)}">G</span>` : '';
+  return `<span class="deal-link" data-area="${escapeHtml(a)}"${tip}>${escapeHtml(a)}</span>${badge}`;
+}
 function ownerLink(o){ return o ? '<span class="deal-link" data-owner="'+escapeHtml(o)+'">'+escapeHtml(o)+'</span>' : ''; }
 function dealRow6(r, col5, col6){ return '<tr><td>'+dealLink(r.dealId,r.deal)+'</td><td>'+areaLink(r.area)+'</td><td>'+escapeHtml(r.task||'')+'</td><td>'+ownerLink(r.owner)+'</td><td>'+col5+'</td><td class="text-center">'+col6+'</td></tr>'; }
 function dealRow5desc(r){ return '<tr><td>'+dealLink(r.dealId,r.deal)+'</td><td>'+areaLink(r.area)+'</td><td>'+escapeHtml(r.task||'')+'</td><td>'+ownerLink(r.owner)+'</td><td>'+escapeHtml(r.desc||'')+'</td></tr>'; }
@@ -1993,7 +2064,7 @@ function renderDashboard(){
 
   // Listas pra popular os selects de filtro
   const allDeals = state.companies.map(c=>({id:c.id, name:c.name})).sort((a,b)=>a.name.localeCompare(b.name));
-  const allAreasD = Array.from(new Set([...state.template.map(t=>t.area),...Object.values(state.deals).flatMap(d=>d.tasks.map(t=>t.area))].filter(Boolean))).sort();
+  const allAreasD = Array.from(new Set([...DEFAULT_AREAS.map(a=>a.name), ...state.template.map(t=>t.area), ...Object.values(state.deals).flatMap(d=>d.tasks.map(t=>t.area))].filter(Boolean))).sort();
   const allOwnersD = Array.from(new Set(Object.values(state.deals).flatMap(d=>d.tasks.map(t=>t.owner)).filter(Boolean))).sort();
   const f = view.dashFilters || {deals:[],areas:[],owners:[]};
 
@@ -2043,17 +2114,13 @@ function renderDashboard(){
   }));
   top.sort((a,b)=>b.dias-a.dias);
 
-  // Heatmap: area x deal — inclui áreas do template + áreas reais dos deals (mesmo critério da Visão Executiva e do filtro de áreas)
-  const areas = Array.from(new Set([
-    ...state.template.map(t=>t.area),
-    ...rawData.flatMap(d=>d.tasks.map(t=>t.area))
-  ].filter(Boolean))).sort();
-  // Consolidação: late > ontrack > done (qualquer atrasado = bloco atrasado)
+  // Heatmap: area x deal
+  const areas = Array.from(new Set([...DEFAULT_AREAS.map(a=>a.name), ...state.template.map(t=>t.area), ...Object.values(state.deals).flatMap(d=>d.tasks.map(t=>t.area))].filter(Boolean)));
   function cellStatus(deal, area){
     const ts = deal.tasks.filter(t=>t.area===area);
     if(!ts.length) return 'empty';
-    if(ts.some(t=>t._f.status==='late')) return 'late';
     if(ts.every(t=>t._f.status==='done')) return 'done';
+    if(ts.some(t=>t._f.status==='late')) return 'late';
     if(ts.some(t=>t._f.status==='ontrack')) return 'ontrack';
     return 'empty';
   }
@@ -2230,7 +2297,7 @@ function renderDashboard(){
                   <td>${r.area?`<span class="deal-link" data-area="${escapeHtml(r.area)}">${escapeHtml(r.area)}</span>`:''}</td>
                   <td><span style="color:${r.severity==='high'?'#dc2626':r.severity==='med'?'#d97706':'#3b82f6'};font-weight:600">${SEVERITIES.find(s=>s.id===r.severity)?.label||''}</span></td>
                   <td>${r.owner?`<span class="deal-link" data-owner="${escapeHtml(r.owner)}">${escapeHtml(r.owner)}</span>`:''}</td>
-                  <td class="text-center" style="position:relative">${r.blockCount>0?blkDropdownHtml(r.id,(r.dealIds||[]).flatMap(cid=>{const c=state.companies.find(x=>x.id===cid);return(state.deals[cid]?.tasks||[]).filter(t=>t.bloqueio==='Sim'&&t.raidId===r.id).map(t=>({...t,dealName:c?.name||''}));})):'<span style="color:#9ca3af">0</span>'}</td>
+                  <td class="text-center">${r.blockCount>0?`<span style="background:#fee2e2;color:#991b1b;padding:.1rem .5rem;border-radius:9999px;font-weight:700">${r.blockCount}</span>`:'<span style="color:#9ca3af">0</span>'}</td>
                 </tr>`).join('')}
               </tbody>
             </table>
@@ -2239,7 +2306,7 @@ function renderDashboard(){
             <div class="empty-icon">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L3 6v6c0 5 4 9 9 10 5-1 9-5 9-10V6l-9-4z"/><polyline points="9 12 11 14 15 10"/></svg>
             </div>
-            <p class="empty-title">Nenhuma Ação de Mitigação aberta</p>
+            <p class="empty-title">Nenhum RAID aberto</p>
           </div>`}
         </div>
       </section>
@@ -2318,6 +2385,31 @@ function renderDashboard(){
           `).join('')}
         </div>
       </section>
+
+      <!-- ====== CARD: Gatilhos por Área ====== -->
+      <section class="bhub-card overflow-hidden">
+        <div id="triggersHeader" style="display:flex;align-items:center;justify-content:space-between;padding:.75rem 1rem;cursor:pointer;background:var(--bhub-beige-soft);border-bottom:1px solid var(--bhub-border)">
+          <div style="display:flex;align-items:center;gap:.55rem">
+            <span style="display:inline-flex;align-items:center;justify-content:center;width:1.6rem;height:1.6rem;border-radius:.4rem;background:#ede9fe;color:#5b21b6">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            </span>
+            <span style="font-size:.9rem;font-weight:600;color:var(--bhub-navy);font-family:'Roboto',sans-serif">Gatilhos por Área</span>
+            <span style="font-size:.72rem;color:var(--bhub-muted);font-weight:400">— quem acionar em cada área</span>
+          </div>
+          <span id="triggersChevron" style="color:var(--bhub-muted);font-size:.8rem">${view.triggersCardOpen ? '▴' : '▾'}</span>
+        </div>
+        <div id="triggersBody" style="display:${view.triggersCardOpen ? 'block' : 'none'};padding:.75rem 1rem">
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:.5rem">
+            ${Object.entries(AREA_TRIGGERS).filter(([,g])=>g).map(([area,gatilho])=>`
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:.55rem .75rem;border-radius:.6rem;background:#f8f9fc;border:1px solid var(--bhub-border);gap:.75rem">
+                <span style="font-size:.82rem;font-weight:600;color:var(--bhub-navy);font-family:'Roboto',sans-serif;white-space:nowrap">${escapeHtml(area)}</span>
+                <span style="font-size:.78rem;color:#5b21b6;font-weight:500;text-align:right">${escapeHtml(gatilho)}</span>
+              </div>
+            `).join('')}
+          </div>
+          <p style="font-size:.7rem;color:var(--bhub-muted);margin-top:.75rem">💡 O badge <span style="display:inline-block;font-size:.6rem;padding:.05rem .35rem;border-radius:9999px;background:#ede9fe;color:#5b21b6;font-weight:700">G</span> ao lado de cada área indica o gatilho responsável. Passe o mouse para ver o nome.</p>
+        </div>
+      </section>
     </div>
   `);
   node.querySelectorAll('[data-deal]').forEach(td=>td.addEventListener('click',()=>{ view.tab='deal'; view.dealId=td.dataset.deal; render(); }));
@@ -2373,6 +2465,10 @@ function renderDashboard(){
 
   // Botão comparar deals
   node.querySelector('#cmpBtn').addEventListener('click', ()=>openCompareDealsPicker());
+
+  // Toggle card Gatilhos por Área
+  const triggersHeader = node.querySelector('#triggersHeader');
+  if(triggersHeader) triggersHeader.addEventListener('click', ()=>{ view.triggersCardOpen = !view.triggersCardOpen; render(); });
 
   // Render charts after mount
   setTimeout(()=>{
@@ -2440,41 +2536,16 @@ function renderDashboard(){
       }
     });
   },0);
-  // Garante listeners de bloqueios no dashboard (independente do render())
-  // Navegacao pelos cards KPI
-  var kpiHeroSection = node.querySelector('.kpi-hero-section');
-  if(kpiHeroSection){
-    kpiHeroSection.querySelectorAll('.kpi, .kpi-hero').forEach(function(card){
-      card.style.cursor = 'pointer';
-      card.style.transition = 'box-shadow .15s, transform .15s';
-      card.addEventListener('mouseenter', function(){ card.style.boxShadow = '0 4px 16px rgba(1,113,228,.20)'; card.style.transform = 'translateY(-2px)'; });
-      card.addEventListener('mouseleave', function(){ card.style.boxShadow = ''; card.style.transform = ''; });
-      card.addEventListener('click', function(){
-        var lbl = (card.querySelector('.kpi-label')||{}).textContent || '';
-        if(lbl.includes('Mitiga')){ view.tab = 'raid'; render(); return; }
-        view.tab = 'deal';
-        view.dealId = '__all__';
-        view.dealTab = 'tarefas';
-        view.dealTaskStatusFilter = '';
-        view.dealTaskBloqueioFilter = '';
-        view.dealTaskAreaFilter = '';
-        view.dealTaskOwnerFilter = '';
-        if(lbl.includes('Done'))          { view.dealTaskStatusFilter = 'done'; }
-        else if(lbl.includes('Track'))    { view.dealTaskStatusFilter = 'ontrack'; }
-        else if(lbl.includes('Atrasad'))  { view.dealTaskStatusFilter = 'late'; }
-        else if(lbl.includes('Bloqueio')) { view.dealTaskBloqueioFilter = 'Sim'; }
-        render();
-      });
-    });
-  }
-  attachBlkListeners(node);
   return node;
 }
 
 function renderDashboardRagMatrix(data){
   if(!data.length) return '<div class="text-xs text-gray-500">Sem deals.</div>';
   const currentWeek = currentIsoWeek();
-  const allAreas = DEFAULT_AREAS.map(a=>a.name);
+  const allAreas = Array.from(new Set([
+    ...DEFAULT_AREAS.map(a=>a.name),
+    ...Object.values(state.deals).flatMap(d=>d.tasks.map(t=>t.area))
+  ].filter(Boolean)));
   function lastRagFor(dealId, area){
     const arr = (state.deals[dealId]?.health||[]).filter(h=>h.area===area).sort((a,b)=>b.weekIso.localeCompare(a.weekIso));
     return arr[0]?.rag || 'na';
@@ -2544,7 +2615,7 @@ function openExecPdfDealModal(deals, onDone){
 }
 
 function renderExecutiva(){
-  // Collect all areas from actual deal tasks (preserva as áreas reais do banco)
+  // Collect all areas
   const allAreas = Array.from(new Set([
     ...state.template.map(t=>t.area),
     ...Object.values(state.deals).flatMap(d=>d.tasks.map(t=>t.area))
@@ -2910,9 +2981,6 @@ function openCompanyModal(existing){
   if(del) del.onclick = async ()=>{
     if(!confirm('Excluir esta empresa e todas as suas tarefas?')) return;
     try{
-      // Apagar registros dependentes antes de apagar a empresa (evita erro de FK em audit_log)
-      await supa.from('audit_log').delete().eq('company_id', existing.id);
-      await supa.from('tasks').delete().eq('company_id', existing.id);
       const { error } = await supa.from('companies').delete().eq('id', existing.id);
       if(error) throw error;
       state.companies = state.companies.filter(c=>c.id!==existing.id);
@@ -3157,7 +3225,7 @@ function openOwnerSummary(ownerName){
             <h2 class="text-xl font-bold" style="color:var(--bhub-navy)">👤 ${escapeHtml(ownerName)}</h2>
             <span class="rag rag-${overall}" style="font-size:.7rem"><span class="rag-dot"></span>${overallLabel}</span>
           </div>
-          <div class="text-xs mt-1" style="color:var(--bhub-muted)">Snapshot por responsável • ${total} tarefa(s) • ${openRaid.length} ação(ões) de mitigação • ${syns.length} sinergia(s)</div>
+          <div class="text-xs mt-1" style="color:var(--bhub-muted)">Snapshot por responsável • ${total} tarefa(s) • ${openRaid.length} RAID aberto(s) • ${syns.length} sinergia(s)</div>
         </div>
         <button id="closeOwner" class="btn btn-secondary">Fechar</button>
       </div>
@@ -3377,81 +3445,8 @@ function openCompareDealsView(ids){
   m.querySelectorAll('[data-area]').forEach(el=>el.addEventListener('click', e=>{ e.stopPropagation(); if(el.dataset.area){ m.remove(); openAreaSummary(el.dataset.area); } }));
 }
 
-function renderAllDealsView(){
-  var sf = view.dealTaskStatusFilter || '';
-  var bf = view.dealTaskBloqueioFilter || '';
-  var allTasks = state.companies.flatMap(function(c){
-    var d = dealOf(c.id);
-    return d.tasks.map(function(t){ return Object.assign({}, t, {_f: computeTaskFields(t, c)}); });
-  });
-  var total = allTasks.length;
-  var doneCnt = allTasks.filter(function(t){ return t._f.status==='done'; }).length;
-  var lateCnt = allTasks.filter(function(t){ return t._f.status==='late'; }).length;
-  var blkCnt  = allTasks.filter(function(t){ return t.bloqueio==='Sim'; }).length;
-  var pct = total ? Math.round(doneCnt/total*100) : 0;
-  var wrap = document.createElement('div');
-  wrap.className = 'space-y-4';
-  var hdr = document.createElement('div');
-  hdr.className = 'flex items-center justify-between flex-wrap gap-3';
-  hdr.innerHTML = '<div><div class="text-xs text-gray-500"><button class="hover:underline" id="back">← Empresas</button></div>'
-    + '<h1 class="text-xl font-bold">Todos os Deals</h1>'
-    + '<div class="text-sm text-gray-500">' + total + ' tarefas • ' + pct + '% concluído</div></div>';
-  var selWrap = document.createElement('div');
-  selWrap.className = 'flex gap-2 items-start';
-  var sel = document.createElement('select');
-  sel.id = 'dealSel'; sel.className = 'w-56';
-  var aoOpt = document.createElement('option');
-  aoOpt.value = '__all__'; aoOpt.selected = true; aoOpt.textContent = 'Todos os Deals';
-  sel.appendChild(aoOpt);
-  state.companies.forEach(function(c){
-    var o = document.createElement('option'); o.value = c.id; o.textContent = c.name; sel.appendChild(o);
-  });
-  selWrap.appendChild(sel);
-  hdr.appendChild(selWrap);
-  wrap.appendChild(hdr);
-  var statsRow = document.createElement('div');
-  statsRow.className = 'grid grid-cols-2 md:grid-cols-4 gap-2';
-  statsRow.innerHTML = '<div class="mini-stat"><div class="lbl">Progresso</div><div class="val">' + pct + '%</div></div>'
-    + '<div class="mini-stat"><div class="lbl">Tasks Done</div><div class="val">' + doneCnt + '/' + total + '</div></div>'
-    + '<div class="mini-stat"><div class="lbl">Atrasadas</div><div class="val" style="color:var(--bhub-red)">' + lateCnt + '</div></div>'
-    + '<div class="mini-stat"><div class="lbl">Bloqueios</div><div class="val" style="color:#92400e">' + blkCnt + '</div></div>';
-  wrap.appendChild(statsRow);
-  state.companies.forEach(function(c){
-    var d = dealOf(c.id);
-    var cTasks = d.tasks.map(function(t){ return Object.assign({}, t, {_f: computeTaskFields(t, c)}); });
-    var matchCnt = cTasks.filter(function(t){
-      if(sf && t._f.status !== sf) return false;
-      if(bf && t.bloqueio !== bf) return false;
-      return true;
-    }).length;
-    if((sf || bf) && matchCnt === 0) return;
-    var det = document.createElement('details');
-    det.className = 'border border-gray-200 rounded-lg overflow-hidden mb-2';
-    det.open = false;
-    var sumEl = document.createElement('summary');
-    sumEl.className = 'px-4 py-2 bg-gray-50 font-semibold text-sm cursor-pointer select-none';
-    sumEl.textContent = c.name + (sf || bf ? ' (' + matchCnt + ')' : '');
-    var body = document.createElement('div');
-    var subView = renderDealTasks(c, {}, cTasks);
-    subView.querySelectorAll('#addTask,#seed,[data-edit],[data-approve-task],[data-reject-task]').forEach(function(el){ el.style.display='none'; });
-    var fs = subView.querySelector('select');
-    if(fs){ var fb=fs.parentElement; while(fb && fb.parentElement !== subView){ fb=fb.parentElement; } if(fb) fb.style.display='none'; }
-    body.appendChild(subView);
-    det.appendChild(sumEl);
-    det.appendChild(body);
-    wrap.appendChild(det);
-  });
-  hdr.querySelector('#back').onclick = function(){
-    view.tab='empresas'; view.dealId=null; view.dealTab='tarefas';
-    view.dealTaskOwnerFilter=''; view.dealTaskAreaFilter=''; view.dealTaskStatusFilter=''; view.dealTaskBloqueioFilter='';
-    render();
-  };
-  sel.onchange = function(e){ view.dealId = e.target.value; render(); };
-  return wrap;
-}
 /* ---------- Deal detail ---------- */
 function renderDeal(){
-  if(view.dealId === '__all__') return renderAllDealsView();
   const company = state.companies.find(c=>c.id===view.dealId) || state.companies[0];
   if(!company){
     return el(`<div class="text-sm text-gray-500">Nenhum deal selecionado.</div>`);
@@ -3506,8 +3501,7 @@ function renderDeal(){
         </div>
         <div class="flex gap-2 items-start">
           <select id="dealSel" class="w-56">
-            <option value="__all__">Todos os Deals</option>
-          ${state.companies.map(c=>`<option value="${c.id}" ${c.id===company.id?'selected':''}>${c.name}</option>`).join('')}
+            ${state.companies.map(c=>`<option value="${c.id}" ${c.id===company.id?'selected':''}>${c.name}</option>`).join('')}
           </select>
           ${canEdit() ? `<button id="editCo" class="btn btn-secondary">⚙ Editar</button>`:''}
         </div>
@@ -3530,24 +3524,8 @@ function renderDeal(){
     </div>
   `);
   node.querySelector('#subview').appendChild(subView);
-  node.querySelector('#back').onclick = ()=>{ view.tab='empresas'; view.dealId=null; view.dealTab='tarefas'; view.dealTaskOwnerFilter=''; view.dealTaskAreaFilter=''; view.dealTaskStatusFilter=''; render(); };
-
-
-
-  // Adiciona opcao 'Todos os Deals' no topo do dealSel
-  var _ds = node.querySelector('#dealSel');
-
+  node.querySelector('#back').onclick = ()=>{ view.tab='empresas'; view.dealId=null; view.dealTab='tarefas'; render(); };
   node.querySelector('#dealSel').onchange = e=>{ view.dealId=e.target.value; render(); };
-  // [v4] Garante exatamente 1 'Todos os Deals' no dealSel
-  (function(){
-    var _ds4 = node.querySelector('#dealSel');
-    if (!_ds4) return;
-    _ds4.querySelectorAll('option[value="__all__"]').forEach(function(o){ o.remove(); });
-    var _opt4 = document.createElement('option');
-    _opt4.value = '__all__';
-    _opt4.textContent = 'Todos os Deals';
-    _ds4.insertBefore(_opt4, _ds4.firstChild);
-  })();
   const editCo = node.querySelector('#editCo');
   if(editCo) editCo.onclick = ()=>openCompanyModal(company);
   node.querySelectorAll('[data-subtab]').forEach(b=>b.onclick = ()=>{ view.dealTab=b.dataset.subtab; render(); });
@@ -3556,21 +3534,9 @@ function renderDeal(){
 
 function renderDealTasks(company, deal, tasks){
   const total = tasks.length;
-  // Filters
-  const allOwners = [...new Set(tasks.map(t=>t.owner).filter(Boolean))].sort();
-  const allAreas = sortAreaNames([...new Set(tasks.map(t=>t.area).filter(Boolean))]);
-  const activeOwnerFilter = view.dealTaskOwnerFilter || '';
-  const activeBloqueioFilter = view.dealTaskBloqueioFilter || '';
-  const activeAreaFilter = view.dealTaskAreaFilter || '';
-  const activeStatusFilter = view.dealTaskStatusFilter || '';
-  const filteredTasks = tasks
-    .filter(t => !activeOwnerFilter || t.owner === activeOwnerFilter)
-    .filter(t => !activeBloqueioFilter || t.bloqueio === activeBloqueioFilter)
-    .filter(t => !activeAreaFilter || t.area === activeAreaFilter)
-    .filter(t => !activeStatusFilter || t._f.status === activeStatusFilter);
   // group by area, sorted by ref within each group, areas in canonical order
   const grouped = {};
-  filteredTasks.forEach(t => {
+  tasks.forEach(t => {
     const a = t.area || '(sem área)';
     if(!grouped[a]) grouped[a] = [];
     grouped[a].push(t);
@@ -3583,37 +3549,9 @@ function renderDealTasks(company, deal, tasks){
   };
   const node = el(`
     <div class="space-y-3">
-      <div class="flex items-center justify-between gap-2 flex-wrap">
-        <div class="flex items-center gap-2 flex-wrap">
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--bhub-muted)"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
-          <span style="font-size:.78rem;color:var(--bhub-muted);font-weight:600;white-space:nowrap">Área:</span>
-          <select id="dealAreaFilter" style="min-width:150px;max-width:220px;padding:.3rem .6rem;font-size:.8rem;border-radius:.5rem">
-            <option value="">Todas</option>
-            ${allAreas.map(a=>`<option value="${escapeHtml(a)}"${activeAreaFilter===a?' selected':''}>${escapeHtml(a)}</option>`).join('')}
-          </select>
-          <span style="font-size:.78rem;color:var(--bhub-muted);font-weight:600;white-space:nowrap">Status:</span>
-          <select id="dealStatusFilter" style="width:auto;min-width:100px;max-width:150px;padding:.3rem .55rem;font-size:.8rem;border-radius:.5rem">
-            <option value="">Todos</option>
-            <option value="done"${activeStatusFilter==='done'?' selected':''}>Done</option>
-            <option value="ontrack"${activeStatusFilter==='ontrack'?' selected':''}>On track</option>
-            <option value="late"${activeStatusFilter==='late'?' selected':''}>Atrasado</option>
-            <option value="empty"${activeStatusFilter==='empty'?' selected':''}>Sem data</option>
-          </select>
-          
-          <span style="font-size:.78rem;color:var(--bhub-muted);font-weight:600;white-space:nowrap">Pessoa:</span>
-          <select id="dealOwnerFilter" style="min-width:180px;max-width:260px;padding:.3rem .6rem;font-size:.8rem;border-radius:.5rem">
-            <option value="">Todos</option>
-            ${allOwners.map(o=>`<option value="${escapeHtml(o)}"${activeOwnerFilter===o?' selected':''}>${escapeHtml(o)}</option>`).join('')}
-          </select>
-          <button data-bloqueio-filter="1" style="padding:.3rem .75rem;font-size:.78rem;border-radius:.5rem;border:1px solid ${activeBloqueioFilter?'#dc2626':'var(--bhub-border)'};background:${activeBloqueioFilter?'#fee2e2':'#fff'};color:${activeBloqueioFilter?'#991b1b':'var(--bhub-muted)'};font-weight:600;cursor:pointer;white-space:nowrap">
-            🚨 ${activeBloqueioFilter ? 'Só bloqueios ✕' : 'Ver bloqueios'}
-          </button>
-          ${(activeOwnerFilter||activeBloqueioFilter||activeAreaFilter||activeStatusFilter) ? `<span style="font-size:.75rem;color:var(--bhub-muted)">${filteredTasks.length} de ${total} tarefas</span><button id="clearTaskFilters" style="margin-left:.25rem;padding:.25rem .5rem;font-size:.72rem;background:#fee2e2;color:#b91c1c;border:1px solid #fca5a5;border-radius:6px;cursor:pointer;font-weight:600">× Limpar filtros</button>` : ''}
-        </div>
-        <div class="flex items-center gap-2">
-          ${canEdit() && total===0 ? `<button id="seed" class="btn btn-primary">Criar a partir do Template</button>`:''}
-          ${canEdit() ? `<button id="addTask" class="btn btn-primary">+ Tarefa</button>`:''}
-        </div>
+      <div class="flex items-center justify-end gap-2">
+        ${canEdit() && total===0 ? `<button id="seed" class="btn btn-primary">Criar a partir do Template</button>`:''}
+        ${canEdit() ? `<button id="addTask" class="btn btn-primary">+ Tarefa</button>`:''}
       </div>
       ${areasInOrder.map(a => `
         <section class="bhub-card overflow-hidden">
@@ -3643,7 +3581,7 @@ function renderDealTasks(company, deal, tasks){
                   <td>${t._f.dataPrevista?fmtDate(t._f.dataPrevista):''}</td>
                   <td>${t._f.dataReal?fmtDate(t._f.dataReal):''}</td>
                   <td class="text-right">${t.completado||0}%</td>
-                  <td class="text-right ${t._f.status==='late'?'text-red-700':t._f.status==='ontrack'?'text-green-700':''}">${t._f.status==='late'?(t._f.diasAtraso||t._f.atraso||''):t._f.status==='ontrack'?(t._f.atraso||''):''}</td>
+                  <td class="text-right ${t._f.atraso!=null && t._f.atraso>0?'text-red-700':'text-green-700'}">${t._f.atraso ?? (t._f.diasAtraso ? '+'+t._f.diasAtraso : '')}</td>
                   <td>${t.ultimoUpdate?fmtDate(t.ultimoUpdate):''}</td>
                   <td>${t.proximoPasso||''}</td>
                   <td>${t.bloqueio==='Sim'?'<span class="pill status-late">Sim</span>':'<span class="pill status-empty">Não</span>'}</td>
@@ -3656,31 +3594,6 @@ function renderDealTasks(company, deal, tasks){
       `).join('') || `<div class="bhub-card p-8 text-center text-gray-500 text-sm">Nenhuma tarefa. Use "Criar a partir do Template" ou adicione tarefas manualmente.</div>`}
     </div>
   `);
-  const dealAreaFilterEl = node.querySelector('#dealAreaFilter');
-  if(dealAreaFilterEl) dealAreaFilterEl.addEventListener('change', ()=>{
-    view.dealTaskAreaFilter = dealAreaFilterEl.value;
-    render();
-  });
-  const dealStatusFilterEl = node.querySelector('#dealStatusFilter');
-  if(dealStatusFilterEl) dealStatusFilterEl.addEventListener('change', ()=>{
-    view.dealTaskStatusFilter = dealStatusFilterEl.value;
-    render();
-  });
-  const dealOwnerFilterEl = node.querySelector('#dealOwnerFilter');
-  if(dealOwnerFilterEl) dealOwnerFilterEl.addEventListener('change', ()=>{
-    view.dealTaskOwnerFilter = dealOwnerFilterEl.value;
-    render();
-  });
-  const bloqueioFilterBtn = node.querySelector('[data-bloqueio-filter]');
-  if(bloqueioFilterBtn) bloqueioFilterBtn.addEventListener('click', ()=>{
-    view.dealTaskBloqueioFilter = view.dealTaskBloqueioFilter ? '' : 'Sim';
-    render();
-  });
-  const clearTaskFiltersBtn = node.querySelector('#clearTaskFilters');
-  if(clearTaskFiltersBtn) clearTaskFiltersBtn.addEventListener('click', ()=>{
-    view.dealTaskOwnerFilter=''; view.dealTaskAreaFilter=''; view.dealTaskStatusFilter=''; view.dealTaskBloqueioFilter='';
-    render();
-  });
   const seed = node.querySelector('#seed');
   if(seed) seed.onclick = async ()=>{
     if(state.template.length===0){ alert('Template está vazio. Cadastre tarefas no Template primeiro.'); return; }
@@ -3712,9 +3625,7 @@ function renderDealTasks(company, deal, tasks){
       const { error } = await supa.from('tasks').delete().eq('id', taskId);
       if(error) throw error;
       const d = state.deals[cid];
-      const deletedRef = d?.tasks?.find(x=>x.id===taskId)?.ref;
       if(d) d.tasks = d.tasks.filter(x=>x.id!==taskId);
-      await renumberDealTaskRefs(cid, deletedRef);
       render();
     }catch(err){ alert('Erro: '+(err.message||err)); }
   }));
@@ -3756,7 +3667,7 @@ function renderDealRaid(company, deal){
       <div class="bhub-card overflow-hidden">
         <div class="scroll-x">
           <table class="w-full">
-            <thead><tr><th class="min-w-[16rem]">TÍTULO</th><th>ASPECTOS</th><th>ÁREA</th><th>SEVERIDADE</th><th>STATUS</th><th>OWNER</th><th>PARTICIPANTES</th><th>PRAZO</th><th class="min-w-[14rem]">MITIGAÇÃO</th><th class="text-center">BLOQUEIOS</th>${canEdit()?'<th></th>':''}</tr></thead>
+            <thead><tr><th class="min-w-[16rem]">TÍTULO</th><th>ASPECTOS</th><th>ÁREA</th><th>SEVERIDADE</th><th>STATUS</th><th>OWNER</th><th>PRAZO</th><th class="min-w-[14rem]">MITIGAÇÃO</th>${canEdit()?'<th></th>':''}</tr></thead>
             <tbody id="dealRaidRows"></tbody>
           </table>
         </div>
@@ -3777,50 +3688,19 @@ function renderDealRaid(company, deal){
         +'<td>'+(sev?'<span class="pill sev-'+r.severity+'">'+sev.label+'</span>':'')+'</td>'
         +'<td>'+(st?'<span class="pill">'+st.label+'</span>':'')+'</td>'
         +'<td class="text-xs">'+(r.owner?'<span class="deal-link" data-owner="'+escapeHtml(r.owner)+'">'+escapeHtml(r.owner)+'</span>':'')+'</td>'
-        +(()=>{
-          const pts = r.participants||[];
-          if(!pts.length) return '<td class="text-xs"><span class="text-gray-400">—</span></td>';
-          const MAX=5, uid='pp-'+r.id;
-          const visible = pts.slice(0,MAX).map(p=>'<span class="pill" style="font-size:.65rem;padding:.1rem .4rem;margin:.1rem">'+escapeHtml(p)+'</span>').join('');
-          const extra = pts.slice(MAX).map(p=>'<span class="pill" style="font-size:.65rem;padding:.1rem .4rem;margin:.1rem">'+escapeHtml(p)+'</span>').join('');
-          const toggle = pts.length>MAX?'<span id="'+uid+'" style="cursor:pointer;font-size:.65rem;padding:.1rem .4rem;border-radius:.75rem;background:#f3f4f6;color:#374151;border:1px solid #d1d5db;font-weight:600;white-space:nowrap;margin:.1rem" data-expanded="0">+' +(pts.length-MAX)+'</span>':'';
-          const extraDiv = pts.length>MAX?'<span id="'+uid+'-extra" style="display:none">'+extra+'</span>':'';
-          return '<td class="text-xs">'+visible+extraDiv+toggle+'</td>';
-        })()
-
         +'<td class="text-xs">'+(r.dueDate?fmtDate(parseDate(r.dueDate)):'')+'</td>'
         +'<td class="text-xs">'+escapeHtml(r.mitigation||'')+'</td>'
-        +(()=>{
-          const blockedTasks = (deal.tasks||[])
-            .filter(t=>t.bloqueio==='Sim' && t.raidId===r.id)
-            .map(t=>({...t, dealName: company.name||''}));
-          return '<td class="text-center">'+(blockedTasks.length>0 ? blkDropdownHtml(r.id, blockedTasks) : '<span style="color:#9ca3af">0</span>')+'</td>';
-        })()
         +(canEdit()?'<td><button class="btn btn-secondary" data-raid-edit="'+r.id+'">✎</button></td>':'');
       tbody.appendChild(tr);
     });
     node.querySelectorAll('[data-raid-edit]').forEach(b=>b.onclick = ()=>openRaidModal(company, b.dataset.raidEdit));
     node.querySelectorAll('[data-area]').forEach(b=>b.addEventListener('click',()=>{ view.tab='dashboard'; view.dashFilters={...view.dashFilters||{},areas:[b.dataset.area]}; render(); }));
     node.querySelectorAll('[data-owner]').forEach(b=>b.addEventListener('click',()=>{ view.tab='dashboard'; view.dashFilters={...view.dashFilters||{},owners:[b.dataset.owner]}; render(); }));
-    // Toggle "+N" participantes
-    tbody.querySelectorAll('[id^="pp-"]:not([id$="-extra"])').forEach(btn=>{
-      btn.addEventListener('click', e=>{
-        e.stopPropagation();
-        const uid = btn.id;
-        const extraEl = document.getElementById(uid+'-extra');
-        const expanded = btn.dataset.expanded==='1';
-        if(extraEl) extraEl.style.display = expanded?'none':'inline';
-        const base = parseInt(btn.textContent)||0;
-        btn.textContent = expanded ? '+'+base : '▲';
-        btn.dataset.expanded = expanded?'0':'1';
-      });
-    });
   }
 
   node.querySelectorAll('[data-rf]').forEach(b=>b.onclick = ()=>{ view.raidFilter=b.dataset.rf; render(); });
   const add = node.querySelector('#addRaid');
   if(add) add.onclick = ()=>openRaidModal(company);
-  attachBlkListeners(node);
   return node;
 }
 /* sevRank, escapeHtml importados de js/pure.js */
@@ -3866,18 +3746,8 @@ function openRaidModal(company, raidId){
               ${RAID_STATUSES.map(s=>`<option value="${s.id}" ${(existing?.status||'open')===s.id?'selected':''}>${s.label}</option>`).join('')}
             </select>
           </label>
-          <label class="block col-span-2">👥 Participantes / Envolvidos
-            <div class="text-xs text-gray-400 mb-1">Selecione todos os usuários envolvidos nesta ação</div>
-            <div id="participantCheckboxes" class="grid grid-cols-2 gap-1 p-2 border rounded-lg bg-gray-50 max-h-36 overflow-y-auto">
-              ${(state.users||[]).map(u=>`
-                <label class="flex items-center gap-1.5 text-xs cursor-pointer">
-                  <input type="checkbox" name="participants" value="${escapeHtml(u.username)}" ${(existing?.participants||[]).includes(u.username)?'checked':''}>
-                  ${escapeHtml(u.username)}
-                </label>`).join('')}
-            </div>
-          </label>
           <div class="col-span-2 mt-1">
-            <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Aspectos — preencha os que se aplicam</div>
+            <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Aspectos RAID — preencha os que se aplicam</div>
             <div class="space-y-2">
               <label class="block">⚠️ <b>Risco</b> — evento que pode acontecer e impactar
                 <textarea name="riscoDesc" rows="2" placeholder="Descreva o risco...">${escapeHtml(existing?.riscoDesc||'')}</textarea>
@@ -3924,19 +3794,12 @@ function openRaidModal(company, raidId){
     </div>
   `);
   document.body.appendChild(m);
-  const close = () => { try{ m.remove(); }catch(e){} };
-  // Fechar ao clicar no backdrop (fora do card branco)
-  m.addEventListener('click', (e) => { if(e.target === m) close(); });
-  // Fechar com ESC
-  const escHandler = (e) => { if(e.key === 'Escape'){ close(); document.removeEventListener('keydown', escHandler); } };
-  document.addEventListener('keydown', escHandler);
-  // Painel de comentários RAID
+  const close = () => m.remove();
   if(existing){
     const raidPanel = m.querySelector('#raidCommentPanel');
-    if(raidPanel) renderCommentsPanel(raidPanel, 'raid', existing.id);
+    if(raidPanel) renderCommentsPanel(raidPanel, 'raid', existing.id, null);
   }
-  const cancelBtn = m.querySelector('#cancel');
-  if(cancelBtn){ cancelBtn.addEventListener('click', close); cancelBtn.onclick = close; }
+  m.querySelector('#cancel').onclick = close;
 
   const showErr = (msg) => {
     const el2 = m.querySelector('#raidFormErr');
@@ -3945,30 +3808,14 @@ function openRaidModal(company, raidId){
 
   const delBtn = m.querySelector('#del');
   if(delBtn) delBtn.onclick = async ()=>{
+    if(!confirm('Excluir esta Ação de Mitigação? Isso removerá o vínculo com todos os deals.')) return;
     try{
-      if(canAdmin()){
-        if(!confirm('Excluir esta Ação de Mitigação? Isso removerá o vínculo com todos os deals.')) return;
-        const { error } = await supa.from('raid_items').delete().eq('id', raidId);
-        if(error) throw error;
-        state.raid = state.raid.filter(r=>r.id!==raidId);
-        for(const d of Object.values(state.deals)) d.raid = (d.raid||[]).filter(r=>r.id!==raidId);
-        close(); render();
-      } else {
-        if(!confirm('Solicitar exclusão desta Ação de Mitigação? Um admin precisará aprovar.')) return;
-        // Usamos task_ref='RAID:<id>' como marcador (sem precisar de colunas extras no schema)
-        const { error } = await supa.from('deletion_requests').insert({
-          task_ref: 'RAID:' + raidId,
-          task_name: existing?.title||'Ação de Mitigação',
-          area: existing?.area||'',
-          requested_by_id: session.id,
-          requested_by_name: session.username||'',
-          status: 'pending'
-        });
-        if(error) throw error;
-        await reloadState();
-        alert('Solicitação enviada. O administrador será notificado para aprovar a exclusão.');
-        close(); render();
-      }
+      const { error } = await supa.from('raid_items').delete().eq('id', raidId);
+      if(error) throw error;
+      state.raid = state.raid.filter(r=>r.id!==raidId);
+      // Remove from all per-deal arrays
+      for(const d of Object.values(state.deals)) d.raid = (d.raid||[]).filter(r=>r.id!==raidId);
+      close(); render();
     }catch(err){ alert('Erro: '+(err.message||err)); }
   };
 
@@ -3976,7 +3823,6 @@ function openRaidModal(company, raidId){
     e.preventDefault();
     const fd = new FormData(e.target);
     const selectedDeals = Array.from(m.querySelectorAll('input[name="dealIds"]:checked')).map(cb=>cb.value);
-    const selectedParticipants = Array.from(m.querySelectorAll('input[name="participants"]:checked')).map(cb=>cb.value);
     if(!fd.get('owner')) return showErr('Owner é obrigatório.');
     if(!fd.get('dueDate')) return showErr('Prazo é obrigatório.');
     if(selectedDeals.length === 0) return showErr('Selecione ao menos um deal afetado.');
@@ -3990,7 +3836,6 @@ function openRaidModal(company, raidId){
       severity: fd.get('severity')||'med', status: fd.get('status')||'open',
       owner: fd.get('owner')||'', dueDate: fd.get('dueDate')||'',
       mitigation: fd.get('mitigation')||'',
-      participants: selectedParticipants,
     };
     try{
       if(existing){
@@ -4015,292 +3860,6 @@ function openRaidModal(company, raidId){
         }
         state.raid.push(newItem);
         for(const cid of selectedDeals){ if(state.deals[cid]) state.deals[cid].raid.push(newItem); }
-      }
-      close(); render();
-    }catch(err){ alert('Erro ao salvar: '+(err.message||err)); }
-  };
-}
-
-/* ===== Painel de Comentários (reutilizável: tasks e RAID) ===== */
-async function renderCommentsPanel(container, entityType, entityId){
-  container.innerHTML = '<div class="text-xs text-gray-400 py-1">Carregando comentários…</div>';
-  const { data: rows, error } = await supa.from('comments')
-    .select('*').eq('entity_type', entityType).eq('entity_id', entityId)
-    .order('created_at', {ascending: true});
-  if(error){ container.innerHTML = `<div class="text-xs text-red-500">Erro: ${escapeHtml(error.message)}</div>`; return; }
-
-  const comments = [...(rows||[])];
-
-  function renderList(){
-    const list = container.querySelector('#cmtList');
-    if(!list) return;
-    if(!comments.length){
-      list.innerHTML = '<div class="text-xs text-gray-400 italic">Nenhum comentário ainda.</div>';
-      return;
-    }
-    list.innerHTML = comments.map(c=>`
-      <div style="padding:.5rem 0;border-bottom:1px solid #f3f4f6">
-        <div style="display:flex;align-items:center;gap:.4rem;margin-bottom:.2rem">
-          <span style="font-size:.72rem;font-weight:700;color:var(--bhub-navy)">${escapeHtml(c.author)}</span>
-          <span style="font-size:.7rem;color:#9ca3af">${new Date(c.created_at).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>
-        </div>
-        <div style="font-size:.82rem;color:#374151;white-space:pre-wrap">${escapeHtml(c.body)}</div>
-      </div>`).join('');
-    // scroll to bottom
-    list.scrollTop = list.scrollHeight;
-  }
-
-  container.innerHTML = `
-    <div id="cmtList" style="max-height:160px;overflow-y:auto;margin-bottom:.6rem"></div>
-    <div style="display:flex;gap:.5rem;align-items:flex-end">
-      <textarea id="cmtInput" rows="2" placeholder="Escreva um comentário…"
-        style="flex:1;font-size:.82rem;border:1px solid var(--bhub-border);border-radius:.5rem;padding:.4rem .6rem;resize:vertical;outline:none"></textarea>
-      <button id="cmtSend" class="btn btn-primary" style="padding:.35rem .9rem;font-size:.8rem;white-space:nowrap">Enviar</button>
-    </div>`;
-  renderList();
-
-  container.querySelector('#cmtSend').addEventListener('click', async ()=>{
-    const input = container.querySelector('#cmtInput');
-    const body = (input.value||'').trim();
-    if(!body) return;
-    const btn = container.querySelector('#cmtSend');
-    btn.disabled = true; btn.textContent = '…';
-    const { data: nc, error: ie } = await supa.from('comments').insert({
-      entity_type: entityType, entity_id: entityId,
-      author: session?.username||'?', body
-    }).select().single();
-    btn.disabled = false; btn.textContent = 'Enviar';
-    if(ie){ alert('Erro ao enviar: '+(ie.message||ie)); return; }
-    comments.push(nc);
-    input.value = '';
-    renderList();
-  });
-  // Ctrl+Enter envia
-  container.querySelector('#cmtInput').addEventListener('keydown', e=>{
-    if(e.key==='Enter' && (e.ctrlKey||e.metaKey)) container.querySelector('#cmtSend').click();
-  });
-}
-
-/* ===== Modal de Tarefa ===== */
-function openTaskModal(company, taskId){
-  const deal = dealOf(company.id);
-  const existing = taskId ? (deal?.tasks||[]).find(t=>t.id===taskId) : null;
-  const isNew = !existing;
-
-  const allAreas = Array.from(new Set([
-    ...DEFAULT_AREAS.map(a=>a.name),
-    ...state.template.map(t=>t.area),
-    ...(deal?.tasks||[]).map(t=>t.area)
-  ].filter(Boolean)));
-
-  const m = el(`
-    <div class="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-20" data-modal="task">
-      <div class="bg-white rounded-2xl p-4 w-full max-w-2xl border border-[color:var(--bhub-border)]" style="box-shadow:0 24px 60px rgba(15,23,39,.25);max-height:90vh;overflow-y:auto">
-        <div class="flex items-center justify-between mb-2">
-          <div class="text-base font-bold" style="color:var(--bhub-navy)">${isNew?'Nova Tarefa':'Editar Tarefa'}</div>
-          <div class="text-xs font-semibold px-2 py-1 rounded-full" style="background:#e0f0ff;color:var(--bhub-blue)">🏢 ${escapeHtml(company?.name||'')}</div>
-        </div>
-        <form id="taskForm" class="grid grid-cols-2 gap-2 text-sm">
-
-          <label class="block">REF
-            <input name="ref" value="${escapeHtml(existing?.ref||'')}" placeholder="ex: 1.1" />
-          </label>
-          <label class="block">Área
-            <select name="area">
-              <option value="">—</option>
-              ${allAreas.map(a=>`<option value="${escapeHtml(a)}" ${existing?.area===a?'selected':''}>${escapeHtml(a)}</option>`).join('')}
-            </select>
-          </label>
-
-          <label class="block col-span-2">Tarefa *
-            <input name="task" required value="${escapeHtml(existing?.task||'')}" placeholder="Descrição da tarefa" />
-          </label>
-
-          <label class="block">Owner
-            ${ownerSelectHtml(existing?.owner||'')}
-          </label>
-          <label class="block">Data Prevista
-            <input name="dataPrevistaManual" type="date" value="${(()=>{ const dp=computeTaskFields(existing||{prazo:0},company).dataPrevista; return dp?toIso(dp):''; })()} " />
-          </label>
-
-          <label class="block">Concluído?
-            <select name="completado">
-              <option value="0" ${(existing?.completado||0) < 100 ? 'selected' : ''}>Não</option>
-              <option value="100" ${(existing?.completado||0) >= 100 ? 'selected' : ''}>Sim</option>
-            </select>
-          </label>
-
-          <label class="block">Concluído?
-            <select name="completado">
-              <option value="0" ${(existing?.completado||0) < 100 ? 'selected' : ''}>Não</option>
-              <option value="100" ${(existing?.completado||0) >= 100 ? 'selected' : ''}>Sim</option>
-            </select>
-          </label>
-
-          <label class="block col-span-2">Próximo Passo
-            <input name="proximoPasso" value="${escapeHtml(existing?.proximoPasso||'')}" placeholder="Próxima ação necessária" />
-          </label>
-
-          <label class="block">Bloqueio?
-            <select name="bloqueio">
-              <option value="Não" ${(existing?.bloqueio||'Não')==='Não'?'selected':''}>Não</option>
-              <option value="Sim" ${existing?.bloqueio==='Sim'?'selected':''}>Sim</option>
-            </select>
-          </label>
-          <label class="block" id="bloqDescWrap" style="${existing?.bloqueio==='Sim'?'':'display:none'}">Descrição do bloqueio
-            <input name="bloqueioDescricao" value="${escapeHtml(existing?.bloqueioDescricao||'')}" placeholder="Descreva o bloqueio" />
-          </label>
-
-          <div class="col-span-2" id="bloqRaidWrap" style="${existing?.bloqueio==='Sim'?'':'display:none'}">
-            ${(()=>{
-              // mostra todos os RAIDs abertos do portfólio (sem filtrar por deal)
-              const openRaids = (state.raid||[]).filter(r=>r.status!=='closed');
-              if(!openRaids.length) return `
-                <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:.5rem;padding:.6rem .9rem;font-size:.82rem;color:#92400e">
-                  ⚠️ Não há Ações de Mitigação abertas no portfólio.<br>
-                  <strong>Crie uma Ação de Mitigação antes de registrar um bloqueio.</strong>
-                </div>
-                <input type="hidden" name="raidId" value="__no_raid__">`;
-              return `<label class="block" style="margin-top:.25rem">🎯 Vincular à Ação de Mitigação <span style="color:#dc2626">*</span>
-                <select name="raidId" id="raidIdSelect">
-                  <option value="">— Selecione —</option>
-                  ${openRaids.map(r=>`
-                    <option value="${escapeHtml(r.id)}" ${existing?.raidId===r.id?'selected':''}>${escapeHtml(r.title||'(sem título)')}</option>
-                  `).join('')}
-                </select>
-              </label>`;
-            })()}
-          </div>
-
-          <div id="taskFormErr" class="col-span-2 text-xs rounded-lg p-2 hidden" style="color:#991b1b;background:#fee2e2"></div>
-
-          <div class="col-span-2 flex justify-between mt-2 pt-3 border-t" style="border-color:var(--bhub-border)">
-            <div>
-              ${!isNew && canEdit() ? `<button type="button" id="delTask" class="btn" style="background:var(--bhub-red);color:#fff">🗑 Excluir</button>` : ''}
-            </div>
-            <div class="flex gap-2">
-              <button type="button" id="cancelTask" class="btn btn-secondary">Cancelar</button>
-              <button type="submit" class="btn btn-primary">${isNew?'Criar':'Salvar'}</button>
-            </div>
-          </div>
-        </form>
-
-        ${!isNew ? `
-        <div class="mt-4 pt-4 border-t" style="border-color:var(--bhub-border)">
-          <div class="text-sm font-semibold mb-2" style="color:var(--bhub-navy)">💬 Comentários</div>
-          <div id="taskCommentPanel"></div>
-        </div>` : ''}
-      </div>
-    </div>
-  `);
-  document.body.appendChild(m);
-  const close = () => m.remove();
-
-  // Carregar painel de comentários (só para tarefas existentes)
-  if(!isNew && taskId){
-    const taskPanel = m.querySelector('#taskCommentPanel');
-    if(taskPanel) renderCommentsPanel(taskPanel, 'task', taskId);
-  }
-
-  // Mostrar/ocultar campos de bloqueio
-  m.querySelector('[name="bloqueio"]').addEventListener('change', e=>{
-    const isSim = e.target.value === 'Sim';
-    m.querySelector('#bloqDescWrap').style.display = isSim ? '' : 'none';
-    m.querySelector('#bloqRaidWrap').style.display = isSim ? '' : 'none';
-    if(!isSim) m.querySelector('[name="raidId"]').value = '';
-  });
-
-  m.querySelector('#cancelTask').onclick = close;
-
-  // Excluir
-  const delBtn = m.querySelector('#delTask');
-  if(delBtn) delBtn.onclick = async ()=>{
-    if(canAdmin()){
-      if(!confirm('Excluir esta tarefa permanentemente?')) return;
-      try{
-        const deletedRef = existing?.ref;
-        const { error } = await supa.from('tasks').delete().eq('id', taskId);
-        if(error) throw error;
-        if(deal) deal.tasks = deal.tasks.filter(t=>t.id!==taskId);
-        await renumberDealTaskRefs(company.id, deletedRef);
-        close(); render();
-      }catch(err){ alert('Erro: '+(err.message||err)); }
-    } else {
-      if(!confirm('Solicitar exclusão desta tarefa? Um admin precisará aprovar.')) return;
-      try{
-        const { error } = await supa.from('deletion_requests').insert({
-          task_id: taskId,
-          task_name: existing?.task||'',
-          task_ref: existing?.ref||'',
-          area: existing?.area||'',
-          company_id: company.id,
-          company_name: company.name||'',
-          requested_by_id: session.id,
-          requested_by_name: session.username||'',
-          status: 'pending'
-        });
-        if(error) throw error;
-        await reloadState(); close(); render();
-        alert('Solicitação de exclusão enviada para o admin.');
-      }catch(err){ alert('Erro: '+(err.message||err)); }
-    }
-  };
-
-  // Salvar
-  m.querySelector('#taskForm').onsubmit = async (e)=>{
-    e.preventDefault();
-    const fd = new FormData(e.target);
-    const showErr = (msg)=>{ const el2=m.querySelector('#taskFormErr'); el2.textContent=msg; el2.classList.remove('hidden'); };
-    if(!fd.get('task')?.trim()) return showErr('Nome da tarefa é obrigatório.');
-    if(fd.get('bloqueio')==='Sim' && (!fd.get('raidId') || fd.get('raidId')==='__no_raid__')){
-      const openRaids = (state.raid||[]).filter(r=>r.status!=='closed');
-      if(!openRaids.length) return showErr('Crie uma Ação de Mitigação no portfólio antes de registrar um bloqueio.');
-      return showErr('Selecione a Ação de Mitigação vinculada ao bloqueio.');
-    }
-
-    const payload = {
-      ref:              fd.get('ref')?.trim()||'',
-      area:             fd.get('area')||'',
-      task:             fd.get('task')?.trim()||'',
-      owner:            fd.get('owner')||'',
-      prazo:            (()=>{
-        const dpRaw = fd.get('dataPrevistaManual');
-        if(dpRaw && company.signDate){
-          const dp = new Date(dpRaw + 'T12:00:00');
-          const sd = parseDate(company.signDate);
-          if(sd && !isNaN(dp)){
-            const diff = businessDaysBetween(sd, dp);
-            return Math.max(0, diff != null ? diff : 0);
-          }
-        }
-        return existing?.prazo||0;
-      })(),
-      phaseId:          fd.get('phaseId')||'',
-      completado:       Number(fd.get('completado'))||0,
-      dataRealConclusao:existing?.dataRealConclusao||'',
-      ultimoUpdate:     existing?.ultimoUpdate||'',
-      proximoPasso:     fd.get('proximoPasso')||'',
-      bloqueio:         fd.get('bloqueio')||'Não',
-      bloqueioDescricao:fd.get('bloqueioDescricao')||'',
-      ferramenta:       existing?.ferramenta||'',
-      evidencia:        existing?.evidencia||'',
-      raidId:           (()=>{ const v=fd.get('raidId'); return (v && v!=='__no_raid__') ? v : null; })(),
-    };
-
-    const needsApproval = !canAdmin() && !canEdit();
-    try{
-      if(isNew){
-        const row = { ...taskToDb(payload, company.id), pending_approval: !canAdmin() ? true : false };
-        const { data, error } = await supa.from('tasks').insert(row).select().single();
-        if(error) throw error;
-        if(!deal) state.deals[company.id] = { tasks:[], raid:[], synergies:[], health:[] };
-        state.deals[company.id].tasks.push(taskFromDb(data));
-      } else {
-        const row = taskToDb(payload, company.id);
-        const { error } = await supa.from('tasks').update(row).eq('id', taskId);
-        if(error) throw error;
-        Object.assign(existing, payload);
-        existing._f = computeTaskFields(existing, company);
       }
       close(); render();
     }catch(err){ alert('Erro ao salvar: '+(err.message||err)); }
@@ -4635,43 +4194,26 @@ function openHealthModal(company, area, week){
 
 /* ===== Histórico / Auditoria ===== */
 function describeAuditChanges(row){
-  var c = row.changes;
+  const c = row.changes;
   if(!c) return '—';
   if(row.action === 'insert') return 'Criado';
   if(row.action === 'delete') return 'Removido';
-  var SKIP = {company_id:1,id:1,ultimo_update:1,updated_at:1,pending_approval:1,phase_id:1,ferramenta:1,evidencia:1,created_at:1,raid_id:1};
-  var LABELS = {task:'Tarefa',owner:'Responsável',area:'Área',completado:'Concíudo',prazo:'Prazo (dias)',proximo_passo:'Próximo passo',bloqueio:'Bloqueio',bloqueio_descricao:'Descrição do bloqueio',ref:'REF',data_real_conclusao:'Data conclusão',status:'Status',title:'Título',name:'Nome',sign_date:'Data assinatura'};
-  function fmtVal(k, raw){
-    if(raw===null||raw===undefined||raw==='') return '—';
-    var s = String(raw);
-    if(/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(8,10)+'/'+s.slice(5,7)+'/'+s.slice(0,4);
-    if(k==='completado') return Number(raw)>=100?'Sim (100%)':'Não ('+raw+'%)';
-    if(/^[0-9a-f]{8}-[0-9a-f]{4}-/.test(s)) return s.slice(0,8)+'…';
-    return s.length>60?s.slice(0,60)+'…':s;
-  }
-  var keys = Object.keys(c).filter(function(k){
-    if(SKIP[k]) return false;
-    var v = c[k];
-    var ov = fmtVal(k, v&&v.old!==undefined?v.old:null);
-    var nv = fmtVal(k, v&&v.new!==undefined?v.new:null);
-    return ov !== nv;
-  }).slice(0,6);
-  if(!keys.length) return '<span style="color:#9ca3af">Sem alterações visíveis</span>';
-  return keys.map(function(k){
-    var v = c[k];
-    var label = LABELS[k]||k;
-    var ov = fmtVal(k, v&&v.old!==undefined?v.old:null);
-    var nv = fmtVal(k, v&&v.new!==undefined?v.new:null);
-    return '<span style="color:#6b7280">'+escapeHtml(label)+':</span> '+escapeHtml(ov)+' <span style="color:#9ca3af">→</span> <b style="color:#1e40af">'+escapeHtml(nv)+'</b>';
-  }).join('&nbsp;&nbsp;·&nbsp;&nbsp;');
+  // update
+  const keys = Object.keys(c).slice(0, 5);
+  if(!keys.length) return 'Sem alterações';
+  return keys.map(k=>{
+    const v = c[k];
+    const ov = (v?.old===null || v?.old===undefined || v?.old==='') ? '—' : String(v.old).slice(0,40);
+    const nv = (v?.new===null || v?.new===undefined || v?.new==='') ? '—' : String(v.new).slice(0,40);
+    return `<b>${escapeHtml(k)}</b>: <span class="text-gray-500">${escapeHtml(ov)}</span> → <span style="color:var(--bhub-navy)">${escapeHtml(nv)}</span>`;
+  }).join('<br>');
 }
 function entityIcon(t){
-  return {tasks:'📋', task:'📋', companies:'🏢', raid_items:'🎯', raid:'🎯', synergies:'💰', health_entries:'🚦', template_tasks:'📐', comments:'💬', attachments:'📎', task_dependencies:'🔗'}[t]||'•';
+  return {task:'📋', companies:'🏢', raid_items:'🛡️', synergies:'💰', health_entries:'🚦', template_tasks:'📐', comments:'💬', attachments:'📎', task_dependencies:'🔗'}[t]||'•';
 }
 function entityLabel(t){
-  return {tasks:'Tarefa', task:'Tarefa', companies:'Empresa', raid_items:'Ação de Mitigação', raid:'Ação de Mitigação', synergies:'Sinergia', health_entries:'Health', template_tasks:'Template', comments:'Comentário', attachments:'Anexo', task_dependencies:'Dependência'}[t]||t;
+  return {tasks:'Tarefa', companies:'Empresa', raid_items:'RAID', synergies:'Sinergia', health_entries:'Health', template_tasks:'Template', comments:'Comentário', attachments:'Anexo', task_dependencies:'Dependência'}[t]||t;
 }
-let _histTypeFilter = '';
 function renderDealHistorico(company){
   const wrap = el(`
     <div class="space-y-3">
@@ -4684,11 +4226,12 @@ function renderDealHistorico(company){
           <select id="histType" class="text-xs" style="width:160px">
             <option value="">Todas as entidades</option>
             <option value="tasks">Tarefas</option>
-            <option value="raid_items">Ações de Mitigação</option>
+            <option value="raid_items">RAID</option>
+            <option value="synergies">Sinergias</option>
+            <option value="health_entries">Health</option>
             <option value="comments">Comentários</option>
             <option value="companies">Empresa</option>
           </select>
-          <button id="histClear" style="display:none;padding:.25rem .5rem;font-size:.72rem;background:#fee2e2;color:#b91c1c;border:1px solid #fca5a5;border-radius:6px;cursor:pointer">× Limpar filtro</button>
           <button id="histReload" class="btn btn-secondary" style="padding:.35rem .7rem;font-size:.75rem">↻ Atualizar</button>
         </div>
       </div>
@@ -4698,19 +4241,11 @@ function renderDealHistorico(company){
     </div>
   `);
 
-  const sel = wrap.querySelector('#histType');
-  const clearBtn = wrap.querySelector('#histClear');
-
-  if(_histTypeFilter){ sel.value = _histTypeFilter; clearBtn.style.display = ''; }
-  function updateClearBtn(){ clearBtn.style.display = sel.value ? '' : 'none'; }
-
   async function load(){
-    _histTypeFilter = sel.value;
-    updateClearBtn();
     const list = wrap.querySelector('#histList');
     list.innerHTML = `<div class="space-y-2">${Array(6).fill('<div class="skel" style="width:100%;height:38px"></div>').join('')}</div>`;
     let q = supa.from('audit_log').select('*').eq('company_id', company.id).order('ts',{ascending:false}).limit(200);
-    const type = sel.value;
+    const type = wrap.querySelector('#histType').value;
     if(type) q = q.eq('entity_type', type);
     const { data, error } = await q;
     if(error){
@@ -4721,33 +4256,22 @@ function renderDealHistorico(company){
       list.innerHTML = '<div class="text-sm text-gray-500">Sem registros para os filtros atuais.</div>';
       return;
     }
-    list.innerHTML = '<div class="space-y-2 text-xs">' + data.map(function(r){
-      var when = new Date(r.ts);
-      var whenStr = when.toLocaleString('pt-BR');
-      var actor = r.actor_name || r.actor_email || 'sistema';
-      var actLabel = r.action==='insert'?'criou':r.action==='update'?'alterou':'removeu';
-      var colorByAct = r.action==='insert'?'#15803d':r.action==='update'?'#1e40af':'#b91c1c';
-      var entityName = '';
-      if(r.entity_id && r.entity_type==='tasks'){
-        var allTasks = Object.values(state.deals||{}).flatMap(function(d){ return d.tasks||[]; });
-        var found = allTasks.find(function(t){ return t.id===r.entity_id; });
-        if(found) entityName = (found.ref?found.ref+' — ':'')+found.task;
-      } else if(r.entity_id && (r.entity_type==='raid_items'||r.entity_type==='raid')){
-        var foundRaid = (state.raid||[]).find(function(x){ return x.id===r.entity_id; });
-        if(foundRaid) entityName = foundRaid.title||'';
-      }
-      var nameTag = entityName ? (' <span style="color:#374151;font-style:italic">"'+escapeHtml(entityName.slice(0,60))+(entityName.length>60?'\u2026':'')+'"</span>') : '';
-      return '<div class="border-l-4 pl-3 py-2" style="border-color:'+colorByAct+'">'
-        + '<div class="flex justify-between items-baseline gap-3 flex-wrap">'
-        + '<div><b>'+escapeHtml(actor)+'</b> <span style="color:'+colorByAct+';font-weight:600">'+actLabel+'</span> '+entityIcon(r.entity_type)+' <b>'+entityLabel(r.entity_type)+'</b>'+nameTag+'</div>'
-        + '<div class="text-gray-400 text-[11px]">'+escapeHtml(whenStr)+'</div>'
-        + '</div>'
-        + '<div class="text-gray-600 mt-1" style="font-size:.72rem;line-height:1.6">'+describeAuditChanges(r)+'</div>'
-        + '</div>';
-    }).join('') + '</div>';
+    list.innerHTML = `<div class="space-y-2 text-xs">${data.map(r=>{
+      const when = new Date(r.ts);
+      const whenStr = when.toLocaleString('pt-BR');
+      const actor = r.actor_name || r.actor_email || 'sistema';
+      const actLabel = r.action==='insert'?'criou':r.action==='update'?'alterou':'removeu';
+      const colorByAct = r.action==='insert'?'#15803d':r.action==='update'?'#1e40af':'#b91c1c';
+      return `<div class="border-l-4 pl-3 py-2" style="border-color:${colorByAct}">
+        <div class="flex justify-between items-baseline gap-3 flex-wrap">
+          <div><b>${escapeHtml(actor)}</b> ${actLabel} ${entityIcon(r.entity_type)} <b>${entityLabel(r.entity_type)}</b></div>
+          <div class="text-gray-500 text-[11px]">${escapeHtml(whenStr)}</div>
+        </div>
+        <div class="text-gray-700 mt-1" style="font-size:.72rem;line-height:1.4">${describeAuditChanges(r)}</div>
+      </div>`;
+    }).join('')}</div>`;
   }
-  sel.addEventListener('change', load);
-  clearBtn.addEventListener('click', function(){ sel.value = ''; load(); });
+  wrap.querySelector('#histType').addEventListener('change', load);
   wrap.querySelector('#histReload').addEventListener('click', load);
   load();
   return wrap;
@@ -5170,7 +4694,6 @@ function renderTemplate(){
         </div>
         <div class="flex gap-2">
           ${canEdit() ? `<button id="addRow" class="btn btn-primary">+ Tarefa no template</button>` : ''}
-          ${canAdmin() ? `<button id="fixRefs" class="btn" style="background:#f0fdf4;border:1px solid #86efac;color:#166534">🔧 Corrigir REFs</button>` : ''}
           ${canAdmin() ? `<button id="clearTpl" class="btn btn-danger" style="opacity:.7">Limpar template</button>` : ''}
         </div>
       </div>
@@ -5215,28 +4738,6 @@ function renderTemplate(){
   if(add) add.onclick = ()=>openTemplateModal();
   const emptyAdd = node.querySelector('#emptyAddTpl');
   if(emptyAdd) emptyAdd.onclick = ()=>openTemplateModal();
-
-  const fixRefsBtn = node.querySelector('#fixRefs');
-  if(fixRefsBtn) fixRefsBtn.onclick = async ()=>{
-    fixRefsBtn.disabled = true;
-    fixRefsBtn.textContent = '⏳ Corrigindo...';
-    try{
-      // Pega todos os prefixos distintos presentes no template
-      const prefixes = [...new Set(
-        state.template.map(x=>(x.ref||'').split('.')[0]).filter(p=>p && !isNaN(Number(p)) && Number(p)>0)
-      )];
-      for(const prefix of prefixes){
-        await renumberAreaRefs(prefix + '.0'); // passa qualquer ref com esse prefixo
-      }
-      render();
-      fixRefsBtn.textContent = '✅ Corrigido!';
-      setTimeout(()=>{ fixRefsBtn.disabled=false; fixRefsBtn.textContent='🔧 Corrigir REFs'; }, 2000);
-    }catch(err){
-      alert('Erro ao corrigir REFs: '+(err.message||err));
-      fixRefsBtn.disabled=false; fixRefsBtn.textContent='🔧 Corrigir REFs';
-    }
-  };
-
   const clr = node.querySelector('#clearTpl');
   if(clr) clr.onclick = ()=>{
     // Double-confirmation modal — admin only
@@ -5310,116 +4811,31 @@ function renderTemplate(){
   node.querySelectorAll('[data-reject-tpl]').forEach(b=>b.onclick=async()=>{
     const tid = b.dataset.rejectTpl;
     if(!confirm('Rejeitar e excluir esta tarefa do template?')) return;
-    const tplTask = state.template.find(x=>x.id===tid);
     const { error } = await supa.from('template_tasks').delete().eq('id', tid);
     if(error){ alert('Erro: '+error.message); return; }
     state.template = state.template.filter(x=>x.id!==tid);
-    await renumberAreaRefs(tplTask?.ref);
     render();
   });
   return node;
 }
-// Após deletar uma tarefa de um deal, renumera sequencialmente as demais do mesmo prefixo (área)
-async function renumberDealTaskRefs(companyId, deletedRef){
-  const prefix = (deletedRef||'').split('.')[0];
-  if(!prefix || isNaN(Number(prefix)) || Number(prefix) <= 0) return;
-
-  const deal = state.deals[companyId];
-  if(!deal) return;
-
-  const tasksInArea = (deal.tasks||[])
-    .filter(x => (x.ref||'').split('.')[0] === prefix)
-    .sort((a,b) => {
-      const aN = parseInt((a.ref||'').split('.')[1]) || 0;
-      const bN = parseInt((b.ref||'').split('.')[1]) || 0;
-      return aN - bN;
-    });
-
-  const batch = [];
-  tasksInArea.forEach((task, idx) => {
-    const newRef = `${prefix}.${idx + 1}`;
-    if(task.ref !== newRef){
-      batch.push({ id: task.id, newRef });
-      task.ref = newRef; // atualiza state em memória
-    }
-  });
-
-  // Envia updates ao DB em paralelo
-  await Promise.all(batch.map(u =>
-    supa.from('tasks').update({ ref: u.newRef }).eq('id', u.id)
-  ));
-}
-
-// Após deletar uma tarefa do template, renumera sequencialmente as demais da mesma área
-async function renumberAreaRefs(deletedRef){
-  const prefix = (deletedRef||'').split('.')[0];
-  if(!prefix || isNaN(Number(prefix)) || Number(prefix) <= 0) return;
-
-  // Tarefas restantes com o mesmo prefixo numérico, ordenadas pelo sufixo atual
-  const tasksInArea = state.template
-    .filter(x => (x.ref||'').split('.')[0] === prefix)
-    .sort((a,b) => {
-      const aN = parseInt((a.ref||'').split('.')[1]) || 0;
-      const bN = parseInt((b.ref||'').split('.')[1]) || 0;
-      return aN - bN;
-    });
-
-  const batch = [];
-  tasksInArea.forEach((task, idx) => {
-    const newRef = `${prefix}.${idx + 1}`;
-    if(task.ref !== newRef){
-      batch.push({ id: task.id, newRef });
-      task.ref = newRef; // atualiza state em memória
-    }
-  });
-
-  // Envia updates ao DB em paralelo
-  await Promise.all(batch.map(u =>
-    supa.from('template_tasks').update({ ref: u.newRef }).eq('id', u.id)
-  ));
-}
-
 function openTemplateModal(id){
   const t = id ? state.template.find(x=>x.id===id) : {id:uid(), ref:'', area:'', task:'', defaultOwner:'', defaultPrazo:0};
   const isNew = !id;
 
-  // Areas: apenas as que têm tarefas reais nos deals (= as mesmas da Visão Executiva)
-  // Se estiver editando uma tarefa com área fora desse conjunto, inclui ela também
-  const allAreas = Array.from(new Set(
-    Object.values(state.deals).flatMap(d=>(d.tasks||[]).map(tk=>tk.area)).filter(Boolean)
-  )).sort();
-  if(t.area && !allAreas.includes(t.area)) allAreas.unshift(t.area);
+  // Areas: DEFAULT_AREAS + quaisquer áreas customizadas já no template
+  const allAreas = [...DEFAULT_AREAS.map(a=>a.name)];
+  state.template.forEach(x=>{ if(x.area && !allAreas.includes(x.area)) allAreas.push(x.area); });
 
   // Usuários com login para o select de owner
   const users = [...(state.users||[])].sort((a,b)=>a.username.localeCompare(b.username));
 
   // Auto-gera REF com base na área selecionada
   function nextRefForArea(areaName){
-    const areaTasks = state.template.filter(x=>x.area===areaName && x.id!==t.id);
-    let prefix;
-    // 1) Se a área tem tarefas com ref válida, reutiliza o prefixo existente
-    const existingPrefix = areaTasks
-      .map(x=>(x.ref||'').split('.')[0])
-      .find(p => p && !isNaN(Number(p)) && Number(p) > 0);
-    if(existingPrefix){
-      prefix = existingPrefix;
-    } else {
-      // 2) Área padrão sem tarefas ainda → usa posição no DEFAULT_AREAS (1-based)
-      const entryIdx = DEFAULT_AREAS.findIndex(a=>a.name===areaName);
-      if(entryIdx >= 0){
-        prefix = String(entryIdx + 1);
-      } else {
-        // 3) Área completamente nova → próximo prefixo numérico livre
-        const usedPrefixes = new Set(
-          state.template.map(x=>(x.ref||'').split('.')[0]).filter(Boolean).map(Number).filter(n=>!isNaN(n) && n>0)
-        );
-        let next = 1;
-        while(usedPrefixes.has(next)) next++;
-        prefix = String(next);
-      }
-    }
-    if(!prefix) return '';
-    const nums = areaTasks
+    const entry = DEFAULT_AREAS.find(a=>a.name===areaName);
+    if(!entry) return '';
+    const prefix = entry.n.split('.')[0]; // "1.0" → "1"
+    const nums = state.template
+      .filter(x=>x.area===areaName && x.id!==t.id)
       .map(x=>{ const p=(x.ref||'').split('.'); return p.length>=2?parseInt(p[1]):0; })
       .filter(n=>!isNaN(n)&&n>0);
     return `${prefix}.${nums.length?Math.max(...nums)+1:1}`;
@@ -5572,11 +4988,9 @@ function openTemplateModal(id){
     if(!canAdmin() && !t.pendingApproval){ alert('Apenas admins podem excluir tarefas aprovadas do template.'); return; }
     if(!confirm('Excluir?')) return;
     try{
-      const deletedRef = t.ref;
       const { error } = await supa.from('template_tasks').delete().eq('id', t.id);
       if(error) throw error;
       state.template = state.template.filter(x=>x.id!==t.id);
-      await renumberAreaRefs(deletedRef);
       m.remove(); render();
     }catch(err){ alert('Erro: '+(err.message||err)); }
   };
@@ -5805,20 +5219,17 @@ function renderHoje(){
     return {...r, _deal};
   });
 
-  // ---- Listas base (filtradas pelo usuário logado) ----
+  // ---- Listas base (sem filtro de deal/pessoa) ----
   const myLate = allTasks
-    .filter(t => t._f.status==='late' && isMe(t.owner))
+    .filter(t => t._f.status==='late')
     .sort((a,b) => (b._f.diasAtraso||0) - (a._f.diasAtraso||0));
 
-  // Só mostra decisões ao owner ou participantes do item
   const decisions = allRaid
-    .filter(r => r.decisaoDesc && r.status==='open'
-      && (isMe(r.owner) || (r.participants||[]).some(p => isMe(p))))
+    .filter(r => r.decisaoDesc && r.status==='open')
     .sort((a,b) => (b.severity==='high'?2:b.severity==='med'?1:0) - (a.severity==='high'?2:a.severity==='med'?1:0));
 
   const myUpcoming = allTasks
     .filter(t => {
-      if(!isMe(t.owner)) return false;
       if(t._f.status!=='ontrack' || !t._f.dataPrevista) return false;
       const diff = businessDaysBetween(today, t._f.dataPrevista);
       return diff>=0 && diff<=10;
@@ -5826,7 +5237,18 @@ function renderHoje(){
     .map(t => ({...t, _diff: businessDaysBetween(today, t._f.dataPrevista)}))
     .sort((a,b) => a._diff - b._diff);
 
-  // Limites de paginação por seção
+  // Todos os owners únicos (para o filtro de pessoa)
+  const allOwners = [...new Set(allTasks.map(t=>t.owner).filter(Boolean))].sort();
+
+  // Deals únicos que aparecem em qualquer seção (para o filtro)
+  const dealsInView = new Map();
+  [...myLate, ...myUpcoming].forEach(t => dealsInView.set(t._deal.id, t._deal.name));
+  decisions.forEach(r => dealsInView.set(r._deal.id, r._deal.name));
+  const dealList = [...dealsInView.entries()].sort((a,b)=>a[1].localeCompare(b[1]));
+
+  // Estado local: filtro de deal + filtro de pessoa + limites de paginação por seção
+  let filterDeal = '';
+  let filterOwner = '';
   const limits = { late: PAGE, dec: PAGE, up: PAGE };
 
   const hour = new Date().getHours();
@@ -5844,7 +5266,6 @@ function renderHoje(){
           <span>${escapeHtml(t._deal.name)}</span><span class="sep">·</span>
           <span>${escapeHtml(t.area||'—')}</span>
           ${t.ref?`<span class="sep">·</span><span>${escapeHtml(t.ref)}</span>`:''}
-          ${t.owner?`<span class="sep">·</span><span style="color:#1e40af;font-size:11px">@ ${escapeHtml(t.owner)}</span>`:''}
         </div>
       </div>
       <div class="hoje-row-right"><span class="hoje-urgency late">${dias===1?'1 d.u. de atraso':`${dias} d.u. de atraso`}</span></div>
@@ -5852,21 +5273,12 @@ function renderHoje(){
   }
   function decisionRow(r){
     const sev = r.severity==='high'?'Alta':r.severity==='med'?'Média':'Baixa';
-    // Mostra todos os deals afetados, não só o primeiro
-    const dealNames = (r.dealIds||[])
-      .map(did => state.companies.find(c=>c.id===did)?.name)
-      .filter(Boolean);
-    const dealsLabel = dealNames.length ? dealNames.join(', ') : (r._deal?.name||'—');
-    // Badge indicando o papel do usuário nesta ação
-    const myRole = isMe(r.owner)
-      ? `<span style="display:inline-block;font-size:.62rem;padding:.1rem .4rem;border-radius:.75rem;background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe;font-weight:600;white-space:nowrap;margin-left:.4rem">👑 Owner</span>`
-      : `<span style="display:inline-block;font-size:.62rem;padding:.1rem .4rem;border-radius:.75rem;background:#ede9fe;color:#5b21b6;border:1px solid #ddd6fe;font-weight:600;white-space:nowrap;margin-left:.4rem">👥 Participante</span>`;
     // data-raid-id → navega para Ações de Mitigação e abre o modal de edição
     return `<div class="hoje-row" data-raid-id="${r.id}" style="cursor:pointer">
       <div class="hoje-row-left">
-        <div class="hoje-row-task" title="${escapeHtml(r.title)}">${escapeHtml(r.title)}${myRole}</div>
+        <div class="hoje-row-task" title="${escapeHtml(r.title)}">${escapeHtml(r.title)}</div>
         <div class="hoje-row-meta">
-          <span title="${escapeHtml(dealsLabel)}">${escapeHtml(dealsLabel)}</span><span class="sep">·</span>
+          <span>${escapeHtml(r._deal?.name||'')}</span><span class="sep">·</span>
           <span>${escapeHtml(r.area||'—')}</span>
           ${r.owner?`<span class="sep">·</span><span>Resp: ${escapeHtml(r.owner)}</span>`:''}
         </div>
@@ -5884,16 +5296,25 @@ function renderHoje(){
           <span>${escapeHtml(t._deal.name)}</span><span class="sep">·</span>
           <span>${escapeHtml(t.area||'—')}</span>
           ${t.ref?`<span class="sep">·</span><span>${escapeHtml(t.ref)}</span>`:''}
-          ${t.owner?`<span class="sep">·</span><span style="color:#1e40af;font-size:11px">@ ${escapeHtml(t.owner)}</span>`:''}
         </div>
       </div>
       <div class="hoje-row-right"><span class="hoje-urgency soon">${d===0?'Vence hoje':d===1?'Vence amanhã':`${d} d.u.`}</span></div>
     </div>`;
   }
 
-  // ---- Renderiza uma seção (com paginação) ----
-  function renderSec(containerId, badgeId, limitKey, items, rowFn, emptyMsg){
-    const visible = items;
+  // ---- Aplica filtros de deal e pessoa a uma lista ----
+  function applyFilters(items, skipOwner){
+    let v = filterDeal ? items.filter(x=>x._deal.id===filterDeal) : items;
+    if(!skipOwner){
+      if(filterOwner==='__me__') v = v.filter(x=>isMe(x.owner));
+      else if(filterOwner) v = v.filter(x=>x.owner===filterOwner);
+    }
+    return v;
+  }
+
+  // ---- Renderiza uma seção (lista filtrada + paginação) ----
+  function renderSec(containerId, badgeId, limitKey, items, rowFn, emptyMsg, skipOwner){
+    const visible = applyFilters(items, skipOwner);
     const limit = limits[limitKey];
     const slice = visible.slice(0, limit);
     const rest = visible.length - slice.length;
@@ -5942,14 +5363,18 @@ function renderHoje(){
 
   // ---- Atualiza total + todas as seções ----
   function refresh(){
-    const total = myLate.length + decisions.length + myUpcoming.length;
+    const totLate = applyFilters(myLate).length;
+    const totDec  = applyFilters(decisions, true).length; // decisões: sem filtro de pessoa
+    const totUp   = applyFilters(myUpcoming).length;
+    const total   = totLate + totDec + totUp;
     const totalEl = node.querySelector('#hoje-total');
+    const ownerLabel = filterOwner==='__me__' ? ` (${[...meTokens][0]||'eu'})` : filterOwner ? ` (${filterOwner})` : '';
     if(totalEl) totalEl.innerHTML = total===0
       ? 'Nenhuma ação pendente. Tudo em dia!'
-      : `<strong>${total}</strong> item${total!==1?'s':''} que precisam de atenção.`;
+      : `<strong>${total}</strong> item${total!==1?'s':''}${ownerLabel} que precisam de atenção.`;
 
     renderSec('sec-late', 'badge-late', 'late', myLate, taskRow, 'Nenhuma tarefa atrasada. ✓');
-    renderSec('sec-dec', 'badge-dec', 'dec', decisions, decisionRow, 'Nenhuma decisão aberta no portfólio.');
+    renderSec('sec-dec', 'badge-dec', 'dec', decisions, decisionRow, 'Nenhuma decisão aberta no portfólio.', true);
     renderSec('sec-up', 'badge-up', 'up', myUpcoming, upcomingRow, 'Nenhuma tarefa vence nos próximos 10 dias úteis.');
   }
 
@@ -5963,6 +5388,24 @@ function renderHoje(){
           ? 'Nenhuma ação pendente no momento. Tudo em dia!'
           : `Você tem <strong>${totalActions}</strong> item${totalActions!==1?'s':''} que precisam de atenção.`
         }</p>
+        <p style="font-size:.72rem;color:var(--bhub-muted);margin-top:.3rem">
+          Buscando por owner: <strong>${[...meTokens].join(' · ')}</strong>
+        </p>
+      </div>
+
+      <div class="hoje-filter-bar">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="color:var(--bhub-muted);flex-shrink:0"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+        <span style="font-size:.78rem;color:var(--bhub-muted);font-weight:600;white-space:nowrap">Deal:</span>
+        <select id="dealFilter" style="min-width:160px">
+          <option value="">Todos os deals${dealList.length>0?` (${dealList.length})`:''}</option>
+          ${dealList.map(([id,name])=>`<option value="${id}">${escapeHtml(name)}</option>`).join('')}
+        </select>
+        <span style="font-size:.78rem;color:var(--bhub-muted);font-weight:600;white-space:nowrap;margin-left:.25rem">Pessoa:</span>
+        <select id="ownerFilter" style="min-width:160px">
+          <option value="">Todo mundo</option>
+          <option value="__me__">⭐ Meu nome (${escapeHtml([...meTokens][0]||'eu')})</option>
+          ${allOwners.filter(o=>!isMe(o)).map(o=>`<option value="${escapeHtml(o)}">${escapeHtml(o)}</option>`).join('')}
+        </select>
       </div>
 
       <!-- Seção 1: Tarefas atrasadas -->
@@ -6038,6 +5481,22 @@ function renderHoje(){
     </div>
   `);
 
+  // Wiring: filtro de deal
+  const filterEl = node.querySelector('#dealFilter');
+  if(filterEl) filterEl.addEventListener('change', ()=>{
+    filterDeal = filterEl.value;
+    limits.late = PAGE; limits.dec = PAGE; limits.up = PAGE;
+    refresh();
+  });
+
+  // Wiring: filtro de pessoa
+  const ownerFilterEl = node.querySelector('#ownerFilter');
+  if(ownerFilterEl) ownerFilterEl.addEventListener('change', ()=>{
+    filterOwner = ownerFilterEl.value;
+    limits.late = PAGE; limits.dec = PAGE; limits.up = PAGE;
+    refresh();
+  });
+
   // Render inicial das seções
   refresh();
 
@@ -6093,9 +5552,7 @@ function renderHoje(){
           const { error } = await supa.from('tasks').delete().eq('id', taskId);
           if(error) throw error;
           const d = state.deals[cid];
-          const deletedRef = d?.tasks?.find(x=>x.id===taskId)?.ref;
           if(d) d.tasks = d.tasks.filter(x=>x.id!==taskId);
-          await renumberDealTaskRefs(cid, deletedRef);
           renderNewTasksSection(); render();
         }catch(err){ alert('Erro: '+(err.message||err)); }
       }));
@@ -6164,72 +5621,48 @@ function renderHoje(){
 
       secDelReqs.innerHTML = reqs.length===0
         ? `<div class="hoje-empty">Nenhuma solicitação de exclusão pendente.</div>`
-        : reqs.map(r=>{
-          // RAID requests são identificadas pelo prefixo 'RAID:' no task_ref
-          const isRaid = (r.task_ref||'').startsWith('RAID:');
-          const raidId  = isRaid ? r.task_ref.slice(5) : '';
-          const typeBadge = isRaid
-            ? `<span style="font-size:.65rem;background:#fef3c7;color:#92400e;border-radius:.25rem;padding:.1rem .35rem;margin-right:.4rem;font-weight:600">Ação de Mitigação</span>`
-            : '';
-          const refDisplay = isRaid ? '' : (r.task_ref
-            ? `<span style="font-family:monospace;font-size:.78rem;background:#f3f4f6;padding:.1rem .3rem;border-radius:.25rem;margin-right:.35rem">${escapeHtml(r.task_ref)}</span>`
-            : '');
-          return `
+        : reqs.map(r=>`
           <div class="hoje-row" data-delreq-id="${r.id}" style="align-items:flex-start">
             <div class="hoje-row-left" style="flex:1;min-width:0">
-              <div class="hoje-row-task" style="font-weight:600">${typeBadge}${refDisplay}${escapeHtml(r.task_name||'(sem nome)')}</div>
+              <div class="hoje-row-task" style="font-weight:600">${r.task_ref?`<span style="font-family:monospace;font-size:.78rem;background:#f3f4f6;padding:.1rem .3rem;border-radius:.25rem;margin-right:.35rem">${escapeHtml(r.task_ref)}</span>`:''}${escapeHtml(r.task_name||'(sem nome)')}</div>
               <div class="hoje-row-meta">
-                ${!isRaid?`<span style="font-weight:600;color:var(--bhub-navy)">${escapeHtml(r.company_name||'—')}</span><span class="sep">·</span>`:''}
-                <span>${escapeHtml(r.area||(state.deals[r.company_id]?.tasks||[]).find(t=>t.id===r.task_id)?.area||'—')}</span><span class="sep">·</span>
-                <span>Por <strong>${escapeHtml(r.requested_by_name||'?')}</strong></span><span class="sep">·</span>
+                <span>${escapeHtml(r.company_name||'—')}</span><span class="sep">·</span>
+                <span>${escapeHtml(r.area||'—')}</span><span class="sep">·</span>
+                <span>Solicitado por <strong>${escapeHtml(r.requested_by_name||'?')}</strong></span><span class="sep">·</span>
                 <span>${r.requested_at ? fmtDate(new Date(r.requested_at)) : ''}</span>
               </div>
             </div>
             <div class="hoje-row-right" style="gap:.5rem;flex-shrink:0">
-              <button class="btn btn-danger" style="font-size:.75rem;padding:.3rem .65rem"
-                data-approve="${r.id}" data-task-id="${r.task_id||''}" data-company-id="${r.company_id||''}"
-                data-raid-id="${escapeHtml(raidId)}">✓ Aprovar</button>
+              <button class="btn btn-danger" style="font-size:.75rem;padding:.3rem .65rem" data-approve="${r.id}" data-task-id="${r.task_id}" data-company-id="${r.company_id}">✓ Aprovar</button>
               <button class="btn btn-secondary" style="font-size:.75rem;padding:.3rem .65rem" data-reject="${r.id}">✕ Rejeitar</button>
             </div>
-          </div>`;
-        }).join('');
+          </div>`).join('');
 
       // Approve handler
       secDelReqs.querySelectorAll('[data-approve]').forEach(btn=>{
         btn.addEventListener('click', async ()=>{
-          const reqId   = btn.dataset.approve;
-          const raidId  = btn.dataset.raidId;
-          const isRaid  = !!raidId;
+          const reqId = btn.dataset.approve;
+          const taskId = btn.dataset.taskId;
           const req = reqs.find(r=>r.id===reqId);
           const ok = await confirmDeleteModal({
             title: 'Confirmar exclusão?',
-            ref: isRaid ? '' : (req?.task_ref||''),
+            ref: req?.task_ref||'',
             description: req?.task_name||'',
-            warning: isRaid
-              ? 'Você está aprovando a exclusão desta Ação de Mitigação. A ação é <strong>irreversível</strong>.'
-              : 'Você está aprovando a exclusão desta tarefa. A ação é <strong>irreversível</strong>.'
+            warning: 'Você está aprovando a exclusão desta tarefa. A ação é <strong>irreversível</strong>.'
           });
           if(!ok) return;
           try{
-            if(isRaid){
-              const { error: delErr } = await supa.from('raid_items').delete().eq('id', raidId);
-              if(delErr) throw delErr;
-              await supa.from('deletion_requests').update({status:'approved'}).eq('id', reqId);
-              state.deletionRequests = state.deletionRequests.filter(r=>r.id!==reqId);
-              state.raid = state.raid.filter(r=>r.id!==raidId);
-              for(const d of Object.values(state.deals)) d.raid = (d.raid||[]).filter(r=>r.id!==raidId);
-            } else {
-              const taskId = btn.dataset.taskId;
-              const companyId = btn.dataset.companyId;
-              const deletedRef = state.deals[companyId]?.tasks?.find(t=>t.id===taskId)?.ref;
-              const { error: delErr } = await supa.from('tasks').delete().eq('id', taskId);
-              if(delErr) throw delErr;
-              await supa.from('deletion_requests').update({status:'approved'}).eq('id', reqId);
-              state.deletionRequests = state.deletionRequests.filter(r=>r.id!==reqId);
-              if(state.deals[companyId]) state.deals[companyId].tasks = state.deals[companyId].tasks.filter(t=>t.id!==taskId);
-              await renumberDealTaskRefs(companyId, deletedRef);
-            }
-            renderDelReqsSection(); render();
+            // delete the task
+            const { error: delErr } = await supa.from('tasks').delete().eq('id', taskId);
+            if(delErr) throw delErr;
+            // mark request as approved
+            await supa.from('deletion_requests').update({status:'approved'}).eq('id', reqId);
+            // update local state
+            state.deletionRequests = state.deletionRequests.filter(r=>r.id!==reqId);
+            // remove task from deal state
+            const companyId = btn.dataset.companyId;
+            if(state.deals[companyId]) state.deals[companyId].tasks = state.deals[companyId].tasks.filter(t=>t.id!==taskId);
+            renderDelReqsSection();
           }catch(err){ alert('Erro: '+(err.message||err)); }
         });
       });
@@ -6252,476 +5685,6 @@ function renderHoje(){
   return node;
 }
 
-// [pmo-v1] renderPMO function
-// [pmo-owner-applied]
-// [hotlist-owner-applied]
-// [timeline-v2-applied]
-// [timeline-fix-applied]
-// [hotlist-fix-applied]
-// [fix-final-applied]
-// [fix7-applied]
-// [fix6-applied]
-// [fix5-applied]
-// [pmo-v2-applied]
-function renderPMO(){
-// [fix8-precompute]
-    (function fix8Precompute(){
-      try {
-        if(!state||!state.companies||typeof aggregate!=='function') return;
-        var computed=aggregate();
-        if(!computed||!computed.length) return;
-        computed.forEach(function(r){
-          var co=r.company||r;
-          var cid=String(co.id||co.company_id||r.id||r.company_id||'');
-          if(!cid) return;
-          var rawDeal=state.deals[cid];
-          if(!rawDeal||!rawDeal.tasks||!rawDeal.tasks.length) return;
-          var cTasks=r.tasks;
-          if(!cTasks||!cTasks.length) return;
-          var byId={};
-          cTasks.forEach(function(ct){ if(ct&&ct.id) byId[String(ct.id)]=ct; });
-          rawDeal.tasks.forEach(function(t){
-            if(!t||!t.id) return;
-            var ct=byId[String(t.id)];
-            if(ct&&ct._f) t._f=ct._f;
-          });
-        });
-      } catch(e){ console.warn('[fix8-precompute]',e); }
-    })();
-
-    // [fix8-classifiers]
-    function isTaskDone(t){
-      if(!t) return false;
-      if(t._f&&t._f.status==='done') return true;
-      if(typeof t.completado==='number'&&t.completado>=100) return true;
-      if(t.dataRealConclusao&&String(t.dataRealConclusao).trim()!=='') return true;
-      return false;
-    }
-    function isTaskLate(t){
-      if(!t) return false;
-      if(isTaskDone(t)) return false;
-      if(t._f&&t._f.status==='late') return true;
-      var prazo=parseDate(t.prazo||t.prevista||t.data_prevista);
-      if(prazo&&prazo<new Date()) return true;
-      return false;
-    }
-    function isTaskAtRisk(t){
-      if(!t||isTaskDone(t)||isTaskLate(t)) return false;
-      if(t._f) return t._f.status==='at-risk';
-      var prazo=parseDate(t.prazo||t.prevista||t.data_prevista);
-      if(prazo){ var diff=(prazo-new Date())/(1000*60*60*24); if(diff>=0&&diff<=14) return true; }
-      return false;
-    }
-    function isTaskOnTrack(t){
-      return t&&!isTaskDone(t)&&!isTaskLate(t)&&!isTaskAtRisk(t);
-    }
-  const node = document.createElement('div');
-  node.style.cssText = 'padding:20px;max-width:1100px;margin:0 auto;font-family:inherit';
-
-  // ── Helpers ──────────────────────────────────────────────────────────────
-  function getDeals(){ return state.companies || []; }
-  function getTasks(deal){ var dd=state.deals&&state.deals[deal.id||deal.company_id]; return dd?dd.tasks||[]:[]; }
-  function getMitigacoes(deal){ var dd=state.deals&&(state.deals[deal.id||deal.company_id||deal._id]||state.deals[String(deal.id||deal.company_id||deal._id)]); return dd?dd.raid||[]:[]; }
-
-  function healthColor(pct){
-    if(pct <= 15) return '#16a34a';
-    if(pct <= 30) return '#d97706';
-    return '#dc2626';
-  }
-  function healthLabel(pct){
-    if(pct <= 15) return 'On Track';
-    if(pct <= 30) return 'Em Risco';
-    return 'Crítico';
-  }
-// [parseDate-robust-v2]
-  function parseDate(s){
-    if(s==null||s===''||s===undefined) return null;
-    if(s instanceof Date) return isNaN(s.getTime())?null:s;
-    if(typeof s==='number'){
-      if(s<=0) return null;
-      var d=s>1e12?new Date(s):new Date(s*1000);
-      return d.getFullYear()>=2000?d:null;
-    }
-    s=String(s).trim();
-    if(!s) return null;
-    if(/^\d{10,}$/.test(s)){
-      var ts=Number(s);
-      var d2=ts>1e12?new Date(ts):new Date(ts*1000);
-      return d2.getFullYear()>=2000?d2:null;
-    }
-    var p=s.split('/');
-    if(p.length===3){
-      var yr=+p[2]; if(yr<100) yr+=2000;
-      var d3=new Date(yr,+p[1]-1,+p[0]);
-      return isNaN(d3.getTime())?null:d3;
-    }
-    var d4=new Date(s);
-    return isNaN(d4.getTime())||d4.getFullYear()<2000?null:d4;
-  }
-  function fmtDate(d){
-    if(!d) return '—';
-    return d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'});
-  }
-  function daysUntil(d){
-    if(!d) return null;
-    return Math.ceil((d - new Date()) / 86400000);
-  }
-
-  const deals = getDeals();
-
-  // ── SECTION 1: WATCHLIST ─────────────────────────────────────────────────
-  const WL_KEY = 'pmo_watchlist_v1';
-  function loadWL(){ try{ return JSON.parse(localStorage.getItem(WL_KEY)||'[]'); }catch(e){ return []; } }
-  function saveWL(arr){ localStorage.setItem(WL_KEY, JSON.stringify(arr)); }
-
-  function buildWatchlist(){
-    const sec = document.createElement('div');
-    sec.style.cssText = 'margin-bottom:32px';
-    sec.innerHTML = '<h2 style="font-size:16px;font-weight:700;color:#1e3a5f;margin:0 0 12px;display:flex;align-items:center;gap:8px">' +
-      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0171E4" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>' +
-      'Watchlist</h2>';
-
-    let wl = loadWL();
-
-    // Board row
-    const board = document.createElement('div');
-    board.style.cssText = 'display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px;min-height:60px;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:10px;padding:10px;align-items:flex-start';
-
-    function renderWLCards(){
-      board.innerHTML = '';
-      if(wl.length === 0){
-        board.innerHTML = '<span style="color:#94a3b8;font-size:13px;margin:auto">Nenhuma empresa na watchlist. Adicione abaixo ↓</span>';
-        return;
-      }
-      wl.forEach(function(name, i){
-        const deal = deals.find(function(d){ return (d.empresa||d.name||d.nome||'') === name; });
-        const tasks = deal ? getTasks(deal) : [];
-        const late = tasks.filter(function(t){ return isTaskLate(t); }).length;
-        const pct = tasks.length ? Math.round(late/tasks.length*100) : 0;
-        const card = document.createElement('div');
-        card.style.cssText = 'background:#fff;border:1.5px solid ' + healthColor(pct) + ';border-radius:10px;padding:10px 14px;min-width:140px;max-width:180px;cursor:pointer;position:relative;box-shadow:0 1px 3px rgba(0,0,0,.06)';
-        card.title = 'Clique para abrir o deal';
-        const removeBtn = document.createElement('button');
-        removeBtn.textContent = '×';
-        removeBtn.style.cssText = 'position:absolute;top:4px;right:6px;background:none;border:none;cursor:pointer;font-size:16px;color:#94a3b8;line-height:1;padding:0';
-        removeBtn.onclick = function(e){
-          e.stopPropagation();
-          wl.splice(i, 1);
-          saveWL(wl);
-          renderWLCards();
-          renderDropdown();
-        };
-        const dot = document.createElement('div');
-        dot.style.cssText = 'width:8px;height:8px;border-radius:50%;background:' + healthColor(pct) + ';display:inline-block;margin-right:6px';
-        const nameSpan = document.createElement('span');
-        nameSpan.style.cssText = 'font-size:13px;font-weight:600;color:#1e293b';
-        nameSpan.textContent = name;
-        const info = document.createElement('div');
-        info.style.cssText = 'margin-top:6px;font-size:11px;color:#64748b';
-        info.textContent = tasks.length + ' tarefas · ' + pct + '% atrasadas';
-        const badge = document.createElement('div');
-        badge.style.cssText = 'margin-top:4px;font-size:10px;font-weight:700;color:' + healthColor(pct);
-        badge.textContent = healthLabel(pct);
-        card.appendChild(removeBtn);
-        card.appendChild(dot);
-        card.appendChild(nameSpan);
-        card.appendChild(info);
-        card.appendChild(badge);
-        card.onclick = function(){
-          if(deal){
-            view.dealId = deal.id || deal._id || '';
-            view.tab = 'deal';
-            render();
-          }
-        };
-        board.appendChild(card);
-      });
-    }
-
-    // Add dropdown
-    const addRow = document.createElement('div');
-    addRow.style.cssText = 'display:flex;gap:8px;align-items:center';
-    const sel = document.createElement('select');
-    sel.style.cssText = 'border:1px solid #cbd5e1;border-radius:6px;padding:6px 10px;font-size:13px;color:#334155;background:#fff';
-    function renderDropdown(){
-      sel.innerHTML = '<option value="">+ Adicionar empresa...</option>';
-      deals.forEach(function(d){
-        const name = d.empresa||d.name||d.nome||'';
-        if(!name || wl.includes(name)) return;
-        const opt = document.createElement('option');
-        opt.value = name;
-        opt.textContent = name;
-        sel.appendChild(opt);
-      });
-    }
-    sel.onchange = function(){
-      if(!sel.value) return;
-      wl.push(sel.value);
-      saveWL(wl);
-      renderWLCards();
-      renderDropdown();
-      sel.value = '';
-    };
-    addRow.appendChild(sel);
-    sec.appendChild(board);
-    sec.appendChild(addRow);
-    renderWLCards();
-    renderDropdown();
-    return sec;
-  }
-
-  // ── SECTION 2: TIMELINE ──────────────────────────────────────────────────
-  function buildTimeline(){
-    const sec = document.createElement('div');
-    sec.style.cssText = 'margin-bottom:32px';
-    sec.innerHTML = '<h2 style="font-size:16px;font-weight:700;color:#1e3a5f;margin:0 0 12px;display:flex;align-items:center;gap:8px">' +
-      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0171E4" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>' +
-      'Timeline — Cronograma</h2>';
-    const now = new Date();
-    // Gather all deals
-    const rows = deals.map(function(d){
-      const tasks = getTasks(d);
-      const late = tasks.filter(function(t){ return isTaskLate(t); }).length;
-      const done = tasks.filter(function(t){ return isTaskDone(t); }).length;
-      const pct = tasks.length ? Math.round(late/tasks.length*100) : 0;
-      var _tdates = getTasks(d).map(function(t){return parseDate((t._f&&t._f.dataPrevista)||t.prazo);}).filter(Boolean);
-      var prevista = _tdates.length ? new Date(Math.max.apply(null,_tdates)) : null;
-      var signDate = parseDate(d.signDate);
-      return { name: d.empresa||d.name||d.nome||'—', tasks: tasks.length, late, done, pct, prevista, signDate, d };
-    }).filter(function(r){ return r.tasks > 0; });
-    if(rows.length === 0){
-      sec.innerHTML += '<p style="color:#64748b;font-size:13px">Nenhum deal com tarefas encontrado.</p>';
-      return sec;
-    }
-    // Date range: earliest signDate → latest prevista
-    var allSignDates = rows.map(function(r){ return r.signDate; }).filter(Boolean);
-    var allPrevistas = rows.map(function(r){ return r.prevista; }).filter(Boolean);
-    var minD = allSignDates.length ? new Date(Math.min.apply(null,allSignDates)) : new Date(now.getFullYear(), now.getMonth()-3, 1);
-    var maxD = allPrevistas.length ? new Date(Math.max.apply(null,allPrevistas)) : new Date(now.getFullYear(), now.getMonth()+6, 1);
-    if(+maxD <= +now) maxD.setMonth(maxD.getMonth()+1);
-    var totalMs = +maxD - +minD || 1;
-    function pctPos(d){
-      if(!d) return null;
-      return Math.max(0, Math.min(100, (+d - +minD) / totalMs * 100));
-    }
-    var nowPct = pctPos(now);
-    var wrap = document.createElement('div');
-    wrap.style.cssText = 'background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px;overflow-x:auto';
-    // Header: step trimestral/semestral conforme range
-    var rangeMonths = Math.round((+maxD - +minD) / (30.44*24*3600*1000));
-    var labelStep = rangeMonths > 24 ? 6 : rangeMonths > 12 ? 3 : 1;
-    var headerRow = document.createElement('div');
-    headerRow.style.cssText = 'display:flex;margin-left:190px;margin-bottom:6px;position:relative;height:20px';
-    var cur = new Date(minD.getFullYear(), minD.getMonth(), 1);
-    var mIdx = 0;
-    while(+cur <= +maxD){
-      if(mIdx % labelStep === 0){
-        var lbl = document.createElement('div');
-        var lp = pctPos(cur);
-        lbl.style.cssText = 'position:absolute;left:'+lp+'%;font-size:10px;color:#64748b;transform:translateX(-50%);white-space:nowrap';
-        lbl.textContent = cur.toLocaleDateString('pt-BR',{month:'short',year:'2-digit'});
-        headerRow.appendChild(lbl);
-      }
-      cur.setMonth(cur.getMonth()+1);
-      mIdx++;
-    }
-    wrap.appendChild(headerRow);
-    // Rows — barra de signDate até prevista
-    rows.forEach(function(r){
-      var row = document.createElement('div');
-      row.style.cssText = 'display:flex;align-items:center;margin-bottom:10px;gap:10px';
-      var label = document.createElement('div');
-      label.style.cssText = 'width:180px;flex-shrink:0;font-size:12px;font-weight:600;color:#334155;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer';
-      label.title = r.name;
-      label.textContent = r.name;
-      label.onclick = function(){
-        view.dealId = r.d.id || r.d._id || '';
-        view.tab = 'deal';
-        render();
-      };
-      var track = document.createElement('div');
-      track.style.cssText = 'flex:1;height:28px;background:#f1f5f9;border-radius:8px;position:relative;min-width:200px';
-      if(r.prevista){
-        var barStart = r.signDate ? (pctPos(r.signDate)||0) : 0;
-        var barEnd   = pctPos(r.prevista)||0;
-        var barW     = Math.max(1, barEnd - barStart);
-        var bar = document.createElement('div');
-        bar.style.cssText = 'position:absolute;left:'+barStart+'%;top:4px;height:20px;width:'+barW+'%;background:'+healthColor(r.pct)+';border-radius:6px;opacity:.9';
-        track.appendChild(bar);
-        // Marker de prevista
-        var marker = document.createElement('div');
-        marker.style.cssText = 'position:absolute;left:'+barEnd+'%;top:2px;width:2px;height:24px;background:#1e3a5f;border-radius:2px';
-        marker.title = 'Prevista: '+fmtDate(r.prevista);
-        track.appendChild(marker);
-        // Label dentro da barra
-        var bLbl = document.createElement('div');
-        bLbl.style.cssText = 'position:absolute;left:'+(barStart+0.5)+'%;top:6px;font-size:10px;color:#fff;font-weight:600;pointer-events:none;white-space:nowrap';
-        bLbl.textContent = r.done+'/'+r.tasks+' · '+healthLabel(r.pct);
-        track.appendChild(bLbl);
-      }
-      // Linha de HOJE
-      var todayLine = document.createElement('div');
-      todayLine.style.cssText = 'position:absolute;left:'+nowPct+'%;top:0;width:2px;height:100%;background:#ef4444;border-radius:2px;z-index:2';
-      todayLine.title = 'Hoje';
-      track.appendChild(todayLine);
-      row.appendChild(label);
-      row.appendChild(track);
-      wrap.appendChild(row);
-    });
-    // Legenda
-    var legend = document.createElement('div');
-    legend.style.cssText = 'margin-top:12px;display:flex;gap:16px;font-size:11px;color:#64748b;align-items:center;flex-wrap:wrap';
-    legend.innerHTML = '<span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:3px;background:#16a34a;display:inline-block"></span>On Track ≤15%</span>' +
-      '<span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:3px;background:#d97706;display:inline-block"></span>Em Risco 15-30%</span>' +
-      '<span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:3px;background:#dc2626;display:inline-block"></span>Crítico >30%</span>' +
-      '<span style="display:flex;align-items:center;gap:4px"><span style="width:2px;height:14px;background:#ef4444;display:inline-block"></span>Hoje</span>' +
-      '<span style="display:flex;align-items:center;gap:4px"><span style="width:2px;height:14px;background:#1e3a5f;display:inline-block"></span>Prevista</span>';
-    sec.appendChild(wrap);
-    sec.appendChild(legend);
-    return sec;
-  }
-
-  // ── SECTION 3: HOT LIST ───────────────────────────────────────────────────
-  function buildHotList(){
-    const sec = document.createElement('div');
-    sec.style.cssText = 'margin-bottom:32px';
-    sec.innerHTML = '<h2 style="font-size:16px;font-weight:700;color:#1e3a5f;margin:0 0 12px;display:flex;align-items:center;gap:8px">' +
-      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><path d="M12 2c0 0-4 5-4 9a4 4 0 0 0 8 0c0-4-4-9-4-9z"/><path d="M12 12c0 0-2 2-2 4a2 2 0 0 0 4 0c0-2-2-4-2-4z"/></svg>' +
-      'Hot List — Vencimentos &amp; Atrasos</h2>';
-
-    const now = new Date();
-
-    // Collect all tasks across all deals with metadata
-    const allTasks = [];
-    const allMit = [];
-    deals.forEach(function(d){
-      const empresa = d.empresa||d.name||d.nome||'—';
-      getTasks(d).forEach(function(t){
-        allTasks.push({ empresa, task: t, deal: d });
-      });
-      getMitigacoes(d).forEach(function(m){
-        allMit.push({ empresa, mit: m, deal: d });
-      });
-    });
-
-    function tasksLate(){ return allTasks.filter(function(x){ return isTaskLate(x.task||x); }); }
-    function tasksInWindow(days){
-      return allTasks.filter(function(x){
-        const d = parseDate((x.task._f&&x.task._f.dataPrevista)||x.task.prevista||x.task.data_prevista||x.task.prazo);
-        if(!d) return false;
-        const u = daysUntil(d);
-        return u !== null && u >= 0 && u <= days;
-      });
-    }
-    function mitInWindow(days){
-      return allMit.filter(function(x){
-        const d = parseDate(x.mit.prazo||x.mit.data_prazo||x.mit.vencimento||x.mit.data_vencimento||x.mit.deadline);
-        if(!d) return true; // sem data = em aberto
-        const u = daysUntil(d);
-        return u !== null && u <= days; // inclui vencidos
-      });
-    }
-
-    function taskRow(x){
-      const t = x.task;
-      const name = t.task||t.tarefa||t.nome||t.name||t.titulo||'Tarefa';
-      const owner = t.owner||'';
-      const d = parseDate((t._f&&t._f.dataPrevista)||t.prevista||t.data_prevista||t.prazo);
-      const u = daysUntil(d);
-      const urgColor = u !== null ? (u <= 0 ? '#dc2626' : u <= 15 ? '#d97706' : '#16a34a') : '#64748b';
-      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;border-radius:6px;background:#fff;margin-bottom:4px;border:1px solid #e2e8f0">' +
-        '<span style="font-size:12px;color:#334155"><b style="color:#1e3a5f">' + escapeHtml(x.empresa) + '</b> · ' + escapeHtml(name) +
-          (owner ? ' <span style="color:#64748b;font-size:11px;font-weight:400">@ ' + escapeHtml(owner) + '</span>' : '') +
-        '</span>' +
-        '<span style="font-size:11px;font-weight:700;color:' + urgColor + ';white-space:nowrap;margin-left:10px">' +
-          (d ? fmtDate(d) + (u!==null?' ('+u+'d)':'') : '—') +
-        '</span></div>';
-    }
-    function mitRow(x){
-      const m = x.mit;
-      const name = m.acao||m.nome||m.descricao||m.titulo||'Ação';
-      const d = parseDate(m.prazo||m.data_prazo||m.vencimento);
-      const u = daysUntil(d);
-      const urgColor = u !== null ? (u <= 0 ? '#dc2626' : u <= 15 ? '#d97706' : '#16a34a') : '#64748b';
-      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;border-radius:6px;background:#fff5f5;margin-bottom:4px;border:1px solid #fecaca">' +
-        '<span style="font-size:12px;color:#334155">🔔 <b style="color:#1e3a5f">' + x.empresa + '</b> · ' + name + '</span>' +
-        '<span style="font-size:11px;font-weight:700;color:' + urgColor + ';white-space:nowrap;margin-left:10px">' +
-          (d ? fmtDate(d) + (u!==null?' ('+u+'d)':'') : '—') +
-        '</span></div>';
-    }
-
-    const buckets = [
-      {
-        key: 'late', label: '🔴 Tarefas Atrasadas', color: '#dc2626',
-        fn: function(){ return tasksLate(); },
-        rowFn: taskRow
-      },
-      {
-        key: 'mit', label: '🔔 Ações de Mitigação em aberto', color: '#7c3aed',
-        fn: function(){ return mitInWindow(30); },
-        rowFn: mitRow
-      },
-      {
-        key: 'd15', label: '⚡ Tarefas vencendo em 15 dias', color: '#d97706',
-        fn: function(){ return tasksInWindow(15); },
-        rowFn: taskRow
-      },
-      {
-        key: 'd30', label: '📅 Tarefas vencendo em 30 dias', color: '#0171E4',
-        fn: function(){ return tasksInWindow(30); },
-        rowFn: taskRow
-      },
-      {
-        key: 'd45', label: '📆 Tarefas vencendo em 45 dias', color: '#0891b2',
-        fn: function(){ return tasksInWindow(45); },
-        rowFn: taskRow
-      },
-      {
-        key: 'd60', label: '🗓️ Tarefas vencendo em 60 dias', color: '#16a34a',
-        fn: function(){ return tasksInWindow(60); },
-        rowFn: taskRow
-      }
-    ];
-
-    buckets.forEach(function(b){
-      const items = b.fn();
-      const details = document.createElement('details');
-      details.style.cssText = 'background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;margin-bottom:10px;overflow:hidden';
-      const summary = document.createElement('summary');
-      summary.style.cssText = 'padding:12px 16px;cursor:pointer;font-size:13px;font-weight:700;color:#1e293b;display:flex;justify-content:space-between;align-items:center;list-style:none;user-select:none';
-      summary.innerHTML = '<span>' + b.label + '</span>' +
-        '<span style="background:' + b.color + ';color:#fff;border-radius:20px;padding:2px 10px;font-size:12px;min-width:24px;text-align:center">' + items.length + '</span>';
-      const body = document.createElement('div');
-      body.style.cssText = 'padding:0 12px 12px';
-      if(items.length === 0){
-        body.innerHTML = '<p style="color:#94a3b8;font-size:12px;margin:8px 0">Nenhum item nesta janela.</p>';
-      } else {
-        body.innerHTML = items.map(b.rowFn).join('');
-      }
-      details.appendChild(summary);
-      details.appendChild(body);
-      sec.appendChild(details);
-    });
-
-    return sec;
-  }
-
-  // ── Assemble ──────────────────────────────────────────────────────────────
-  const header = document.createElement('div');
-  header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;padding-bottom:16px;border-bottom:2px solid #e2e8f0';
-  header.innerHTML = '<div>' +
-    '<h1 style="margin:0;font-size:22px;font-weight:800;color:#1e3a5f">PMO · Cockpit</h1>' +
-    '<p style="margin:4px 0 0;font-size:13px;color:#64748b">Visão exclusiva de administradores · Dados em tempo real</p>' +
-    '</div>' +
-    '<span style="background:#0171E4;color:#fff;font-size:11px;font-weight:700;border-radius:6px;padding:4px 10px">ADMIN</span>';
-
-  node.appendChild(header);
-  node.appendChild(buildWatchlist());
-  node.appendChild(buildTimeline());
-  node.appendChild(buildHotList());
-  return node;
-}
-
 function renderUsuarios(){
   const isAdmin = canAdmin();
   const ROLE_INFO = { admin:'Acesso total', owner:'Pode criar e editar', leitor:'Somente leitura' };
@@ -6740,7 +5703,7 @@ function renderUsuarios(){
         <div class="text-xs font-semibold uppercase tracking-wider mb-2" style="color:var(--bhub-muted);font-family:'Roboto'">Perfis disponíveis</div>
         <div class="flex flex-wrap gap-3">
           <div class="flex items-center gap-2"><span class="role-pill role-admin">admin</span><span class="text-xs text-gray-500">Acesso total — gerencia usuários, templates e todos os dados</span></div>
-          <div class="flex items-center gap-2"><span class="role-pill role-owner">owner</span><span class="text-xs text-gray-500">Pode criar e editar tarefas, Ações de Mitigação e sinergias</span></div>
+          <div class="flex items-center gap-2"><span class="role-pill role-owner">owner</span><span class="text-xs text-gray-500">Pode criar e editar tarefas, RAID e sinergias</span></div>
           <div class="flex items-center gap-2"><span class="role-pill role-leitor">leitor</span><span class="text-xs text-gray-500">Somente visualização — não pode alterar dados</span></div>
         </div>
       </div>
@@ -6826,9 +5789,8 @@ function renderUsuarios(){
       (deal.tasks||[]).forEach(t=>{ if(t.owner&&t.owner.trim()) ownerNames.add(t.owner.trim()); });
       (deal.raid||[]).forEach(r=>{ if(r.owner&&r.owner.trim()) ownerNames.add(r.owner.trim()); });
     });
-    const normName = s=>(s||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
-    const profileNames = new Set((state.users||[]).map(u=>normName(u.username)));
-    const unlinked = [...ownerNames].filter(n=>!profileNames.has(normName(n))).sort();
+    const profileNames = new Set((state.users||[]).map(u=>(u.username||'').trim().toLowerCase()));
+    const unlinked = [...ownerNames].filter(n=>!profileNames.has(n.toLowerCase())).sort();
 
     const ownerSection = node.querySelector('#ownersWithoutAccount');
     if(ownerSection){
@@ -6839,7 +5801,7 @@ function renderUsuarios(){
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#92400e" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/><line x1="19" y1="5" x2="19" y2="11"/><line x1="16" y1="8" x2="22" y2="8"/></svg>
               <span class="text-sm font-semibold" style="color:#92400e">Owners sem conta (${unlinked.length})</span>
             </div>
-            <p class="text-xs text-gray-500">Pessoas que aparecem como responsáveis em tarefas ou Ações de Mitigação mas ainda não possuem perfil no sistema. Clique em "Criar conta" para convidá-las.</p>
+            <p class="text-xs text-gray-500">Pessoas que aparecem como responsáveis em tarefas ou RAID mas ainda não possuem perfil no sistema. Clique em "Criar conta" para convidá-las.</p>
           </div>
           <div class="divide-y">
             ${unlinked.map(name=>`
@@ -7017,42 +5979,38 @@ function showRealtimePulse(label){
   clearTimeout(_realtimeIndicator._t);
   _realtimeIndicator._t = setTimeout(()=>{ _realtimeIndicator.style.opacity = '0'; }, 1500);
 }
-let _realtimePollingInterval = null;
-
-async function doRealtimeReload(label){
-  if(_savingOps > 0) return;
-  try{
-    await reloadState();
-    render();
-    showRealtimePulse(label||'atualizado');
-  }catch(e){ console.error('realtime reload:', e); }
-}
-
 function startRealtime(){
   if(_realtimeCh) return;
+  // Não dispara reload por mudanças causadas localmente (já temos render)
+  // mas é melhor sempre rodar reloadState para garantir consistência cross-tab/usuário.
   const tables = ['tasks','companies','raid_items','raid_deal_links','synergies','health_entries','template_tasks','comments','attachments','task_dependencies'];
-  _realtimeCh = supa.channel('pmi-app-v2');
+  _realtimeCh = supa.channel('pmi-app');
   tables.forEach(t=>{
     _realtimeCh.on('postgres_changes', { event:'*', schema:'public', table:t }, (payload)=>{
+      // Se estamos no meio de uma operação de salvar, ignora (já temos UI atualizada)
       if(_savingOps > 0) return;
+      const label = `${t} ${payload.eventType||''}`.trim();
       clearTimeout(_realtimeDebounce);
-      _realtimeDebounce = setTimeout(()=> doRealtimeReload(t), 800);
+      _realtimeDebounce = setTimeout(async ()=>{
+        try{
+          await reloadState();
+          // Re-render preservando o panel atual se houver modal aberto
+          const hadOpenTaskModal = document.querySelector('[data-modal="task"]');
+          render();
+          if(hadOpenTaskModal){
+            // O modal foi removido pelo render; uma re-abertura seria possível mas exigiria persistir o id.
+          }
+          showRealtimePulse(label);
+        }catch(e){ console.error('realtime reload:', e); }
+      }, 600);
     });
   });
   _realtimeCh.subscribe((status)=>{
-    console.log('[realtime] status:', status);
+    if(status === 'SUBSCRIBED') console.log('[realtime] conectado');
   });
-
-  // Polling incondicional a cada 60s
-  if(_realtimePollingInterval) clearInterval(_realtimePollingInterval);
-  _realtimePollingInterval = setInterval(async ()=>{
-    if(_savingOps > 0 || document.hidden) return;
-    await doRealtimeReload('sync');
-  }, 60000);
 }
 function stopRealtime(){
   if(_realtimeCh){ supa.removeChannel(_realtimeCh); _realtimeCh = null; }
-  if(_realtimePollingInterval){ clearInterval(_realtimePollingInterval); _realtimePollingInterval = null; }
 }
 
 // Detecta erros do Supabase Auth no fragmento da URL (#error=...&error_code=...).
