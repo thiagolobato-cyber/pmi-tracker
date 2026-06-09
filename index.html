@@ -5404,15 +5404,15 @@ function renderHomebroker(){
     const ds = t.val!=null ? t.val+'d' : '—';
     const daysColor = t.val!=null && t.val > 30 ? '#7c2d12' : '#a01923';
     const rowBg = idx%2===0 ? '#fff' : '#f8fafb';
-    return '<tr class="hot-row" style="background:'+rowBg+'">'
-      +'<td style="padding:.28rem .6rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
-      +'<span class="deal-link" data-summary="'+escapeHtml(t.cid)+'" style="font-size:.65rem;font-weight:700;color:#5b21b6;background:#ede9fe;border-radius:9999px;padding:.05rem .4rem;margin-right:.35rem;cursor:pointer;white-space:nowrap;flex-shrink:0">'+escapeHtml(t.deal)+'</span>'
-      +'<span style="font-size:.72rem;color:#374151" title="'+escapeHtml(t.task)+'">'+escapeHtml(t.task)+'</span>'
-      +'</td>'
-      +'<td style="padding:.28rem .5rem;font-size:.72rem;color:#6b7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+escapeHtml(t.owner)+'">'+escapeHtml(t.owner)+'</td>'
-      +'<td style="padding:.28rem .5rem;font-size:.72rem;color:#6b7280;white-space:nowrap;text-align:right">'+(t.due?fmtDate(t.due):'—')+'</td>'
-      +'<td style="padding:.28rem .5rem;font-size:.72rem;font-weight:800;color:'+daysColor+';white-space:nowrap;text-align:right">'+ds+'</td>'
-      +'</tr>';
+    const due = t.due ? fmtDate(t.due) : '—';
+    return '<div class="hot-row" style="display:flex;align-items:center;gap:.45rem;padding:.3rem .7rem;border-bottom:1px solid #f3f4f6;background:'+rowBg+';min-width:0">'
+      +'<span class="deal-link" data-summary="'+escapeHtml(t.cid)+'" style="font-size:.62rem;font-weight:700;color:#5b21b6;background:#ede9fe;border-radius:9999px;padding:.05rem .4rem;cursor:pointer;white-space:nowrap;flex-shrink:0">'+escapeHtml(t.deal)+'</span>'
+      +'<span style="font-size:.72rem;color:#374151;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0" title="'+escapeHtml(t.task)+'">'+escapeHtml(t.task)+'</span>'
+      +'<span style="font-size:.68rem;color:#9ca3af;white-space:nowrap;flex-shrink:0" title="'+escapeHtml(t.owner||'')+'">'+escapeHtml(t.owner||'—')+'</span>'
+      +'<span style="font-size:.65rem;color:#d1d5db;flex-shrink:0">·</span>'
+      +'<span style="font-size:.68rem;color:#9ca3af;white-space:nowrap;flex-shrink:0">'+due+'</span>'
+      +'<span style="font-size:.72rem;font-weight:800;color:'+daysColor+';white-space:nowrap;flex-shrink:0;min-width:2rem;text-align:right">'+ds+'</span>'
+      +'</div>';
   }
   function hotSection(key, icon, label, items, badgeColor){
     const isOpen = !!view.hotlistOpen[key];
@@ -5420,17 +5420,8 @@ function renderHomebroker(){
     const hdrBg  = isOpen ? '#fafaf8' : '#fff';
     const chevron = isOpen ? '180' : '0';
     const rows = items.slice(0,100).map((t,i)=>hotRow(t,i)).join('');
-    const more = items.length>100 ? '<tr><td colspan="5" style="padding:.3rem .85rem;font-size:.65rem;color:var(--bhub-muted);text-align:center">+ '+(items.length-100)+' mais…</td></tr>' : '';
-    const table = count>0 ? '<div style="overflow-x:auto"><table class="w-full" style="border-collapse:collapse;table-layout:fixed">'
-      +'<colgroup><col><col style="width:180px"><col style="width:90px"><col style="width:46px"></colgroup>'
-      +'<thead><tr style="background:#f3f4f6;border-bottom:2px solid #e5e7eb">'
-      +'<th style="padding:.25rem .6rem;font-size:.62rem;font-weight:700;color:var(--bhub-muted);text-transform:uppercase;text-align:left">TAREFA</th>'
-      +'<th style="padding:.25rem .5rem;font-size:.62rem;font-weight:700;color:var(--bhub-muted);text-transform:uppercase;text-align:left">RESPONSÁVEL</th>'
-      +'<th style="padding:.25rem .5rem;font-size:.62rem;font-weight:700;color:var(--bhub-muted);text-transform:uppercase;text-align:right">VENCIMENTO</th>'
-      +'<th style="padding:.25rem .5rem;font-size:.62rem;font-weight:700;color:var(--bhub-muted);text-transform:uppercase;text-align:right">DIAS</th>'
-      +'</tr></thead>'
-      +'<tbody>'+rows+more+'</tbody>'
-      +'</table></div>' : '';
+    const more = items.length>100 ? '<div style="padding:.3rem .85rem;font-size:.65rem;color:var(--bhub-muted);text-align:center">+ '+(items.length-100)+' mais…</div>' : '';
+    const body = count>0 ? '<div>'+rows+more+'</div>' : '';
     return '<div>'
       +'<div class="hb-hot-hdr" data-hot-key="'+key+'" style="display:flex;align-items:center;justify-content:space-between;padding:.6rem .85rem;cursor:pointer;border-bottom:1px solid #f3f4f6;background:'+hdrBg+';user-select:none">'
       +'<div style="font-size:.8rem;font-weight:600;color:var(--bhub-navy)">'+icon+' '+label+'</div>'
@@ -5438,7 +5429,7 @@ function renderHomebroker(){
       +'<span style="background:'+badgeColor+';color:#fff;font-size:.65rem;font-weight:700;border-radius:9999px;padding:.1rem .5rem;min-width:1.6rem;text-align:center">'+count+'</span>'
       +'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="transition:transform .15s;transform:rotate('+chevron+'deg)"><polyline points="6 9 12 15 18 9"/></svg>'
       +'</div></div>'
-      +(isOpen ? table : '')
+      +(isOpen ? body : '')
       +'</div>';
   }
 
