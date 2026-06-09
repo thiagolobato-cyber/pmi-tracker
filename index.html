@@ -2549,6 +2549,7 @@ function renderDashboard(){
     card.addEventListener('click', ()=>{
       view.tab = card.dataset.kpiNav;
       view.dealId = null; // garante que não abre deal individual
+      view.dealTaskStatusFilter = null;
       if(card.dataset.kpiSort){
         view.empresasSortCol = card.dataset.kpiSort;
         view.empresasSortDir = 'desc';
@@ -3650,9 +3651,33 @@ function renderDeal(){
 
 function renderDealTasks(company, deal, tasks){
   const total = tasks.length;
+
+  // ---- Status filter pills ----
+  const SF = view.dealTaskStatusFilter || 'all';
+  const filteredTasks = SF === 'all' ? tasks
+    : SF === 'done'    ? tasks.filter(t => t._f.status === 'done')
+    : SF === 'ontrack' ? tasks.filter(t => t._f.status === 'ontrack')
+    : SF === 'late'    ? tasks.filter(t => t._f.status === 'late')
+    : SF === 'blocked' ? tasks.filter(t => t.bloqueio === 'Sim')
+    : tasks;
+
+  const sfPills = [
+    { key:'all',     label:'Todas',    count: total },
+    { key:'done',    label:'Done',     count: tasks.filter(t=>t._f.status==='done').length,    color:'#16a34a', bg:'#dcfce7' },
+    { key:'ontrack', label:'On Track', count: tasks.filter(t=>t._f.status==='ontrack').length, color:'#2563eb', bg:'#dbeafe' },
+    { key:'late',    label:'Atrasadas',count: tasks.filter(t=>t._f.status==='late').length,    color:'#dc2626', bg:'#fee2e2' },
+    { key:'blocked', label:'Bloqueio', count: tasks.filter(t=>t.bloqueio==='Sim').length,      color:'#d97706', bg:'#fef3c7' },
+  ].map(p => {
+    const active = SF === p.key;
+    const base = active
+      ? `background:${p.color||'#0171E4'};color:#fff;border-color:${p.color||'#0171E4'}`
+      : `background:#fff;color:var(--bhub-navy);border-color:var(--bhub-border)`;
+    return `<button class="sf-pill" data-sf="${p.key}" style="font-size:.73rem;padding:.22rem .65rem;border-radius:9999px;border:1px solid;cursor:pointer;white-space:nowrap;transition:all .12s;${base}">${p.label} <span style="opacity:.75">${p.count}</span></button>`;
+  }).join('');
+
   // group by area, sorted by ref within each group, areas in canonical order
   const grouped = {};
-  tasks.forEach(t => {
+  filteredTasks.forEach(t => {
     const a = t.area || '(sem área)';
     if(!grouped[a]) grouped[a] = [];
     grouped[a].push(t);
@@ -3665,9 +3690,12 @@ function renderDealTasks(company, deal, tasks){
   };
   const node = el(`
     <div class="space-y-3">
-      <div class="flex items-center justify-end gap-2">
-        ${canEdit() && total===0 ? `<button id="seed" class="btn btn-primary">Criar a partir do Template</button>`:''}
-        ${canEdit() ? `<button id="addTask" class="btn btn-primary">+ Tarefa</button>`:''}
+      <div class="flex items-center justify-between flex-wrap gap-2">
+        <div style="display:flex;flex-wrap:wrap;gap:.35rem;align-items:center">${sfPills}</div>
+        <div style="display:flex;gap:.5rem">
+          ${canEdit() && total===0 ? `<button id="seed" class="btn btn-primary">Criar a partir do Template</button>`:''}
+          ${canEdit() ? `<button id="addTask" class="btn btn-primary">+ Tarefa</button>`:''}
+        </div>
       </div>
       ${areasInOrder.map(a => `
         <section class="bhub-card overflow-hidden">
@@ -3716,6 +3744,12 @@ function renderDealTasks(company, deal, tasks){
     const ok = await instantiateFromTemplate(company.id);
     if(ok) render();
   };
+  // Status filter pills
+  node.querySelectorAll('.sf-pill').forEach(b => b.addEventListener('click', ()=>{
+    view.dealTaskStatusFilter = b.dataset.sf;
+    render();
+  }));
+
   const addTask = node.querySelector('#addTask');
   if(addTask) addTask.onclick = ()=>openTaskModal(company);
   node.querySelectorAll('[data-edit]').forEach(b=>b.onclick = ()=>openTaskModal(company, b.dataset.edit));
