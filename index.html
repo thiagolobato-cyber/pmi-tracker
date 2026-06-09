@@ -6253,6 +6253,7 @@ function renderHoje(){
 }
 
 // [pmo-v1] renderPMO function
+// [pmo-owner-applied]
 // [hotlist-owner-applied]
 // [timeline-v2-applied]
 // [timeline-fix-applied]
@@ -6624,11 +6625,14 @@ function renderPMO(){
     function taskRow(x){
       const t = x.task;
       const name = t.task||t.tarefa||t.nome||t.name||t.titulo||'Tarefa';
+      const owner = t.owner||'';
       const d = parseDate((t._f&&t._f.dataPrevista)||t.prevista||t.data_prevista||t.prazo);
       const u = daysUntil(d);
       const urgColor = u !== null ? (u <= 0 ? '#dc2626' : u <= 15 ? '#d97706' : '#16a34a') : '#64748b';
       return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;border-radius:6px;background:#fff;margin-bottom:4px;border:1px solid #e2e8f0">' +
-        '<span style="font-size:12px;color:#334155"><b style="color:#1e3a5f">' + x.empresa + '</b> · ' + name + '</span>' +
+        '<span style="font-size:12px;color:#334155"><b style="color:#1e3a5f">' + escapeHtml(x.empresa) + '</b> · ' + escapeHtml(name) +
+          (owner ? ' <span style="color:#64748b;font-size:11px;font-weight:400">@ ' + escapeHtml(owner) + '</span>' : '') +
+        '</span>' +
         '<span style="font-size:11px;font-weight:700;color:' + urgColor + ';white-space:nowrap;margin-left:10px">' +
           (d ? fmtDate(d) + (u!==null?' ('+u+'d)':'') : '—') +
         '</span></div>';
