@@ -5398,8 +5398,10 @@ function renderHomebroker(){
     const daysColor = t.val!=null && t.val > 30 ? '#7c2d12' : '#a01923';
     const rowBg = idx%2===0 ? '#fff' : '#f8fafb';
     return '<tr class="hot-row" style="background:'+rowBg+'">'
-      +'<td style="padding:.28rem .5rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><span class="deal-link" data-summary="'+escapeHtml(t.cid)+'" style="font-size:.72rem;font-weight:700;color:var(--bhub-navy);cursor:pointer" title="'+escapeHtml(t.deal)+'">'+escapeHtml(t.deal)+'</span></td>'
-      +'<td style="padding:.28rem .5rem;font-size:.72rem;color:#374151;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+escapeHtml(t.task)+'">'+escapeHtml(t.task)+'</td>'
+      +'<td style="padding:.28rem .6rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
+      +'<span class="deal-link" data-summary="'+escapeHtml(t.cid)+'" style="font-size:.65rem;font-weight:700;color:#5b21b6;background:#ede9fe;border-radius:9999px;padding:.05rem .4rem;margin-right:.35rem;cursor:pointer;white-space:nowrap;flex-shrink:0">'+escapeHtml(t.deal)+'</span>'
+      +'<span style="font-size:.72rem;color:#374151" title="'+escapeHtml(t.task)+'">'+escapeHtml(t.task)+'</span>'
+      +'</td>'
       +'<td style="padding:.28rem .5rem;font-size:.72rem;color:#6b7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+escapeHtml(t.owner)+'">'+escapeHtml(t.owner)+'</td>'
       +'<td style="padding:.28rem .5rem;font-size:.72rem;color:#6b7280;white-space:nowrap;text-align:right">'+(t.due?fmtDate(t.due):'—')+'</td>'
       +'<td style="padding:.28rem .5rem;font-size:.72rem;font-weight:800;color:'+daysColor+';white-space:nowrap;text-align:right">'+ds+'</td>'
@@ -5413,10 +5415,9 @@ function renderHomebroker(){
     const rows = items.slice(0,100).map((t,i)=>hotRow(t,i)).join('');
     const more = items.length>100 ? '<tr><td colspan="5" style="padding:.3rem .85rem;font-size:.65rem;color:var(--bhub-muted);text-align:center">+ '+(items.length-100)+' mais…</td></tr>' : '';
     const table = count>0 ? '<div style="overflow-x:auto"><table class="w-full" style="border-collapse:collapse;table-layout:fixed">'
-      +'<colgroup><col style="width:110px"><col><col style="width:170px"><col style="width:88px"><col style="width:48px"></colgroup>'
+      +'<colgroup><col><col style="width:180px"><col style="width:90px"><col style="width:46px"></colgroup>'
       +'<thead><tr style="background:#f3f4f6;border-bottom:2px solid #e5e7eb">'
-      +'<th style="padding:.25rem .5rem;font-size:.62rem;font-weight:700;color:var(--bhub-muted);text-transform:uppercase;text-align:left">DEAL</th>'
-      +'<th style="padding:.25rem .5rem;font-size:.62rem;font-weight:700;color:var(--bhub-muted);text-transform:uppercase;text-align:left">TAREFA</th>'
+      +'<th style="padding:.25rem .6rem;font-size:.62rem;font-weight:700;color:var(--bhub-muted);text-transform:uppercase;text-align:left">TAREFA</th>'
       +'<th style="padding:.25rem .5rem;font-size:.62rem;font-weight:700;color:var(--bhub-muted);text-transform:uppercase;text-align:left">RESPONSÁVEL</th>'
       +'<th style="padding:.25rem .5rem;font-size:.62rem;font-weight:700;color:var(--bhub-muted);text-transform:uppercase;text-align:right">VENCIMENTO</th>'
       +'<th style="padding:.25rem .5rem;font-size:.62rem;font-weight:700;color:var(--bhub-muted);text-transform:uppercase;text-align:right">DIAS</th>'
