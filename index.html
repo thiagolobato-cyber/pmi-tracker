@@ -5333,7 +5333,7 @@ function renderHomebroker(){
   const monthLines = months.filter((_,i)=>i%labelStep===0).map(m=>'<div style="position:absolute;left:'+tlPct(m)+'%;top:0;bottom:0;border-left:1px solid #e6e3d9;pointer-events:none"></div>').join('');
   const todayPct = tlPct(today);
 
-  const ganttRows = data.map(d=>{
+  const ganttRows = data.map((d,i)=>{
     const tds = d.tasks.map(t=>t._f?.dataPrevista).filter(Boolean);
     const dStart = d.company.signDate ? new Date(d.company.signDate) : (tds.length ? new Date(Math.min(...tds.map(x=>x.getTime()))) : null);
     const dEnd   = tds.length ? new Date(Math.max(...tds.map(x=>x.getTime()))) : null;
@@ -5341,8 +5341,9 @@ function renderHomebroker(){
     const st = dealStatus(d);
     const bL = tlPct(dStart), bR = tlPct(dEnd), bW = Math.max(0.5, bR-bL);
     const lbl = d.done+'/'+d.total+' \xb7 '+st.label;
-    return '<div style="display:flex;align-items:center;height:34px;border-bottom:1px solid #f3f4f6">'
-      +'<div style="width:140px;flex-shrink:0;font-size:.72rem;font-weight:600;color:var(--bhub-navy);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:.5rem" title="'+escapeHtml(d.company.name)+'">'+escapeHtml(d.company.name)+'</div>'
+    const rowBg = i%2===0 ? '#fff' : '#f8fafb';
+    return '<div style="display:flex;align-items:center;height:36px;border-bottom:1px solid #e5e7eb;background:'+rowBg+'">'
+      +'<div style="width:140px;flex-shrink:0;font-size:.72rem;font-weight:600;color:var(--bhub-navy);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:.5rem;padding-left:.3rem;border-left:3px solid '+st.dot+'" title="'+escapeHtml(d.company.name)+'">'+escapeHtml(d.company.name)+'</div>'
       +'<div style="flex:1;position:relative;height:22px">'
       +'<div style="position:absolute;left:'+bL+'%;width:'+bW+'%;height:100%;background:'+st.dot+';border-radius:3px;display:flex;align-items:center;padding:0 .35rem;overflow:hidden">'
       +'<span style="font-size:.62rem;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+lbl+'</span>'
@@ -5387,13 +5388,15 @@ function renderHomebroker(){
   const bucket45 = tasksDueInRange(30,45);
   const bucket60 = tasksDueInRange(45,60);
 
+  let _hotRowIdx = 0;
   function hotRow(t){
     const ds = t.val!=null ? t.val+'d' : '—';
-    return '<div style="display:grid;grid-template-columns:2fr 1.2fr 0.9fr 0.4fr;gap:.4rem;padding:.3rem .85rem;border-bottom:1px solid #f3f4f6;font-size:.71rem;align-items:center">'
-      +'<div><span class="deal-link" data-summary="'+escapeHtml(t.cid)+'" style="font-weight:600;color:var(--bhub-navy)">'+escapeHtml(t.deal)+'</span>'
+    const rowBg = (_hotRowIdx++)%2===0 ? '#fff' : '#f8fafb';
+    return '<div style="display:grid;grid-template-columns:2fr 1.2fr 0.9fr 0.4fr;gap:.4rem;padding:.32rem .85rem;border-bottom:1px solid #e5e7eb;font-size:.71rem;align-items:center;background:'+rowBg+'">'
+      +'<div><span class="deal-link" data-summary="'+escapeHtml(t.cid)+'" style="font-weight:700;color:var(--bhub-navy)">'+escapeHtml(t.deal)+'</span>'
       +' <span style="color:var(--bhub-muted)">\xb7 '+escapeHtml(t.task)+'</span></div>'
-      +'<div style="color:var(--bhub-muted)">'+escapeHtml(t.owner)+'</div>'
-      +'<div style="color:var(--bhub-muted)">'+(t.due?fmtDate(t.due):'—')+'</div>'
+      +'<div style="color:#374151">'+escapeHtml(t.owner)+'</div>'
+      +'<div style="color:#6b7280">'+(t.due?fmtDate(t.due):'—')+'</div>'
       +'<div style="text-align:right;font-weight:700;color:#a01923">'+ds+'</div>'
       +'</div>';
   }
@@ -5408,6 +5411,7 @@ function renderHomebroker(){
       +'<div style="font-size:.62rem;font-weight:700;color:var(--bhub-muted);text-transform:uppercase">VENCIMENTO</div>'
       +'<div style="font-size:.62rem;font-weight:700;color:var(--bhub-muted);text-transform:uppercase;text-align:right">DIAS</div>'
       +'</div>';
+    _hotRowIdx = 0;
     const rows = items.slice(0,100).map(hotRow).join('');
     const more = items.length>100 ? '<div style="padding:.3rem .85rem;font-size:.65rem;color:var(--bhub-muted);text-align:center">+ '+(items.length-100)+' mais…</div>' : '';
     return '<div>'
