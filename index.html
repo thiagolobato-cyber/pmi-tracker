@@ -221,6 +221,9 @@
   .sidebar.collapsed .sidebar-user .info{display:none}
   .hot-row{transition:background .1s}
   .hot-row:hover{background:#eff6ff !important}
+  .g-tip{position:relative;display:inline-block;}
+  .g-tip::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 5px);left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;font-size:.68rem;font-weight:400;padding:.3rem .55rem;border-radius:.4rem;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .12s;z-index:999;box-shadow:0 2px 8px rgba(0,0,0,.18);}
+  .g-tip:hover::after{opacity:1;}
 
   /* Avatar dropdown */
   .sidebar-footer{position:relative}
@@ -569,7 +572,7 @@ const AREA_TRIGGERS = {
   'Operações':                               'Rodrigo Papa / Tatiane Steffani',
   'Tech':                                    'Rodrigo Papa / Tatiane Steffani',
   'PMI / M&A':                               'Thiago Lobato / Vinicius Cavalcanti',
-  'Treinamentos para colaboradores':         '',
+  'Treinamentos para colaboradores':         'Rodrigo Papa / Tatiane Steffani',
 };
 
 /* ---------- State ---------- */
@@ -2090,7 +2093,7 @@ function areaLink(a){
   if(!a) return '';
   const gatilho = AREA_TRIGGERS[a];
   const tip = gatilho ? ` title="Gatilho: ${escapeHtml(gatilho)}"` : '';
-  const badge = gatilho ? `<span style="display:inline-block;margin-left:.3rem;font-size:.6rem;padding:.05rem .35rem;border-radius:9999px;background:#ede9fe;color:#5b21b6;font-weight:700;vertical-align:middle;cursor:default" title="Gatilho: ${escapeHtml(gatilho)}">G</span>` : '';
+  const badge = gatilho ? `<span class="g-tip" data-tip="Gatilho: ${escapeHtml(gatilho)}" style="display:inline-block;margin-left:.3rem;font-size:.6rem;padding:.05rem .35rem;border-radius:9999px;background:#ede9fe;color:#5b21b6;font-weight:700;vertical-align:middle;cursor:default">G</span>` : '';
   return `<span class="deal-link" data-area="${escapeHtml(a)}"${tip}>${escapeHtml(a)}</span>${badge}`;
 }
 function ownerLink(o){ return o ? '<span class="deal-link" data-owner="'+escapeHtml(o)+'">'+escapeHtml(o)+'</span>' : ''; }
