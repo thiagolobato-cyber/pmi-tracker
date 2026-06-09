@@ -219,6 +219,8 @@
   .sidebar.collapsed .sidebar-item .sidebar-label{display:none}
   .sidebar.collapsed .sidebar-user{justify-content:center}
   .sidebar.collapsed .sidebar-user .info{display:none}
+  .hot-row{transition:background .1s}
+  .hot-row:hover{background:#eff6ff !important}
 
   /* Avatar dropdown */
   .sidebar-footer{position:relative}
@@ -5388,16 +5390,17 @@ function renderHomebroker(){
   const bucket45 = tasksDueInRange(30,45);
   const bucket60 = tasksDueInRange(45,60);
 
-  let _hotRowIdx = 0;
   function hotRow(t){
     const ds = t.val!=null ? t.val+'d' : '—';
-    const rowBg = (_hotRowIdx++)%2===0 ? '#fff' : '#f8fafb';
-    return '<div style="display:grid;grid-template-columns:2fr 1.2fr 0.9fr 0.4fr;gap:.4rem;padding:.32rem .85rem;border-bottom:1px solid #e5e7eb;font-size:.71rem;align-items:center;background:'+rowBg+'">'
-      +'<div><span class="deal-link" data-summary="'+escapeHtml(t.cid)+'" style="font-weight:700;color:var(--bhub-navy)">'+escapeHtml(t.deal)+'</span>'
-      +' <span style="color:var(--bhub-muted)">\xb7 '+escapeHtml(t.task)+'</span></div>'
-      +'<div style="color:#374151">'+escapeHtml(t.owner)+'</div>'
-      +'<div style="color:#6b7280">'+(t.due?fmtDate(t.due):'—')+'</div>'
-      +'<div style="text-align:right;font-weight:700;color:#a01923">'+ds+'</div>'
+    const daysColor = t.val!=null && t.val > 30 ? '#7c2d12' : '#a01923';
+    return '<div class="hot-row" style="display:grid;grid-template-columns:2fr 1fr 0.8fr auto;gap:.5rem;padding:.45rem .85rem;border-bottom:1px solid #f1f5f9;align-items:center;background:#fff">'
+      +'<div style="min-width:0">'
+      +'<div style="font-size:.75rem;font-weight:700;color:var(--bhub-navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span class="deal-link" data-summary="'+escapeHtml(t.cid)+'" style="cursor:pointer">'+escapeHtml(t.deal)+'</span></div>'
+      +'<div style="font-size:.68rem;color:#6b7280;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:.05rem">'+escapeHtml(t.task)+'</div>'
+      +'</div>'
+      +'<div style="font-size:.72rem;color:#374151;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escapeHtml(t.owner)+'</div>'
+      +'<div style="font-size:.72rem;color:#6b7280;white-space:nowrap">'+(t.due?fmtDate(t.due):'—')+'</div>'
+      +'<div style="font-size:.72rem;font-weight:800;color:'+daysColor+';white-space:nowrap;text-align:right;min-width:2.5rem">'+ds+'</div>'
       +'</div>';
   }
   function hotSection(key, icon, label, items, badgeColor){
@@ -5411,7 +5414,6 @@ function renderHomebroker(){
       +'<div style="font-size:.62rem;font-weight:700;color:var(--bhub-muted);text-transform:uppercase">VENCIMENTO</div>'
       +'<div style="font-size:.62rem;font-weight:700;color:var(--bhub-muted);text-transform:uppercase;text-align:right">DIAS</div>'
       +'</div>';
-    _hotRowIdx = 0;
     const rows = items.slice(0,100).map(hotRow).join('');
     const more = items.length>100 ? '<div style="padding:.3rem .85rem;font-size:.65rem;color:var(--bhub-muted);text-align:center">+ '+(items.length-100)+' mais…</div>' : '';
     return '<div>'
