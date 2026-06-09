@@ -6251,6 +6251,7 @@ function renderHoje(){
 }
 
 // [pmo-v1] renderPMO function
+// [timeline-fix-applied]
 // [hotlist-fix-applied]
 // [fix-final-applied]
 // [fix7-applied]
@@ -6479,7 +6480,7 @@ function renderPMO(){
       const late = tasks.filter(function(t){ return isTaskLate(t); }).length;
       const done = tasks.filter(function(t){ return isTaskDone(t); }).length;
       const pct = tasks.length ? Math.round(late/tasks.length*100) : 0;
-      var _tdates=getTasks(d).map(function(t){return parseDate(t.prazo);}).filter(Boolean); var prevista=_tdates.length?new Date(Math.max.apply(null,_tdates)):null;
+      var _tdates=getTasks(d).map(function(t){return parseDate((t._f&&t._f.dataPrevista)||t.prazo);}).filter(Boolean); // [timeline-fix] var prevista=_tdates.length?new Date(Math.max.apply(null,_tdates)):null;
       return { name: d.empresa||d.name||d.nome||'—', tasks: tasks.length, late, done, pct, prevista, d };
     }).filter(function(r){ return r.tasks > 0; });
 
