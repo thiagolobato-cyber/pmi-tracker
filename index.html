@@ -2265,22 +2265,22 @@ function renderDashboard(){
             <div class="kpi-value">${data.length}</div>
             <div class="kpi-sub">em acompanhamento</div>
           </div>
-          <div class="kpi" data-kpi-nav="homebroker" style="cursor:pointer" title="Ver painel PMO">
+          <div class="kpi" data-kpi-nav="empresas" data-kpi-sort="done" style="cursor:pointer" title="Ver deals ordenados por tarefas concluídas">
             <div class="kpi-head"><div class="kpi-label">Tasks Done</div><div class="kpi-icon kpi-icon-green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div></div>
             <div class="kpi-value">${done} <span style="font-size:1rem;font-weight:500;color:var(--bhub-muted)">/ ${total}</span></div>
             <div class="kpi-sub">tarefas concluídas</div>
           </div>
-          <div class="kpi" data-kpi-nav="executiva" style="cursor:pointer" title="Visão Executiva">
+          <div class="kpi" data-kpi-nav="empresas" data-kpi-sort="pct" style="cursor:pointer" title="Ver deals ordenados por % de conclusão">
             <div class="kpi-head"><div class="kpi-label">On Track</div><div class="kpi-icon kpi-icon-blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></div></div>
             <div class="kpi-value tone-blue">${ontrack}</div>
             <div class="kpi-sub">dentro do prazo</div>
           </div>
-          <div class="kpi" data-kpi-nav="cobranca" style="cursor:pointer" title="Ver aba Cobrança">
+          <div class="kpi" data-kpi-nav="empresas" data-kpi-sort="late" style="cursor:pointer" title="Ver deals ordenados por tarefas atrasadas">
             <div class="kpi-head"><div class="kpi-label">⚠ Atrasadas</div><div class="kpi-icon kpi-icon-red"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div></div>
             <div class="kpi-value tone-red">${late}</div>
             <div class="kpi-sub">${total>0?Math.round(late/total*100):0}% do portfólio</div>
           </div>
-          <div class="kpi" data-kpi-nav="raid" style="cursor:pointer" title="Ver Ações de Mitigação">
+          <div class="kpi" data-kpi-nav="empresas" data-kpi-sort="blocked" style="cursor:pointer" title="Ver deals ordenados por bloqueios">
             <div class="kpi-head"><div class="kpi-label">Bloqueios</div><div class="kpi-icon kpi-icon-amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div></div>
             <div class="kpi-value tone-amber">${blocked}</div>
             <div class="kpi-sub">tarefas bloqueadas</div>
@@ -2546,7 +2546,14 @@ function renderDashboard(){
 
   // KPI cards → navegação por atalho
   node.querySelectorAll('[data-kpi-nav]').forEach(card => {
-    card.addEventListener('click', ()=>{ view.tab = card.dataset.kpiNav; render(); });
+    card.addEventListener('click', ()=>{
+      view.tab = card.dataset.kpiNav;
+      if(card.dataset.kpiSort){
+        view.empresasSortCol = card.dataset.kpiSort;
+        view.empresasSortDir = 'desc';
+      }
+      render();
+    });
   });
 
   // Render charts after mount
