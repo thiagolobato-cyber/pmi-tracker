@@ -2265,22 +2265,22 @@ function renderDashboard(){
             <div class="kpi-value">${data.length}</div>
             <div class="kpi-sub">em acompanhamento</div>
           </div>
-          <div class="kpi" data-kpi-nav="empresas" data-kpi-sort="done" data-kpi-filter="done" style="cursor:pointer" title="Ver deals com tasks concluídas">
+          <div class="kpi" data-kpi-nav="deal" data-kpi-filter="done" style="cursor:pointer" title="Ver tasks concluídas por deal">
             <div class="kpi-head"><div class="kpi-label">Tasks Done</div><div class="kpi-icon kpi-icon-green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div></div>
             <div class="kpi-value">${done} <span style="font-size:1rem;font-weight:500;color:var(--bhub-muted)">/ ${total}</span></div>
             <div class="kpi-sub">tarefas concluídas</div>
           </div>
-          <div class="kpi" data-kpi-nav="empresas" data-kpi-sort="pct" data-kpi-filter="ontrack" style="cursor:pointer" title="Ver deals on track">
+          <div class="kpi" data-kpi-nav="deal" data-kpi-filter="ontrack" style="cursor:pointer" title="Ver tasks on track por deal">
             <div class="kpi-head"><div class="kpi-label">On Track</div><div class="kpi-icon kpi-icon-blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></div></div>
             <div class="kpi-value tone-blue">${ontrack}</div>
             <div class="kpi-sub">dentro do prazo</div>
           </div>
-          <div class="kpi" data-kpi-nav="empresas" data-kpi-sort="late" data-kpi-filter="late" style="cursor:pointer" title="Ver deals com tarefas atrasadas">
+          <div class="kpi" data-kpi-nav="deal" data-kpi-filter="late" style="cursor:pointer" title="Ver tarefas atrasadas por deal">
             <div class="kpi-head"><div class="kpi-label">⚠ Atrasadas</div><div class="kpi-icon kpi-icon-red"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div></div>
             <div class="kpi-value tone-red">${late}</div>
             <div class="kpi-sub">${total>0?Math.round(late/total*100):0}% do portfólio</div>
           </div>
-          <div class="kpi" data-kpi-nav="empresas" data-kpi-sort="blocked" data-kpi-filter="blocked" style="cursor:pointer" title="Ver deals com bloqueios">
+          <div class="kpi" data-kpi-nav="deal" data-kpi-filter="blocked" style="cursor:pointer" title="Ver bloqueios por deal">
             <div class="kpi-head"><div class="kpi-label">Bloqueios</div><div class="kpi-icon kpi-icon-amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div></div>
             <div class="kpi-value tone-amber">${blocked}</div>
             <div class="kpi-sub">tarefas bloqueadas</div>
@@ -2547,14 +2547,37 @@ function renderDashboard(){
   // KPI cards → navegação por atalho
   node.querySelectorAll('[data-kpi-nav]').forEach(card => {
     card.addEventListener('click', ()=>{
-      view.tab = card.dataset.kpiNav;
-      view.dealId = null; // garante que não abre deal individual
-      view.dealTaskStatusFilter = null;
-      if(card.dataset.kpiSort){
-        view.empresasSortCol = card.dataset.kpiSort;
-        view.empresasSortDir = 'desc';
+      const nav    = card.dataset.kpiNav;
+      const filter = card.dataset.kpiFilter || null;
+      view.tab = nav;
+      view.empresasStatusFilter = null;
+
+      if(nav === 'deal'){
+        // Abre o deal com mais tarefas do status clicado, com pill pré-ativo
+        const agg = aggregate();
+        const scoreOf = d => {
+          if(filter === 'done')    return d.done    || 0;
+          if(filter === 'ontrack') return d.ontrack || 0;
+          if(filter === 'late')    return d.late    || 0;
+          if(filter === 'blocked') return d.blocked || 0;
+          return 0;
+        };
+        const best = agg.slice().sort((a,b) => scoreOf(b) - scoreOf(a))[0];
+        view.dealId               = best ? best.company.id : (state.companies[0]||{}).id;
+        view.dealTab              = 'tarefas';
+        view.dealTaskStatusFilter = filter || 'all';
+        view.dealTaskAreaFilter   = '';
+        view.dealTaskOwnerFilter  = '';
+      } else {
+        // empresas ou outras abas
+        view.dealId = null;
+        view.dealTaskStatusFilter = null;
+        if(card.dataset.kpiSort){
+          view.empresasSortCol = card.dataset.kpiSort;
+          view.empresasSortDir = 'desc';
+        }
+        view.empresasStatusFilter = filter;
       }
-      view.empresasStatusFilter = card.dataset.kpiFilter || null;
       render();
     });
   });
