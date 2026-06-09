@@ -6251,6 +6251,7 @@ function renderHoje(){
 }
 
 // [pmo-v1] renderPMO function
+// [timeline-v2-applied]
 // [timeline-fix-applied]
 // [hotlist-fix-applied]
 // [fix-final-applied]
@@ -6472,65 +6473,61 @@ function renderPMO(){
     sec.innerHTML = '<h2 style="font-size:16px;font-weight:700;color:#1e3a5f;margin:0 0 12px;display:flex;align-items:center;gap:8px">' +
       '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0171E4" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>' +
       'Timeline — Cronograma</h2>';
-
     const now = new Date();
-    // Gather all deals with prevista date
+    // Gather all deals
     const rows = deals.map(function(d){
       const tasks = getTasks(d);
       const late = tasks.filter(function(t){ return isTaskLate(t); }).length;
       const done = tasks.filter(function(t){ return isTaskDone(t); }).length;
       const pct = tasks.length ? Math.round(late/tasks.length*100) : 0;
-      var _tdates=getTasks(d).map(function(t){return parseDate((t._f&&t._f.dataPrevista)||t.prazo);}).filter(Boolean); var prevista=_tdates.length?new Date(Math.max.apply(null,_tdates)):null; var prevista=_tdates.length?new Date(Math.max.apply(null,_tdates)):null;
-      return { name: d.empresa||d.name||d.nome||'—', tasks: tasks.length, late, done, pct, prevista, d };
+      var _tdates = getTasks(d).map(function(t){return parseDate((t._f&&t._f.dataPrevista)||t.prazo);}).filter(Boolean);
+      var prevista = _tdates.length ? new Date(Math.max.apply(null,_tdates)) : null;
+      var signDate = parseDate(d.signDate);
+      return { name: d.empresa||d.name||d.nome||'—', tasks: tasks.length, late, done, pct, prevista, signDate, d };
     }).filter(function(r){ return r.tasks > 0; });
-
     if(rows.length === 0){
       sec.innerHTML += '<p style="color:#64748b;font-size:13px">Nenhum deal com tarefas encontrado.</p>';
       return sec;
     }
-
-    // Find date range
-    const dates = rows.map(function(r){ return r.prevista; }).filter(Boolean);
-    const minD = dates.length ? new Date(Math.min.apply(null, dates)) : now;
-    const maxD = dates.length ? new Date(Math.max.apply(null, dates)) : new Date(now.getFullYear(), now.getMonth()+3, 1);
-    if(maxD <= now) maxD.setMonth(maxD.getMonth()+1);
-
-    const totalMs = maxD - minD || 1;
-
+    // Date range: earliest signDate → latest prevista
+    var allSignDates = rows.map(function(r){ return r.signDate; }).filter(Boolean);
+    var allPrevistas = rows.map(function(r){ return r.prevista; }).filter(Boolean);
+    var minD = allSignDates.length ? new Date(Math.min.apply(null,allSignDates)) : new Date(now.getFullYear(), now.getMonth()-3, 1);
+    var maxD = allPrevistas.length ? new Date(Math.max.apply(null,allPrevistas)) : new Date(now.getFullYear(), now.getMonth()+6, 1);
+    if(+maxD <= +now) maxD.setMonth(maxD.getMonth()+1);
+    var totalMs = +maxD - +minD || 1;
     function pctPos(d){
       if(!d) return null;
-      return Math.max(0, Math.min(100, (d - minD) / totalMs * 100));
+      return Math.max(0, Math.min(100, (+d - +minD) / totalMs * 100));
     }
-    const nowPct = pctPos(now);
-
-    const wrap = document.createElement('div');
+    var nowPct = pctPos(now);
+    var wrap = document.createElement('div');
     wrap.style.cssText = 'background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px;overflow-x:auto';
-
-    // Header dates
-    const headerRow = document.createElement('div');
-    headerRow.style.cssText = 'display:flex;margin-left:200px;margin-bottom:6px;position:relative;height:20px';
-    const months = [];
-    const cur = new Date(minD.getFullYear(), minD.getMonth(), 1);
-    while(cur <= maxD){
-      months.push(new Date(cur));
+    // Header: step trimestral/semestral conforme range
+    var rangeMonths = Math.round((+maxD - +minD) / (30.44*24*3600*1000));
+    var labelStep = rangeMonths > 24 ? 6 : rangeMonths > 12 ? 3 : 1;
+    var headerRow = document.createElement('div');
+    headerRow.style.cssText = 'display:flex;margin-left:190px;margin-bottom:6px;position:relative;height:20px';
+    var cur = new Date(minD.getFullYear(), minD.getMonth(), 1);
+    var mIdx = 0;
+    while(+cur <= +maxD){
+      if(mIdx % labelStep === 0){
+        var lbl = document.createElement('div');
+        var lp = pctPos(cur);
+        lbl.style.cssText = 'position:absolute;left:'+lp+'%;font-size:10px;color:#64748b;transform:translateX(-50%);white-space:nowrap';
+        lbl.textContent = cur.toLocaleDateString('pt-BR',{month:'short',year:'2-digit'});
+        headerRow.appendChild(lbl);
+      }
       cur.setMonth(cur.getMonth()+1);
+      mIdx++;
     }
-    months.forEach(function(m){
-      const lbl = document.createElement('div');
-      const lp = pctPos(m);
-      lbl.style.cssText = 'position:absolute;left:' + lp + '%;font-size:10px;color:#64748b;transform:translateX(-50%);white-space:nowrap';
-      lbl.textContent = m.toLocaleDateString('pt-BR',{month:'short',year:'2-digit'});
-      headerRow.appendChild(lbl);
-    });
     wrap.appendChild(headerRow);
-
-    // Rows
+    // Rows — barra de signDate até prevista
     rows.forEach(function(r){
-      const row = document.createElement('div');
+      var row = document.createElement('div');
       row.style.cssText = 'display:flex;align-items:center;margin-bottom:10px;gap:10px';
-
-      const label = document.createElement('div');
-      label.style.cssText = 'width:190px;flex-shrink:0;font-size:12px;font-weight:600;color:#334155;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer';
+      var label = document.createElement('div');
+      label.style.cssText = 'width:180px;flex-shrink:0;font-size:12px;font-weight:600;color:#334155;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer';
       label.title = r.name;
       label.textContent = r.name;
       label.onclick = function(){
@@ -6538,56 +6535,43 @@ function renderPMO(){
         view.tab = 'deal';
         render();
       };
-
-      const track = document.createElement('div');
+      var track = document.createElement('div');
       track.style.cssText = 'flex:1;height:28px;background:#f1f5f9;border-radius:8px;position:relative;min-width:200px';
-
-      // Bar from start to prevista
       if(r.prevista){
-        const barEnd = pctPos(r.prevista);
-        const bar = document.createElement('div');
-        bar.style.cssText = 'position:absolute;left:0;top:4px;height:20px;width:' + barEnd + '%;background:' + healthColor(r.pct) + ';border-radius:6px;opacity:.85;transition:width .3s';
+        var barStart = r.signDate ? (pctPos(r.signDate)||0) : 0;
+        var barEnd   = pctPos(r.prevista)||0;
+        var barW     = Math.max(1, barEnd - barStart);
+        var bar = document.createElement('div');
+        bar.style.cssText = 'position:absolute;left:'+barStart+'%;top:4px;height:20px;width:'+barW+'%;background:'+healthColor(r.pct)+';border-radius:6px;opacity:.9';
         track.appendChild(bar);
-
-        // Progress within bar (done tasks)
-        const donePct = r.tasks ? r.done/r.tasks : 0;
-        const prog = document.createElement('div');
-        prog.style.cssText = 'position:absolute;left:0;top:8px;height:12px;width:' + (barEnd*donePct) + '%;background:rgba(255,255,255,.45);border-radius:4px';
-        track.appendChild(prog);
-
-        // Prevista marker
-        const marker = document.createElement('div');
-        marker.style.cssText = 'position:absolute;left:' + barEnd + '%;top:2px;width:2px;height:24px;background:#1e3a5f;border-radius:2px';
-        marker.title = 'Prevista: ' + fmtDate(r.prevista);
+        // Marker de prevista
+        var marker = document.createElement('div');
+        marker.style.cssText = 'position:absolute;left:'+barEnd+'%;top:2px;width:2px;height:24px;background:#1e3a5f;border-radius:2px';
+        marker.title = 'Prevista: '+fmtDate(r.prevista);
         track.appendChild(marker);
-
-        // Label on bar
-        const bLbl = document.createElement('div');
-        bLbl.style.cssText = 'position:absolute;left:4px;top:6px;font-size:10px;color:#fff;font-weight:600;pointer-events:none;white-space:nowrap';
-        bLbl.textContent = r.done + '/' + r.tasks + ' · ' + healthLabel(r.pct);
+        // Label dentro da barra
+        var bLbl = document.createElement('div');
+        bLbl.style.cssText = 'position:absolute;left:'+(barStart+0.5)+'%;top:6px;font-size:10px;color:#fff;font-weight:600;pointer-events:none;white-space:nowrap';
+        bLbl.textContent = r.done+'/'+r.tasks+' · '+healthLabel(r.pct);
         track.appendChild(bLbl);
       }
-
-      // TODAY line
-      const todayLine = document.createElement('div');
-      todayLine.style.cssText = 'position:absolute;left:' + nowPct + '%;top:0;width:2px;height:100%;background:#ef4444;border-radius:2px;z-index:2';
+      // Linha de HOJE
+      var todayLine = document.createElement('div');
+      todayLine.style.cssText = 'position:absolute;left:'+nowPct+'%;top:0;width:2px;height:100%;background:#ef4444;border-radius:2px;z-index:2';
       todayLine.title = 'Hoje';
       track.appendChild(todayLine);
-
       row.appendChild(label);
       row.appendChild(track);
       wrap.appendChild(row);
     });
-
-    // Legend
-    const legend = document.createElement('div');
-    legend.style.cssText = 'margin-top:12px;display:flex;gap:16px;font-size:11px;color:#64748b;align-items:center';
+    // Legenda
+    var legend = document.createElement('div');
+    legend.style.cssText = 'margin-top:12px;display:flex;gap:16px;font-size:11px;color:#64748b;align-items:center;flex-wrap:wrap';
     legend.innerHTML = '<span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:3px;background:#16a34a;display:inline-block"></span>On Track ≤15%</span>' +
       '<span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:3px;background:#d97706;display:inline-block"></span>Em Risco 15-30%</span>' +
       '<span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:3px;background:#dc2626;display:inline-block"></span>Crítico >30%</span>' +
       '<span style="display:flex;align-items:center;gap:4px"><span style="width:2px;height:14px;background:#ef4444;display:inline-block"></span>Hoje</span>' +
       '<span style="display:flex;align-items:center;gap:4px"><span style="width:2px;height:14px;background:#1e3a5f;display:inline-block"></span>Prevista</span>';
-
     sec.appendChild(wrap);
     sec.appendChild(legend);
     return sec;
