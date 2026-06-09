@@ -1438,7 +1438,7 @@ function renderLogin(){
 function renderCobranca(){
   // Collect all late tasks across all deals
   const today = new Date(); today.setHours(0,0,0,0);
-  if(!view.cobrancaFilters) view.cobrancaFilters = { trigger:'', dealId:'' };
+  if(!view.cobrancaFilters) view.cobrancaFilters = { trigger:'', dealId:'', owner:'' };
   const allLateTasks = [];
   state.companies.forEach(c => {
     const deal = state.deals[c.id];
@@ -1460,13 +1460,16 @@ function renderCobranca(){
     .map(id=>allLateTasks.find(t=>t.dealId===id))
     .map(t=>({id:t.dealId, name:t.deal}))
     .sort((a,b)=>a.name.localeCompare(b.name));
+  const uniqueOwners = Array.from(new Set(allLateTasks.map(t=>t.owner))).sort();
 
   // Apply filters
   const fTrigger = view.cobrancaFilters.trigger;
   const fDealId  = view.cobrancaFilters.dealId;
+  const fOwner   = view.cobrancaFilters.owner;
   const lateTasks = allLateTasks.filter(t => {
     if(fTrigger && AREA_TRIGGERS[t.area] !== fTrigger) return false;
     if(fDealId  && t.dealId !== fDealId) return false;
+    if(fOwner   && t.owner  !== fOwner)  return false;
     return true;
   });
 
@@ -1498,7 +1501,7 @@ function renderCobranca(){
 
   const totalLate = lateTasks.length;
   const totalAll  = allLateTasks.length;
-  const isFiltered = fTrigger || fDealId;
+  const isFiltered = fTrigger || fDealId || fOwner;
   const node = el(`
     <div class="space-y-5">
       <div class="page-header">
@@ -1517,18 +1520,21 @@ function renderCobranca(){
         </button>` : ''}
       </div>
 
-      <!-- Filtros -->
-      <div class="bhub-card" style="padding:.65rem 1rem;display:flex;flex-wrap:wrap;align-items:center;gap:.75rem">
-        <span style="font-size:.75rem;font-weight:700;color:var(--bhub-muted);text-transform:uppercase;letter-spacing:.07em">Filtros</span>
-        <select id="cobrFiltroGatilho" style="font-size:.78rem;padding:.3rem .6rem;border:1px solid var(--bhub-border);border-radius:.4rem;background:#fff;min-width:180px">
-          <option value="">Todos os gatilhos</option>
+      <!-- Filtros compactos -->
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:.5rem">
+        <select id="cobrFiltroGatilho" style="font-size:.75rem;padding:.25rem .5rem;border:1px solid ${fTrigger?'#0171E4':'var(--bhub-border)'};border-radius:999px;background:${fTrigger?'#eff6ff':'#fff'};color:${fTrigger?'#0171E4':'var(--bhub-navy)'};font-weight:${fTrigger?'700':'400'};cursor:pointer;max-width:180px">
+          <option value="">Gatilho</option>
           ${uniqueTriggers.map(t=>`<option value="${escapeHtml(t)}" ${fTrigger===t?'selected':''}>${escapeHtml(t)}</option>`).join('')}
         </select>
-        <select id="cobrFiltroDeal" style="font-size:.78rem;padding:.3rem .6rem;border:1px solid var(--bhub-border);border-radius:.4rem;background:#fff;min-width:180px">
-          <option value="">Todos os deals</option>
+        <select id="cobrFiltroDeal" style="font-size:.75rem;padding:.25rem .5rem;border:1px solid ${fDealId?'#0171E4':'var(--bhub-border)'};border-radius:999px;background:${fDealId?'#eff6ff':'#fff'};color:${fDealId?'#0171E4':'var(--bhub-navy)'};font-weight:${fDealId?'700':'400'};cursor:pointer;max-width:180px">
+          <option value="">Deal</option>
           ${uniqueDeals.map(d=>`<option value="${escapeHtml(d.id)}" ${fDealId===d.id?'selected':''}>${escapeHtml(d.name)}</option>`).join('')}
         </select>
-        ${isFiltered ? `<button id="cobrClearFilters" style="font-size:.73rem;padding:.3rem .65rem;border:1px solid var(--bhub-border);border-radius:.4rem;background:#fff;cursor:pointer;color:var(--bhub-muted)">✕ Limpar filtros</button>` : ''}
+        <select id="cobrFiltroOwner" style="font-size:.75rem;padding:.25rem .5rem;border:1px solid ${fOwner?'#0171E4':'var(--bhub-border)'};border-radius:999px;background:${fOwner?'#eff6ff':'#fff'};color:${fOwner?'#0171E4':'var(--bhub-navy)'};font-weight:${fOwner?'700':'400'};cursor:pointer;max-width:180px">
+          <option value="">Responsável</option>
+          ${uniqueOwners.map(o=>`<option value="${escapeHtml(o)}" ${fOwner===o?'selected':''}>${escapeHtml(o)}</option>`).join('')}
+        </select>
+        ${isFiltered ? `<button id="cobrClearFilters" style="font-size:.72rem;padding:.22rem .6rem;border:1px solid #fca5a5;border-radius:999px;background:#fff;cursor:pointer;color:#dc2626;font-weight:600">✕ Limpar</button>` : ''}
       </div>
 
       ${totalLate === 0 ? `
@@ -1587,10 +1593,12 @@ function renderCobranca(){
   // Filtros
   const selGatilho = node.querySelector('#cobrFiltroGatilho');
   const selDeal    = node.querySelector('#cobrFiltroDeal');
+  const selOwner   = node.querySelector('#cobrFiltroOwner');
   const btnClear   = node.querySelector('#cobrClearFilters');
   if(selGatilho) selGatilho.addEventListener('change', ()=>{ view.cobrancaFilters.trigger=selGatilho.value; render(); });
   if(selDeal)    selDeal.addEventListener('change',    ()=>{ view.cobrancaFilters.dealId=selDeal.value; render(); });
-  if(btnClear)   btnClear.addEventListener('click',    ()=>{ view.cobrancaFilters={trigger:'',dealId:''}; render(); });
+  if(selOwner)   selOwner.addEventListener('change',   ()=>{ view.cobrancaFilters.owner=selOwner.value; render(); });
+  if(btnClear)   btnClear.addEventListener('click',    ()=>{ view.cobrancaFilters={trigger:'',dealId:'',owner:''}; render(); });
 
   // Copy button
   const copyBtn = node.querySelector('#cobrancaCopyBtn');
