@@ -5313,12 +5313,16 @@ function renderHomebroker(){
   const months = [];
   let mCur = new Date(tlMin);
   while(mCur < tlMax){ months.push(new Date(mCur)); mCur = new Date(mCur.getFullYear(), mCur.getMonth()+1, 1); }
-  const monthLabels = months.map(m=>{
+  // Step adaptativo para não sobrecarregar labels
+  const totalMonths = months.length;
+  const labelStep = totalMonths <= 12 ? 1 : totalMonths <= 24 ? 2 : totalMonths <= 36 ? 3 : 6;
+  const monthLabels = months.filter((_,i)=>i%labelStep===0).map(m=>{
     const p = tlPct(m);
     const lb = m.toLocaleDateString('pt-BR',{month:'short',year:'2-digit'});
     return '<div style="position:absolute;left:'+p+'%;transform:translateX(-50%);font-size:.6rem;color:var(--bhub-muted);white-space:nowrap">'+lb+'</div>';
   }).join('');
-  const monthLines = months.map(m=>'<div style="position:absolute;left:'+tlPct(m)+'%;top:0;bottom:0;border-left:1px solid #e6e3d9;pointer-events:none"></div>').join('');
+  // Grid lines a cada labelStep meses (mesmo step dos labels)
+  const monthLines = months.filter((_,i)=>i%labelStep===0).map(m=>'<div style="position:absolute;left:'+tlPct(m)+'%;top:0;bottom:0;border-left:1px solid #e6e3d9;pointer-events:none"></div>').join('');
   const todayPct = tlPct(today);
 
   const ganttRows = data.map(d=>{
