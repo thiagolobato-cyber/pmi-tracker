@@ -2553,17 +2553,8 @@ function renderDashboard(){
       view.empresasStatusFilter = null;
 
       if(nav === 'deal'){
-        // Abre o deal com mais tarefas do status clicado, com pill pré-ativo
-        const agg = aggregate();
-        const scoreOf = d => {
-          if(filter === 'done')    return d.done    || 0;
-          if(filter === 'ontrack') return d.ontrack || 0;
-          if(filter === 'late')    return d.late    || 0;
-          if(filter === 'blocked') return d.blocked || 0;
-          return 0;
-        };
-        const best = agg.slice().sort((a,b) => scoreOf(b) - scoreOf(a))[0];
-        view.dealId               = best ? best.company.id : (state.companies[0]||{}).id;
+        // Abre visão "Todos os deals" com pill de status pré-ativo
+        view.dealId               = '__all__';
         view.dealTab              = 'tarefas';
         view.dealTaskStatusFilter = filter || 'all';
         view.dealTaskAreaFilter   = '';
@@ -3585,8 +3576,149 @@ function openCompareDealsView(ids){
   m.querySelectorAll('[data-area]').forEach(el=>el.addEventListener('click', e=>{ e.stopPropagation(); if(el.dataset.area){ m.remove(); openAreaSummary(el.dataset.area); } }));
 }
 
+/* ---------- Todos os deals – visão cross-deal de tarefas ---------- */
+function renderDealAll(){
+  const SF = view.dealTaskStatusFilter || 'all';
+  const FA = view.dealTaskAreaFilter   || '';
+  const FO = view.dealTaskOwnerFilter  || '';
+
+  // Agrega tarefas de todos os deals
+  let allTasks = [];
+  state.companies.forEach(c => {
+    const d = dealOf(c.id);
+    d.tasks.forEach(t => {
+      allTasks.push({...t, _f: computeTaskFields(t, c), _company: c});
+    });
+  });
+
+  const total = allTasks.length;
+  const counts = {
+    done:    allTasks.filter(t=>t._f.status==='done').length,
+    ontrack: allTasks.filter(t=>t._f.status==='ontrack').length,
+    late:    allTasks.filter(t=>t._f.status==='late').length,
+    blocked: allTasks.filter(t=>t.bloqueio==='Sim').length,
+  };
+
+  // Aplica filtros
+  let filtered = allTasks;
+  if(SF !== 'all') filtered = filtered.filter(t =>
+    SF==='done'    ? t._f.status==='done'    :
+    SF==='ontrack' ? t._f.status==='ontrack' :
+    SF==='late'    ? t._f.status==='late'    :
+    SF==='blocked' ? t.bloqueio==='Sim'      : true
+  );
+  if(FA) filtered = filtered.filter(t=>(t.area||'(sem área)')===FA);
+  if(FO) filtered = filtered.filter(t=>t.owner===FO);
+
+  const allAreas  = sortAreaNames(Array.from(new Set(allTasks.map(t=>t.area||'(sem área)'))));
+  const allOwners = Array.from(new Set(allTasks.map(t=>t.owner||'').filter(Boolean))).sort();
+
+  const sfPills = [
+    {key:'all',     label:'Todas',    count:total},
+    {key:'done',    label:'Done',     count:counts.done,    color:'#16a34a'},
+    {key:'ontrack', label:'On Track', count:counts.ontrack, color:'#2563eb'},
+    {key:'late',    label:'Atrasadas',count:counts.late,    color:'#dc2626'},
+    {key:'blocked', label:'Bloqueio', count:counts.blocked, color:'#d97706'},
+  ].map(p=>{
+    const active = SF===p.key;
+    const base = active
+      ? `background:${p.color||'#0171E4'};color:#fff;border-color:${p.color||'#0171E4'}`
+      : `background:#fff;color:var(--bhub-navy);border-color:var(--bhub-border)`;
+    return `<button class="sf-pill" data-sf="${p.key}" style="font-size:.73rem;padding:.22rem .65rem;border-radius:9999px;border:1px solid;cursor:pointer;white-space:nowrap;transition:all .12s;${base}">${p.label} <span style="opacity:.75">${p.count}</span></button>`;
+  }).join('');
+
+  const selStyle = `font-size:.75rem;padding:.25rem .55rem;border:1px solid var(--bhub-border);border-radius:.4rem;background:#fff;color:var(--bhub-navy);cursor:pointer;max-width:170px`;
+
+  // agrupa por deal para renderizar
+  const byDeal = {};
+  filtered.forEach(t=>{
+    const id = t._company.id;
+    if(!byDeal[id]) byDeal[id] = {company: t._company, tasks:[]};
+    byDeal[id].tasks.push(t);
+  });
+  Object.values(byDeal).forEach(g=>g.tasks.sort(sortByRef));
+  const dealGroups = Object.values(byDeal).sort((a,b)=>a.company.name.localeCompare(b.company.name));
+
+  const rows = dealGroups.map(g=>`
+    <section class="bhub-card overflow-hidden">
+      <div class="bhub-card-header">
+        <span class="deal-link font-semibold" data-open="${g.company.id}" style="cursor:pointer">${escapeHtml(g.company.name)}</span>
+        <span class="text-xs text-gray-500 font-normal ml-2">(${g.tasks.length} tarefa${g.tasks.length!==1?'s':''})</span>
+      </div>
+      <div class="scroll-x">
+        <table class="w-full">
+          <thead><tr>
+            <th>REF</th><th class="min-w-[18rem]">TAREFA</th><th>STATUS</th><th>OWNER</th><th>PRAZO</th><th>PREVISTA</th><th>REAL</th><th>%</th><th>ATRASO</th><th>BLOQ.</th>
+          </tr></thead>
+          <tbody>
+            ${g.tasks.map(t=>`<tr>
+              <td class="text-xs">${t.ref||''}</td>
+              <td>${escapeHtml(t.task||'')}</td>
+              <td><span class="pill ${statusClass(t._f.status)}">${statusLabel(t._f.status)}</span></td>
+              <td>${escapeHtml(t.owner||'')}</td>
+              <td class="text-center">${t.prazo||0}</td>
+              <td>${t._f.dataPrevista?fmtDate(t._f.dataPrevista):''}</td>
+              <td>${t._f.dataReal?fmtDate(t._f.dataReal):''}</td>
+              <td class="text-right">${t.completado||0}%</td>
+              <td class="text-right ${t._f.atraso!=null&&t._f.atraso>0?'text-red-700':'text-green-700'}">${t._f.atraso??''}</td>
+              <td>${t.bloqueio==='Sim'?'<span class="pill status-late">Sim</span>':'<span class="pill status-empty">Não</span>'}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </section>`).join('') || `<div class="bhub-card p-8 text-center text-gray-500 text-sm">Nenhuma tarefa encontrada.</div>`;
+
+  const node = el(`
+    <div class="space-y-4">
+      <div class="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <div class="text-xs text-gray-500"><button class="hover:underline" id="back">← Empresas</button></div>
+          <h1 class="text-xl font-bold">Todos os deals</h1>
+          <div class="text-sm text-gray-500">${filtered.length} tarefa${filtered.length!==1?'s':''} • ${state.companies.length} deals</div>
+        </div>
+        <select id="dealSel" class="w-56">
+          <option value="__all__" selected>Todos os deals</option>
+          ${state.companies.map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}
+        </select>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:.35rem;align-items:center">
+        ${sfPills}
+        <span style="color:var(--bhub-border);margin:0 .1rem">|</span>
+        <select id="dtAreaFilter" style="${selStyle}">
+          <option value="">Todas as áreas</option>
+          ${allAreas.map(a=>`<option value="${escapeHtml(a)}" ${FA===a?'selected':''}>${escapeHtml(a)}</option>`).join('')}
+        </select>
+        <select id="dtOwnerFilter" style="${selStyle}">
+          <option value="">Todos os owners</option>
+          ${allOwners.map(o=>`<option value="${escapeHtml(o)}" ${FO===o?'selected':''}>${escapeHtml(o)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="space-y-3">${rows}</div>
+    </div>
+  `);
+
+  node.querySelector('#back').onclick = ()=>{ view.tab='empresas'; view.dealId=null; render(); };
+  node.querySelector('#dealSel').onchange = e=>{
+    view.dealId = e.target.value;
+    view.dealTaskAreaFilter=''; view.dealTaskOwnerFilter='';
+    render();
+  };
+  node.querySelectorAll('.sf-pill').forEach(b=>b.addEventListener('click',()=>{ view.dealTaskStatusFilter=b.dataset.sf; render(); }));
+  const dtArea = node.querySelector('#dtAreaFilter');
+  if(dtArea) dtArea.addEventListener('change',()=>{ view.dealTaskAreaFilter=dtArea.value; render(); });
+  const dtOwner = node.querySelector('#dtOwnerFilter');
+  if(dtOwner) dtOwner.addEventListener('change',()=>{ view.dealTaskOwnerFilter=dtOwner.value; render(); });
+  node.querySelectorAll('[data-open]').forEach(b=>b.addEventListener('click',()=>{ view.dealId=b.dataset.open; view.dealTaskAreaFilter=''; view.dealTaskOwnerFilter=''; render(); }));
+  return node;
+}
+
 /* ---------- Deal detail ---------- */
 function renderDeal(){
+  // ── modo "Todos os deals" ──────────────────────────────────────────────────
+  if(view.dealId === '__all__'){
+    return renderDealAll();
+  }
+
   const company = state.companies.find(c=>c.id===view.dealId) || state.companies[0];
   if(!company){
     return el(`<div class="text-sm text-gray-500">Nenhum deal selecionado.</div>`);
@@ -3641,6 +3773,7 @@ function renderDeal(){
         </div>
         <div class="flex gap-2 items-start">
           <select id="dealSel" class="w-56">
+            <option value="__all__">Todos os deals</option>
             ${state.companies.map(c=>`<option value="${c.id}" ${c.id===company.id?'selected':''}>${c.name}</option>`).join('')}
           </select>
           ${canEdit() ? `<button id="editCo" class="btn btn-secondary">⚙ Editar</button>`:''}
