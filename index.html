@@ -1596,14 +1596,16 @@ function renderShell(){
 }
 
 function renderSidebar(){
+  const pmoTabs = canEdit() ? [
+    ['homebroker', 'HB',      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>'],
+    ['cobranca',   'Cobrança','<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>'],
+  ] : [];
   const portfolioTabs = [
     ['dashboard','Dashboard',      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>'],
     ['hoje',     'Visão Usuário',  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L13.09 8.26L19 7L15.45 12L19 17L13.09 15.74L12 22L10.91 15.74L5 17L8.55 12L5 7L10.91 8.26L12 2Z"/></svg>'],
     ['executiva','Visão Executiva','<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l3-3 4 4 5-7"/></svg>'],
     ['empresas', 'Deals',          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="8" height="14" rx="1"/><rect x="13" y="3" width="8" height="17" rx="1"/><line x1="6" y1="10" x2="8" y2="10"/><line x1="6" y1="14" x2="8" y2="14"/><line x1="16" y1="7" x2="18" y2="7"/><line x1="16" y1="11" x2="18" y2="11"/><line x1="16" y1="15" x2="18" y2="15"/></svg>'],
-    ['raid',        'Ação de Mitigação', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L3 6v6c0 5 4 9 9 10 5-1 9-5 9-10V6l-9-4z"/><path d="M12 8v4"/><circle cx="12" cy="16" r=".5" fill="currentColor"/></svg>'],
-    ['homebroker', 'PMO',               '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>'],
-    ...(canEdit() ? [['cobranca', 'Cobrança', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r=".5" fill="currentColor"/></svg>']] : []),
+    ['raid',     'Ação de Mitigação','<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L3 6v6c0 5 4 9 9 10 5-1 9-5 9-10V6l-9-4z"/><path d="M12 8v4"/><circle cx="12" cy="16" r=".5" fill="currentColor"/></svg>'],
   ];
   const configTabs = [
     ['template', 'Template',  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="13" y2="16"/></svg>'],
@@ -1622,7 +1624,8 @@ function renderSidebar(){
         <div class="logo-text">PMI <span class="blue">Tracker</span></div>
       </div>
       <nav class="sidebar-nav">
-        <div class="sidebar-group-label">Portfólio</div>
+        ${pmoTabs.length ? '<div class="sidebar-group-label">PMO</div>'+tabHtml(pmoTabs) : ''}
+        <div class="sidebar-group-label" style="margin-top:.5rem">Portfólio</div>
         ${tabHtml(portfolioTabs)}
         <div class="sidebar-group-label" style="margin-top:.5rem">Configurações</div>
         ${tabHtml(configTabs.filter(([k])=> k!=='usuarios' || canAdmin()))}
@@ -5209,243 +5212,235 @@ function openChangeRoleModal(user){
    HOMEBROKER — visão PMO executiva de integração (McKinsey style)
    ================================================================ */
 function renderHomebroker(){
+  if(!canEdit()) return el('<div></div>');
   const today = new Date(); today.setHours(0,0,0,0);
   const data = aggregate();
+  if(!view.hbWatchlist) view.hbWatchlist = [];
+  if(!view.hotlistOpen) view.hotlistOpen = {};
 
-  // ── KPIs ──────────────────────────────────────────────────────
-  const total   = data.reduce((s,d)=>s+d.total,0);
-  const done    = data.reduce((s,d)=>s+d.done,0);
-  const late    = data.reduce((s,d)=>s+d.late,0);
-  const ontrack = data.reduce((s,d)=>s+d.ontrack,0);
-  const noowner = data.reduce((s,d)=>s+d.noowner,0);
-  const blocked = data.reduce((s,d)=>s+d.blocked,0);
-  const pct     = total > 0 ? Math.round(done/total*100) : 0;
+  // ── Deal status helper ──────────────────────────────────────────
+  function dealStatus(d){
+    const pct = d.total > 0 ? d.late/d.total*100 : 0;
+    if(pct > 30) return { label:'Crítico',  color:'#dc2626', dot:'#dc2626' };
+    if(pct > 15) return { label:'Em Risco', color:'#d97706', dot:'#d97706' };
+    return               { label:'On Track',color:'#16a34a', dot:'#16a34a' };
+  }
 
-  // ── Deal health summary ────────────────────────────────────────
-  const dealHealth = data.map(d => {
-    const p = d.total > 0 ? Math.round(d.done/d.total*100) : 0;
-    const rag = d.late > 0 ? 'red' : d.ontrack > 0 ? 'blue' : 'green';
-    return { ...d, pct:p, rag };
-  }).sort((a,b) => a.pct - b.pct); // lowest pct first
+  // ── WATCHLIST ───────────────────────────────────────────────────
+  const watchDeals     = view.hbWatchlist.map(id=>data.find(d=>d.company.id===id)).filter(Boolean);
+  const availableToAdd = data.filter(d=>!view.hbWatchlist.includes(d.company.id));
+  const watchCardsHtml = watchDeals.map(d=>{
+    const st = dealStatus(d);
+    const latePct = d.total>0 ? Math.round(d.late/d.total*100) : 0;
+    return '<div style="border:1.5px solid '+st.dot+';border-radius:.75rem;padding:.65rem .85rem;min-width:180px;max-width:220px;position:relative;background:#fff">'
+      +'<button class="hb-watch-remove" data-remove-watch="'+d.company.id+'" style="position:absolute;top:.3rem;right:.4rem;background:none;border:none;cursor:pointer;color:var(--bhub-muted);font-size:.9rem;line-height:1;padding:.1rem" title="Remover">\xd7</button>'
+      +'<div style="display:flex;align-items:center;gap:.45rem;margin-bottom:.35rem">'
+      +'<span style="display:inline-block;width:.6rem;height:.6rem;border-radius:50%;background:'+st.dot+';flex-shrink:0"></span>'
+      +'<span style="font-size:.82rem;font-weight:700;color:var(--bhub-navy);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px">'+escapeHtml(d.company.name)+'</span>'
+      +'</div>'
+      +'<div style="font-size:.72rem;color:var(--bhub-muted)">'+d.total+' tarefas \xb7 '+latePct+'% atrasadas</div>'
+      +'<div style="font-size:.72rem;font-weight:700;color:'+st.color+';margin-top:.2rem">'+st.label+'</div>'
+      +'</div>';
+  }).join('');
+  const addSelectHtml = availableToAdd.length
+    ? '<div style="min-width:200px"><select id="hbAddWatch" style="width:100%;padding:.45rem .6rem;border:1.5px dashed var(--bhub-border);border-radius:.75rem;font-size:.78rem;color:var(--bhub-muted);background:#fafaf8">'
+      +'<option value="">+ Adicionar empresa...</option>'
+      +availableToAdd.map(d=>'<option value="'+escapeHtml(d.company.id)+'">'+escapeHtml(d.company.name)+'</option>').join('')
+      +'</select></div>' : '';
 
-  // ── Late tasks ─────────────────────────────────────────────────
+  // ── TIMELINE ───────────────────────────────────────────────────
+  const allDates = [];
+  data.forEach(d=>{
+    if(d.company.signDate) allDates.push(new Date(d.company.signDate));
+    d.tasks.forEach(t=>{ if(t.dataPrevista) allDates.push(new Date(t.dataPrevista)); });
+  });
+  let tlMin, tlMax;
+  if(allDates.length){
+    tlMin = new Date(Math.min(...allDates.map(d=>d.getTime())));
+    tlMax = new Date(Math.max(...allDates.map(d=>d.getTime())));
+  } else {
+    tlMin = new Date(today); tlMin.setMonth(tlMin.getMonth()-6);
+    tlMax = new Date(today); tlMax.setMonth(tlMax.getMonth()+6);
+  }
+  tlMin = new Date(tlMin.getFullYear(), tlMin.getMonth()-1, 1);
+  tlMax = new Date(tlMax.getFullYear(), tlMax.getMonth()+2, 1);
+  const tlMs  = tlMax - tlMin;
+  const tlPct = d => Math.max(0, Math.min(100, (d-tlMin)/tlMs*100));
+
+  const months = [];
+  let mCur = new Date(tlMin);
+  while(mCur < tlMax){ months.push(new Date(mCur)); mCur = new Date(mCur.getFullYear(), mCur.getMonth()+1, 1); }
+  const monthLabels = months.map(m=>{
+    const p = tlPct(m);
+    const lb = m.toLocaleDateString('pt-BR',{month:'short',year:'2-digit'});
+    return '<div style="position:absolute;left:'+p+'%;transform:translateX(-50%);font-size:.6rem;color:var(--bhub-muted);white-space:nowrap">'+lb+'</div>';
+  }).join('');
+  const monthLines = months.map(m=>'<div style="position:absolute;left:'+tlPct(m)+'%;top:0;bottom:0;border-left:1px solid #e6e3d9;pointer-events:none"></div>').join('');
+  const todayPct = tlPct(today);
+
+  const ganttRows = data.map(d=>{
+    const tds = d.tasks.map(t=>t.dataPrevista).filter(Boolean).map(s=>new Date(s));
+    const dStart = d.company.signDate ? new Date(d.company.signDate) : (tds.length ? new Date(Math.min(...tds.map(x=>x.getTime()))) : null);
+    const dEnd   = tds.length ? new Date(Math.max(...tds.map(x=>x.getTime()))) : null;
+    if(!dStart || !dEnd) return '';
+    const st = dealStatus(d);
+    const bL = tlPct(dStart), bR = tlPct(dEnd), bW = Math.max(0.5, bR-bL);
+    const lbl = d.done+'/'+d.total+' \xb7 '+st.label;
+    return '<div style="display:flex;align-items:center;height:34px;border-bottom:1px solid #f3f4f6">'
+      +'<div style="width:140px;flex-shrink:0;font-size:.72rem;font-weight:600;color:var(--bhub-navy);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:.5rem" title="'+escapeHtml(d.company.name)+'">'+escapeHtml(d.company.name)+'</div>'
+      +'<div style="flex:1;position:relative;height:22px">'
+      +'<div style="position:absolute;left:'+bL+'%;width:'+bW+'%;height:100%;background:'+st.dot+';border-radius:3px;display:flex;align-items:center;padding:0 .35rem;overflow:hidden">'
+      +'<span style="font-size:.62rem;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+lbl+'</span>'
+      +'</div>'
+      +'<div style="position:absolute;left:'+tlPct(dEnd)+'%;top:-2px;font-size:.6rem;transform:translateX(-50%);color:#0F1727;pointer-events:none;line-height:1">▼</div>'
+      +'</div>'
+      +'</div>';
+  }).join('');
+
+  // ── HOT LIST ───────────────────────────────────────────────────
   const lateTasks = [];
-  data.forEach(d => d.tasks.forEach(t => {
-    if(t._f.status !== 'late') return;
-    const dias = t._f.dataPrevista ? businessDaysBetween(t._f.dataPrevista, today) : '?';
-    lateTasks.push({ dealId:d.company.id, deal:d.company.name, area:t.area||'', owner:t.owner||'—', task:t.task||'', due:t._f.dataPrevista, dias });
+  data.forEach(d=>d.tasks.forEach(t=>{
+    if(t._f.status!=='late') return;
+    const dias = t._f.dataPrevista ? businessDaysBetween(t._f.dataPrevista, today) : null;
+    lateTasks.push({cid:d.company.id, deal:d.company.name, owner:t.owner||'—', task:t.task||'', due:t._f.dataPrevista, val:dias});
   }));
-  lateTasks.sort((a,b)=>(b.dias||0)-(a.dias||0));
+  lateTasks.sort((a,b)=>(b.val||0)-(a.val||0));
 
-  // ── Upcoming (due in ≤10 b.d.) ─────────────────────────────────
-  const upcoming = [];
-  data.forEach(d => d.tasks.forEach(t => {
-    if(t._f.status !== 'ontrack' || !t._f.dataPrevista) return;
-    const diff = businessDaysBetween(today, t._f.dataPrevista);
-    if(diff !== null && diff >= 0 && diff <= 10)
-      upcoming.push({ dealId:d.company.id, deal:d.company.name, area:t.area||'', owner:t.owner||'—', task:t.task||'', due:t._f.dataPrevista, diff });
-  }));
-  upcoming.sort((a,b)=>a.diff-b.diff);
+  const openRaidItems = state.raid.filter(r=>r.status!=='closed').map(r=>{
+    const dealName = (r.dealIds||[]).map(id=>state.companies.find(c=>c.id===id)?.name||'').filter(Boolean).join(', ')||'—';
+    const daysLeft = r.dueDate ? Math.round((new Date(r.dueDate)-today)/(1000*60*60*24)) : null;
+    return {cid:(r.dealIds||[])[0]||'', deal:dealName, owner:r.owner||'—', task:r.title||'(sem t\xedtulo)', due:r.dueDate||'', val:daysLeft};
+  });
 
-  // ── Integration wave / phase breakdown ────────────────────────
-  const phaseMap = {};
-  data.forEach(d => d.tasks.forEach(t => {
-    const ph = t.phase || phaseFor(t, d.company) || 'Sem fase';
-    if(!phaseMap[ph]) phaseMap[ph] = { total:0, done:0 };
-    phaseMap[ph].total++;
-    if(t._f.status === 'done') phaseMap[ph].done++;
-  }));
+  function tasksDueInRange(minDays, maxDays){
+    const out = [];
+    const dMin = new Date(today); dMin.setDate(dMin.getDate()+minDays);
+    const dMax = new Date(today); dMax.setDate(dMax.getDate()+maxDays);
+    data.forEach(d=>d.tasks.forEach(t=>{
+      if(!t._f.dataPrevista || t._f.status==='done' || t._f.status==='late') return;
+      const due = new Date(t._f.dataPrevista);
+      if(due>dMin && due<=dMax){
+        const dL = Math.round((due-today)/(1000*60*60*24));
+        out.push({cid:d.company.id, deal:d.company.name, owner:t.owner||'—', task:t.task||'', due:t._f.dataPrevista, val:dL});
+      }
+    }));
+    out.sort((a,b)=>a.val-b.val);
+    return out;
+  }
+  const bucket15 = tasksDueInRange(0,15);
+  const bucket30 = tasksDueInRange(15,30);
+  const bucket45 = tasksDueInRange(30,45);
+  const bucket60 = tasksDueInRange(45,60);
 
-  // ── RAG by area ────────────────────────────────────────────────
-  const areaMap = {};
-  data.forEach(d => d.tasks.forEach(t => {
-    const a = t.area || 'Sem área';
-    if(!areaMap[a]) areaMap[a] = { total:0, done:0, late:0 };
-    areaMap[a].total++;
-    if(t._f.status === 'done') areaMap[a].done++;
-    if(t._f.status === 'late') areaMap[a].late++;
-  }));
+  function hotRow(t){
+    const ds = t.val!=null ? t.val+'d' : '—';
+    return '<div style="display:grid;grid-template-columns:2fr 1.2fr 0.9fr 0.4fr;gap:.4rem;padding:.3rem .85rem;border-bottom:1px solid #f3f4f6;font-size:.71rem;align-items:center">'
+      +'<div><span class="deal-link" data-summary="'+escapeHtml(t.cid)+'" style="font-weight:600;color:var(--bhub-navy)">'+escapeHtml(t.deal)+'</span>'
+      +' <span style="color:var(--bhub-muted)">\xb7 '+escapeHtml(t.task)+'</span></div>'
+      +'<div style="color:var(--bhub-muted)">'+escapeHtml(t.owner)+'</div>'
+      +'<div style="color:var(--bhub-muted)">'+(t.due?fmtDate(t.due):'—')+'</div>'
+      +'<div style="text-align:right;font-weight:700;color:#a01923">'+ds+'</div>'
+      +'</div>';
+  }
+  function hotSection(key, icon, label, items, badgeColor){
+    const isOpen = !!view.hotlistOpen[key];
+    const count  = items.length;
+    const hdrBg  = isOpen ? '#fafaf8' : '#fff';
+    const chevron = isOpen ? '180' : '0';
+    const tblHdr = '<div style="display:grid;grid-template-columns:2fr 1.2fr 0.9fr 0.4fr;gap:.4rem;padding:.25rem .85rem;border-bottom:1px solid #e6e3d9;background:#f3f4f6">'
+      +'<div style="font-size:.62rem;font-weight:700;color:var(--bhub-muted);text-transform:uppercase">DEAL / TAREFA</div>'
+      +'<div style="font-size:.62rem;font-weight:700;color:var(--bhub-muted);text-transform:uppercase">OWNER</div>'
+      +'<div style="font-size:.62rem;font-weight:700;color:var(--bhub-muted);text-transform:uppercase">VENCIMENTO</div>'
+      +'<div style="font-size:.62rem;font-weight:700;color:var(--bhub-muted);text-transform:uppercase;text-align:right">DIAS</div>'
+      +'</div>';
+    const rows = items.slice(0,100).map(hotRow).join('');
+    const more = items.length>100 ? '<div style="padding:.3rem .85rem;font-size:.65rem;color:var(--bhub-muted);text-align:center">+ '+(items.length-100)+' mais…</div>' : '';
+    return '<div>'
+      +'<div class="hb-hot-hdr" data-hot-key="'+key+'" style="display:flex;align-items:center;justify-content:space-between;padding:.6rem .85rem;cursor:pointer;border-bottom:1px solid #f3f4f6;background:'+hdrBg+';user-select:none">'
+      +'<div style="font-size:.8rem;font-weight:600;color:var(--bhub-navy)">'+icon+' '+label+'</div>'
+      +'<div style="display:flex;align-items:center;gap:.5rem">'
+      +'<span style="background:'+badgeColor+';color:#fff;font-size:.65rem;font-weight:700;border-radius:9999px;padding:.1rem .5rem;min-width:1.6rem;text-align:center">'+count+'</span>'
+      +'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="transition:transform .15s;transform:rotate('+chevron+'deg)"><polyline points="6 9 12 15 18 9"/></svg>'
+      +'</div></div>'
+      +(isOpen && count>0 ? '<div>'+tblHdr+rows+more+'</div>' : '')
+      +'</div>';
+  }
 
-  const kpi = (val, label, color, sub='') =>
-    `<div style="background:#fff;border:1px solid var(--bhub-border);border-radius:.75rem;padding:.8rem 1.1rem;min-width:110px">
-      <div style="font-size:1.6rem;font-weight:800;color:${color};font-family:'Roboto',sans-serif;line-height:1">${val}</div>
-      <div style="font-size:.72rem;font-weight:600;color:var(--bhub-navy);margin-top:.2rem">${label}</div>
-      ${sub ? `<div style="font-size:.65rem;color:var(--bhub-muted)">${sub}</div>` : ''}
-    </div>`;
+  // ── BUILD HTML ─────────────────────────────────────────────────
+  const html =
+    '<div class="space-y-5">'
+    // Header
+    +'<div class="page-header">'
+    +'<div><h1>PMO \xb7 Cockpit</h1><p class="subtitle">Vis\xe3o exclusiva de administradores \xb7 Dados em tempo real</p></div>'
+    +'<span style="background:#0171E4;color:#fff;font-size:.7rem;font-weight:700;border-radius:.35rem;padding:.2rem .6rem;letter-spacing:.05em">ADMIN</span>'
+    +'</div>'
+    // Watchlist
+    +'<section class="bhub-card overflow-hidden">'
+    +'<div style="padding:.65rem 1rem;background:var(--bhub-beige-soft);border-bottom:1px solid var(--bhub-border);display:flex;align-items:center;gap:.5rem">'
+    +'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>'
+    +'<span style="font-size:.82rem;font-weight:700;color:var(--bhub-navy)">Watchlist</span>'
+    +'</div>'
+    +'<div style="padding:.75rem 1rem"><div style="display:flex;flex-wrap:wrap;gap:.65rem;align-items:flex-start">'
+    +watchCardsHtml+addSelectHtml
+    +'</div></div></section>'
+    // Timeline
+    +'<section class="bhub-card overflow-hidden">'
+    +'<div style="padding:.65rem 1rem;background:var(--bhub-beige-soft);border-bottom:1px solid var(--bhub-border);display:flex;align-items:center;gap:.5rem">'
+    +'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>'
+    +'<span style="font-size:.82rem;font-weight:700;color:var(--bhub-navy)">Timeline — Cronograma</span>'
+    +'</div>'
+    +'<div style="padding:.75rem 1rem;overflow-x:auto"><div style="min-width:700px">'
+    +'<div style="display:flex;height:22px;margin-bottom:.3rem"><div style="width:140px;flex-shrink:0"></div>'
+    +'<div style="flex:1;position:relative">'+monthLabels+'</div></div>'
+    +'<div style="position:relative">'
+    +'<div style="position:absolute;left:140px;right:0;top:0;bottom:0;pointer-events:none">'+monthLines
+    +'<div style="position:absolute;left:'+todayPct+'%;top:0;bottom:0;border-left:2px dashed #ef4444;z-index:2"></div>'
+    +'</div>'
+    +ganttRows
+    +'</div>'
+    +'<div style="display:flex;flex-wrap:wrap;gap:.9rem;margin-top:.5rem;padding-left:140px">'
+    +'<span style="font-size:.63rem;display:flex;align-items:center;gap:.3rem"><span style="width:10px;height:8px;background:#16a34a;border-radius:2px;display:inline-block"></span>On Track ≤15%</span>'
+    +'<span style="font-size:.63rem;display:flex;align-items:center;gap:.3rem"><span style="width:10px;height:8px;background:#d97706;border-radius:2px;display:inline-block"></span>Em Risco 15-30%</span>'
+    +'<span style="font-size:.63rem;display:flex;align-items:center;gap:.3rem"><span style="width:10px;height:8px;background:#dc2626;border-radius:2px;display:inline-block"></span>Cr\xedtico >30%</span>'
+    +'<span style="font-size:.63rem;display:flex;align-items:center;gap:.3rem"><span style="display:inline-block;width:1px;height:12px;border-left:2px dashed #ef4444"></span>Hoje</span>'
+    +'<span style="font-size:.63rem">▼ Prevista</span>'
+    +'</div>'
+    +'</div></div></section>'
+    // Hot List
+    +'<section class="bhub-card overflow-hidden">'
+    +'<div style="padding:.65rem 1rem;background:var(--bhub-beige-soft);border-bottom:1px solid var(--bhub-border);display:flex;align-items:center;gap:.5rem">'
+    +'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0011 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 01-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 002.5 2.5z"/></svg>'
+    +'<span style="font-size:.82rem;font-weight:700;color:var(--bhub-navy)">Hot List — Vencimentos &amp; Atrasos</span>'
+    +'</div>'
+    +hotSection('late','🔴','Tarefas Atrasadas',lateTasks,'#dc2626')
+    +hotSection('raid','🔔','A\xe7\xf5es de Mitiga\xe7\xe3o em aberto',openRaidItems,'#7c3aed')
+    +hotSection('b15','⚡','Tarefas vencendo em 15 dias',bucket15,'#f59e0b')
+    +hotSection('b30','📅','Tarefas vencendo em 30 dias',bucket30,'#2563eb')
+    +hotSection('b45','📅','Tarefas vencendo em 45 dias',bucket45,'#0891b2')
+    +hotSection('b60','📅','Tarefas vencendo em 60 dias',bucket60,'#059669')
+    +'</section>'
+    +'</div>';
 
-  const ragDot = rag => `<span style="display:inline-block;width:.55rem;height:.55rem;border-radius:50%;background:${rag==='red'?'#f25461':rag==='blue'?'#0171E4':'#16a34a'};flex-shrink:0"></span>`;
+  const node = el(html);
 
-  const node = el(`
-    <div class="space-y-5">
-      <!-- Header -->
-      <div class="page-header">
-        <div>
-          <h1 style="display:flex;align-items:center;gap:.55rem">
-            <span style="display:inline-flex;align-items:center;justify-content:center;width:1.8rem;height:1.8rem;border-radius:.45rem;background:#dde9fa;color:#0171E4">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-            </span>
-            PMO — Visão de Integração
-          </h1>
-          <p class="subtitle">Painel executivo do portfólio · ${data.length} deal${data.length!==1?'s':''} em integração</p>
-        </div>
-      </div>
-
-      <!-- KPI strip -->
-      <div style="display:flex;flex-wrap:wrap;gap:.6rem">
-        ${kpi(pct+'%', 'Integração Geral', '#0171E4', `${done} de ${total} tarefas`)}
-        ${kpi(data.length, 'Deals ativos', '#0F1727')}
-        ${kpi(late, 'Atrasadas', '#f25461', 'tarefas')}
-        ${kpi(ontrack, 'On Track', '#0171E4', 'tarefas')}
-        ${kpi(blocked, 'Bloqueadas', '#d97706', 'tarefas')}
-        ${kpi(noowner, 'Sem owner', '#6b7280', 'tarefas')}
-      </div>
-
-      <!-- Progress bar geral -->
-      <div class="bhub-card" style="padding:.8rem 1rem">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.4rem">
-          <span style="font-size:.78rem;font-weight:700;color:var(--bhub-navy)">Progresso Consolidado do Portfólio</span>
-          <span style="font-size:.78rem;font-weight:800;color:#0171E4">${pct}%</span>
-        </div>
-        <div style="height:.55rem;background:#e6e3d9;border-radius:9999px;overflow:hidden">
-          <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,#0171E4,#60a5fa);border-radius:9999px;transition:width .4s"></div>
-        </div>
-      </div>
-
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
-
-        <!-- Deal health matrix -->
-        <section class="bhub-card overflow-hidden">
-          <div style="padding:.65rem 1rem;background:var(--bhub-beige-soft);border-bottom:1px solid var(--bhub-border);font-size:.82rem;font-weight:700;color:var(--bhub-navy)">
-            📊 Status por Deal
-          </div>
-          <div style="padding:.5rem 0;max-height:340px;overflow-y:auto">
-            ${dealHealth.map(d=>`
-              <div class="hb-deal-row" data-hb-deal="${escapeHtml(d.company.id)}" style="display:flex;align-items:center;gap:.6rem;padding:.4rem 1rem;cursor:pointer;transition:background .12s">
-                ${ragDot(d.rag)}
-                <div style="flex:1;min-width:0">
-                  <div style="font-size:.78rem;font-weight:600;color:var(--bhub-navy);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(d.company.name)}</div>
-                  <div style="height:.3rem;background:#e6e3d9;border-radius:9999px;margin-top:.2rem;overflow:hidden">
-                    <div style="height:100%;width:${d.pct}%;background:${d.rag==='red'?'#f25461':d.rag==='blue'?'#0171E4':'#16a34a'};border-radius:9999px"></div>
-                  </div>
-                </div>
-                <span style="font-size:.72rem;font-weight:700;color:${d.rag==='red'?'#a01923':d.rag==='blue'?'#005bb8':'#0f5e2c'};min-width:2.8rem;text-align:right">${d.pct}%</span>
-                ${d.late>0?`<span style="font-size:.65rem;background:#fee2e2;color:#991b1b;padding:.05rem .35rem;border-radius:9999px;white-space:nowrap">${d.late} atr.</span>`:''}
-              </div>`).join('')}
-          </div>
-        </section>
-
-        <!-- RAG by area -->
-        <section class="bhub-card overflow-hidden">
-          <div style="padding:.65rem 1rem;background:var(--bhub-beige-soft);border-bottom:1px solid var(--bhub-border);font-size:.82rem;font-weight:700;color:var(--bhub-navy)">
-            🗂 Status por Área
-          </div>
-          <div style="padding:.5rem 0;max-height:340px;overflow-y:auto">
-            ${Object.entries(areaMap).sort((a,b)=>(b[1].late||0)-(a[1].late||0)).map(([area,m])=>{
-              const p = m.total>0?Math.round(m.done/m.total*100):0;
-              const rag = m.late>0?'red':p===100?'green':'blue';
-              return `<div style="display:flex;align-items:center;gap:.6rem;padding:.4rem 1rem">
-                ${ragDot(rag)}
-                <div style="flex:1;min-width:0">
-                  <div style="font-size:.78rem;font-weight:600;color:var(--bhub-navy);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(area)}</div>
-                  <div style="height:.3rem;background:#e6e3d9;border-radius:9999px;margin-top:.2rem;overflow:hidden">
-                    <div style="height:100%;width:${p}%;background:${rag==='red'?'#f25461':rag==='blue'?'#0171E4':'#16a34a'};border-radius:9999px"></div>
-                  </div>
-                </div>
-                <span style="font-size:.72rem;font-weight:700;color:var(--bhub-muted);min-width:2.8rem;text-align:right">${p}%</span>
-                ${m.late>0?`<span style="font-size:.65rem;background:#fee2e2;color:#991b1b;padding:.05rem .35rem;border-radius:9999px;white-space:nowrap">${m.late}</span>`:''}
-              </div>`;
-            }).join('')}
-          </div>
-        </section>
-
-      </div>
-
-      <!-- Phase breakdown -->
-      ${Object.keys(phaseMap).length > 0 ? `
-      <section class="bhub-card overflow-hidden">
-        <div style="padding:.65rem 1rem;background:var(--bhub-beige-soft);border-bottom:1px solid var(--bhub-border);font-size:.82rem;font-weight:700;color:var(--bhub-navy)">⚡ Ondas / Fases de Integração</div>
-        <div style="padding:.75rem 1rem;display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:.6rem">
-          ${Object.entries(phaseMap).map(([ph,m])=>{
-            const p = m.total>0?Math.round(m.done/m.total*100):0;
-            return `<div style="background:#f8f9fc;border:1px solid var(--bhub-border);border-radius:.6rem;padding:.55rem .75rem">
-              <div style="font-size:.75rem;font-weight:700;color:var(--bhub-navy);margin-bottom:.3rem">${escapeHtml(ph)}</div>
-              <div style="display:flex;align-items:center;gap:.5rem">
-                <div style="flex:1;height:.35rem;background:#e6e3d9;border-radius:9999px;overflow:hidden">
-                  <div style="height:100%;width:${p}%;background:#0171E4;border-radius:9999px"></div>
-                </div>
-                <span style="font-size:.7rem;font-weight:700;color:#0171E4">${p}%</span>
-              </div>
-              <div style="font-size:.65rem;color:var(--bhub-muted);margin-top:.2rem">${m.done}/${m.total} tarefas</div>
-            </div>`;
-          }).join('')}
-        </div>
-      </section>` : ''}
-
-      <!-- Alerts: Atrasadas -->
-      <section class="bhub-card overflow-hidden">
-        <div style="padding:.65rem 1rem;background:#fff5f5;border-bottom:1px solid #fecaca;display:flex;align-items:center;justify-content:space-between">
-          <span style="font-size:.82rem;font-weight:700;color:#991b1b">🚨 Atividades Atrasadas (${lateTasks.length})</span>
-        </div>
-        ${lateTasks.length === 0
-          ? `<div style="padding:1.2rem;text-align:center;color:var(--bhub-muted);font-size:.82rem">✅ Nenhuma atividade atrasada!</div>`
-          : `<div class="scroll-x"><table class="w-full text-xs">
-              <thead><tr>
-                <th style="text-align:left;padding:.3rem .75rem;font-size:.65rem">DEAL</th>
-                <th style="text-align:left;padding:.3rem .5rem;font-size:.65rem">ÁREA</th>
-                <th style="text-align:left;padding:.3rem .5rem;font-size:.65rem">TAREFA</th>
-                <th style="text-align:left;padding:.3rem .5rem;font-size:.65rem">OWNER</th>
-                <th style="text-align:left;padding:.3rem .5rem;font-size:.65rem">VENCEU</th>
-                <th style="text-align:right;padding:.3rem .75rem;font-size:.65rem">D.U. ATRASO</th>
-              </tr></thead>
-              <tbody>
-                ${lateTasks.slice(0,20).map(t=>`<tr>
-                  <td style="padding:.3rem .75rem"><span class="deal-link text-xs" data-summary="${escapeHtml(t.dealId)}">${escapeHtml(t.deal)}</span></td>
-                  <td style="padding:.3rem .5rem;color:var(--bhub-muted)">${escapeHtml(t.area)}</td>
-                  <td style="padding:.3rem .5rem;max-width:16rem">${escapeHtml(t.task)}</td>
-                  <td style="padding:.3rem .5rem">${escapeHtml(t.owner)}</td>
-                  <td style="padding:.3rem .5rem;white-space:nowrap">${t.due?fmtDate(t.due):'—'}</td>
-                  <td style="padding:.3rem .75rem;text-align:right;font-weight:700;color:#a01923">${t.dias}</td>
-                </tr>`).join('')}
-              </tbody>
-            </table></div>
-            ${lateTasks.length>20?`<div style="padding:.4rem .75rem;font-size:.7rem;color:var(--bhub-muted);text-align:center">+ ${lateTasks.length-20} mais — veja a aba Cobrança para detalhe completo</div>`:''}
-          `}
-      </section>
-
-      <!-- Alerts: Próximas -->
-      <section class="bhub-card overflow-hidden">
-        <div style="padding:.65rem 1rem;background:#eff6ff;border-bottom:1px solid #bfdbfe;display:flex;align-items:center;justify-content:space-between">
-          <span style="font-size:.82rem;font-weight:700;color:#1e40af">📅 Próximas Atividades — vence em ≤10 d.u. (${upcoming.length})</span>
-        </div>
-        ${upcoming.length === 0
-          ? `<div style="padding:1.2rem;text-align:center;color:var(--bhub-muted);font-size:.82rem">Nenhuma atividade vencendo nos próximos 10 dias úteis.</div>`
-          : `<div class="scroll-x"><table class="w-full text-xs">
-              <thead><tr>
-                <th style="text-align:left;padding:.3rem .75rem;font-size:.65rem">DEAL</th>
-                <th style="text-align:left;padding:.3rem .5rem;font-size:.65rem">ÁREA</th>
-                <th style="text-align:left;padding:.3rem .5rem;font-size:.65rem">TAREFA</th>
-                <th style="text-align:left;padding:.3rem .5rem;font-size:.65rem">OWNER</th>
-                <th style="text-align:right;padding:.3rem .75rem;font-size:.65rem">VENCE EM (D.U.)</th>
-              </tr></thead>
-              <tbody>
-                ${upcoming.slice(0,20).map(t=>`<tr>
-                  <td style="padding:.3rem .75rem"><span class="deal-link text-xs" data-summary="${escapeHtml(t.dealId)}">${escapeHtml(t.deal)}</span></td>
-                  <td style="padding:.3rem .5rem;color:var(--bhub-muted)">${escapeHtml(t.area)}</td>
-                  <td style="padding:.3rem .5rem;max-width:16rem">${escapeHtml(t.task)}</td>
-                  <td style="padding:.3rem .5rem">${escapeHtml(t.owner)}</td>
-                  <td style="padding:.3rem .75rem;text-align:right;font-weight:700;color:${t.diff<=3?'#f25461':t.diff<=7?'#d97706':'#0171E4'}">${t.diff === 0 ? 'Hoje' : t.diff}</td>
-                </tr>`).join('')}
-              </tbody>
-            </table></div>
-          `}
-      </section>
-
-    </div>
-  `);
-
-  // Deal row click → navigate to deal
-  node.querySelectorAll('.hb-deal-row').forEach(r => r.addEventListener('click', ()=>{ view.tab='deal'; view.dealId=r.dataset.hbDeal; render(); }));
-  node.querySelectorAll('[data-summary]').forEach(b => b.addEventListener('click', e=>{ e.stopPropagation(); view.tab='deal'; view.dealId=b.dataset.summary; render(); }));
+  // Event: add to watchlist
+  const addSel = node.querySelector('#hbAddWatch');
+  if(addSel) addSel.addEventListener('change',()=>{
+    const id = addSel.value;
+    if(id && !view.hbWatchlist.includes(id)){ view.hbWatchlist=[...view.hbWatchlist,id]; render(); }
+  });
+  // Event: remove from watchlist
+  node.querySelectorAll('[data-remove-watch]').forEach(btn=>{
+    btn.addEventListener('click',()=>{ view.hbWatchlist=view.hbWatchlist.filter(x=>x!==btn.dataset.removeWatch); render(); });
+  });
+  // Event: accordion toggle
+  node.querySelectorAll('.hb-hot-hdr').forEach(h=>{
+    h.addEventListener('click',()=>{ view.hotlistOpen[h.dataset.hotKey]=!view.hotlistOpen[h.dataset.hotKey]; render(); });
+  });
+  // Event: deal links
+  node.querySelectorAll('[data-summary]').forEach(b=>{
+    b.addEventListener('click',e=>{ e.stopPropagation(); view.tab='deal'; view.dealId=b.dataset.summary; render(); });
+  });
   return node;
 }
 
