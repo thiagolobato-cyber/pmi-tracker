@@ -2033,6 +2033,7 @@ function renderRaidPortfolio(){
               <th>SEVERIDADE</th>
               <th>STATUS</th>
               <th>OWNER</th>
+              <th class="min-w-[10rem]">PARTICIPANTES</th>
               <th>PRAZO</th>
               <th>BLOQUEIOS</th>
               ${canEdit()?'<th></th>':''}
@@ -2062,14 +2063,29 @@ function renderRaidPortfolio(){
       },0);
       const tr = document.createElement('tr');
       if(r.status==='closed') tr.className='opacity-50';
-      tr.innerHTML = '<td><div class="font-medium">'+escapeHtml(r.title||'')+'</div>'
-          +(r.mitigation?'<div class="text-xs text-gray-500">'+escapeHtml(r.mitigation)+'</div>':'')+'</td>'
+      // Participantes: owners únicos de tarefas vinculadas a este RAID
+      const participants = [...new Set(
+        (r.dealIds||[]).flatMap(cid=>(state.deals[cid]?.tasks||[])
+          .filter(t=>t.raidId===r.id && t.owner)
+          .map(t=>t.owner))
+      )].filter(p=>p !== r.owner); // exclui owner já listado na coluna owner
+      const participantsHtml = participants.length
+        ? participants.map(p=>{
+            const initials = p.split(' ').slice(0,2).map(w=>w[0]||'').join('').toUpperCase();
+            // deterministic hue from name
+            let h=0; for(let i=0;i<p.length;i++) h=p.charCodeAt(i)+((h<<5)-h); h=((h%360)+360)%360;
+            return `<span title="${escapeHtml(p)}" style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:99px;background:hsl(${h},50%,40%);color:#fff;font-size:.6rem;font-weight:700;font-family:'Roboto',sans-serif;border:2px solid #fff;margin-right:-4px;cursor:default">${escapeHtml(initials)}</span>`;
+          }).join('')+`<span style="font-size:.7rem;color:var(--bhub-muted);margin-left:8px">${participants.length} pessoa${participants.length!==1?'s':''}</span>`
+        : '<span class="text-gray-400 text-xs">—</span>';
+
+      tr.innerHTML = '<td><div class="font-medium">'+escapeHtml(r.title||'')+'</div></td>'
         +'<td>'+raidAspectBadges(r)+'</td>'
         +'<td class="text-xs">'+( dealNames||'<span class="text-gray-400">—</span>' )+'</td>'
         +'<td class="text-xs">'+(r.area?'<span class="deal-link" data-area="'+escapeHtml(r.area)+'">'+escapeHtml(r.area)+'</span>':'')+'</td>'
         +'<td>'+(sev?'<span class="pill sev-'+r.severity+'">'+sev.label+'</span>':'')+'</td>'
         +'<td>'+(st?'<span class="pill">'+st.label+'</span>':'')+'</td>'
         +'<td class="text-xs">'+(r.owner?'<span class="deal-link" data-owner="'+escapeHtml(r.owner)+'">'+escapeHtml(r.owner)+'</span>':'<span class="text-red-500 font-semibold">sem owner</span>')+'</td>'
+        +'<td style="white-space:nowrap">'+participantsHtml+'</td>'
         +'<td class="text-xs">'+(r.dueDate?fmtDate(parseDate(r.dueDate)):'<span class="text-red-500 font-semibold">sem prazo</span>')+'</td>'
         +'<td class="text-center">'+(blockCount>0?'<span style="background:#fee2e2;color:#991b1b;padding:.1rem .45rem;border-radius:9999px;font-weight:700;font-size:.75rem">'+blockCount+'</span>':'<span class="text-gray-400 text-xs">0</span>')+'</td>'
         +(canEdit()?'<td><button class="btn btn-secondary" data-raid-edit="'+r.id+'">✎</button></td>':'');
