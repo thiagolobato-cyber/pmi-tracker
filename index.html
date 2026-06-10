@@ -5173,19 +5173,45 @@ function openHealthModal(company, area, week){
 }
 
 /* ===== Histórico / Auditoria ===== */
+const AUDIT_FIELD_LABELS = {
+  task:'Tarefa', status:'Status', owner:'Owner', prazo:'Prazo (dias)',
+  completado:'Concluído (%)', bloqueio:'Bloqueio', ref:'REF', area:'Área',
+  data_real:'Data real', due_date:'Data prevista', raid_id:'Ação de Mitigação',
+  proximo_passo:'Próximo passo', bloqueio_descricao:'Descrição do bloqueio',
+  ferramenta:'Ferramenta', evidencia:'Evidência', pending_approval:'Aprovação pendente',
+  title:'Título', severity:'Severidade', mitigation:'Mitigação',
+  risco_desc:'Risco', issue_desc:'Issue', decisao_desc:'Decisão', premissa_desc:'Premissa',
+  name:'Nome', sign_date:'Data assinatura',
+  planned_value:'Valor planejado', realized_value:'Valor realizado',
+  message:'Mensagem', type:'Tipo', participants:'Participantes',
+};
+const AUDIT_SKIP_FIELDS = new Set(['company_id','id','created_at','updated_at','_ts']);
+function _auditEmpty(v){ return v===null||v===undefined||String(v||'').trim()===''||v==='null'; }
 function describeAuditChanges(row){
   const c = row.changes;
-  if(!c) return '—';
-  if(row.action === 'insert') return 'Criado';
-  if(row.action === 'delete') return 'Removido';
-  // update
-  const keys = Object.keys(c).slice(0, 5);
-  if(!keys.length) return 'Sem alterações';
-  return keys.map(k=>{
-    const v = c[k];
-    const ov = (v?.old===null || v?.old===undefined || v?.old==='') ? '—' : String(v.old).slice(0,40);
-    const nv = (v?.new===null || v?.new===undefined || v?.new==='') ? '—' : String(v.new).slice(0,40);
-    return `<b>${escapeHtml(k)}</b>: <span class="text-gray-500">${escapeHtml(ov)}</span> → <span style="color:var(--bhub-navy)">${escapeHtml(nv)}</span>`;
+  if(!c) return '';
+  if(row.action==='comment') return `<span style="color:#374151;font-style:italic">"${escapeHtml(c.message||'')}"</span>`;
+  if(row.action==='insert') return '';
+  if(row.action==='delete') return '';
+  const entries = Object.entries(c)
+    .filter(([k,v])=>{
+      if(AUDIT_SKIP_FIELDS.has(k)) return false;
+      const ov = v?.old; const nv = v?.new;
+      if(_auditEmpty(ov) && _auditEmpty(nv)) return false;
+      if(String(ov??'').trim()===String(nv??'').trim()) return false;
+      return true;
+    })
+    .slice(0,8);
+  if(!entries.length) return '';
+  return entries.map(([k,v])=>{
+    const label = AUDIT_FIELD_LABELS[k] || k.replace(/_/g,' ');
+    const ov = _auditEmpty(v?.old)
+      ? `<span style="color:#9ca3af">vazio</span>`
+      : `<span style="background:#fee2e2;color:#991b1b;padding:.05rem .3rem;border-radius:3px">${escapeHtml(String(v.old).slice(0,80))}</span>`;
+    const nv = _auditEmpty(v?.new)
+      ? `<span style="color:#9ca3af">vazio</span>`
+      : `<span style="background:#dcfce7;color:#166534;padding:.05rem .3rem;border-radius:3px;font-weight:600">${escapeHtml(String(v.new).slice(0,80))}</span>`;
+    return `<span style="color:#6b7280;font-size:.68rem">${escapeHtml(label)}</span>&nbsp;${ov}&nbsp;→&nbsp;${nv}`;
   }).join('<br>');
 }
 function entityIcon(t){
@@ -5236,18 +5262,58 @@ function renderDealHistorico(company){
       list.innerHTML = '<div class="text-sm text-gray-500">Sem registros para os filtros atuais.</div>';
       return;
     }
-    list.innerHTML = `<div class="space-y-2 text-xs">${data.map(r=>{
+    // Build entity name lookup for context
+    const dealTasks = state.deals[company.id]?.tasks||[];
+    const dealRaid  = state.deals[company.id]?.raid||[];
+    const dealSyns  = state.deals[company.id]?.synergies||[];
+    function entityName(row){
+      if(row.entity_type==='tasks'||row.entity_type==='task'){
+        const t = dealTasks.find(x=>x.id===row.entity_id);
+        return t ? (t.task||'').slice(0,70) : null;
+      }
+      if(row.entity_type==='raid_items'){
+        const r2 = dealRaid.find(x=>x.id===row.entity_id) || state.raid.find(x=>x.id===row.entity_id);
+        return r2 ? (r2.title||'').slice(0,60) : null;
+      }
+      if(row.entity_type==='synergies'){
+        const s = dealSyns.find(x=>x.id===row.entity_id);
+        return s ? (s.name||'').slice(0,60) : null;
+      }
+      return null;
+    }
+    // Filter out pure-noise entries (update with no meaningful field change)
+    const meaningful = data.filter(r=>{
+      if(r.action==='comment') return true;
+      if(r.action==='insert'||r.action==='delete') return true;
+      return describeAuditChanges(r) !== ''; // has at least one real change
+    });
+    if(!meaningful.length){
+      list.innerHTML = '<div class="text-sm text-gray-500">Sem registros relevantes para os filtros atuais.</div>';
+      return;
+    }
+    list.innerHTML = `<div class="space-y-1.5 text-xs">${meaningful.map(r=>{
       const when = new Date(r.ts);
-      const whenStr = when.toLocaleString('pt-BR');
+      const whenStr = when.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
       const actor = r.actor_name || r.actor_email || 'sistema';
-      const actLabel = r.action==='insert'?'criou':r.action==='update'?'alterou':'removeu';
-      const colorByAct = r.action==='insert'?'#15803d':r.action==='update'?'#1e40af':'#b91c1c';
-      return `<div class="border-l-4 pl-3 py-2" style="border-color:${colorByAct}">
-        <div class="flex justify-between items-baseline gap-3 flex-wrap">
-          <div><b>${escapeHtml(actor)}</b> ${actLabel} ${entityIcon(r.entity_type)} <b>${entityLabel(r.entity_type)}</b></div>
-          <div class="text-gray-500 text-[11px]">${escapeHtml(whenStr)}</div>
+      const isComment = r.action==='comment';
+      const actLabel = isComment ? 'comentou em'
+        : r.action==='insert' ? 'criou'
+        : r.action==='update' ? 'alterou'
+        : 'removeu';
+      const borderColor = isComment?'#94a3b8':r.action==='insert'?'#16a34a':r.action==='update'?'#2563eb':'#dc2626';
+      const name = entityName(r);
+      const nameHtml = name ? `<span style="background:#f1f5f9;padding:.1rem .35rem;border-radius:4px;color:#374151;font-weight:500">${escapeHtml(name)}</span>` : '';
+      const changes = describeAuditChanges(r);
+      return `<div style="border-left:3px solid ${borderColor};padding:.4rem .6rem .4rem .75rem;background:#fafafa;border-radius:0 6px 6px 0">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:.5rem;flex-wrap:wrap">
+          <div style="line-height:1.5">
+            <b style="color:#111827">${escapeHtml(actor)}</b>
+            <span style="color:#6b7280"> ${actLabel} ${entityIcon(r.entity_type)} ${entityLabel(r.entity_type)}</span>
+            ${nameHtml ? ' ' + nameHtml : ''}
+          </div>
+          <div style="color:#9ca3af;font-size:.68rem;white-space:nowrap">${escapeHtml(whenStr)}</div>
         </div>
-        <div class="text-gray-700 mt-1" style="font-size:.72rem;line-height:1.4">${describeAuditChanges(r)}</div>
+        ${changes ? `<div style="margin-top:.3rem;line-height:1.6">${changes}</div>` : ''}
       </div>`;
     }).join('')}</div>`;
   }
