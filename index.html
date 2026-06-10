@@ -2087,11 +2087,29 @@ function renderRaidPortfolio(){
         +'<td class="text-xs">'+(r.owner?'<span class="deal-link" data-owner="'+escapeHtml(r.owner)+'">'+escapeHtml(r.owner)+'</span>':'<span class="text-red-500 font-semibold">sem owner</span>')+'</td>'
         +'<td style="white-space:nowrap">'+participantsHtml+'</td>'
         +'<td class="text-xs">'+(r.dueDate?fmtDate(parseDate(r.dueDate)):'<span class="text-red-500 font-semibold">sem prazo</span>')+'</td>'
-        +'<td class="text-center">'+(blockCount>0?'<span style="background:#fee2e2;color:#991b1b;padding:.1rem .45rem;border-radius:9999px;font-weight:700;font-size:.75rem">'+blockCount+'</span>':'<span class="text-gray-400 text-xs">0</span>')+'</td>'
+        +'<td class="text-center">'+(blockCount>0?'<span class="raid-blk-badge" data-raid-expand="'+r.id+'" style="background:#fee2e2;color:#991b1b;padding:.1rem .45rem;border-radius:9999px;font-weight:700;font-size:.75rem;cursor:pointer;user-select:none" title="Ver tarefas impactadas">'+blockCount+' ▾</span>':'<span class="text-gray-400 text-xs">0</span>')+'</td>'
         +(canEdit()?'<td><button class="btn btn-secondary" data-raid-edit="'+r.id+'">✎</button></td>':'');
       tbody.appendChild(tr);
+      // Expand row for blocked tasks
+      const colCount = canEdit() ? 11 : 10;
+      const expandDiv = document.createElement('div');
+      expandDiv.innerHTML = '<table><tbody>'+getBlockedTasksHtml(r.id, colCount)+'</tbody></table>';
+      const expandTr = expandDiv.querySelector('tr.raid-expand-row');
+      if(expandTr) tbody.appendChild(expandTr);
     });
     node.querySelectorAll('[data-raid-edit]').forEach(b=>b.onclick=()=>openRaidModal(null, b.dataset.raidEdit));
+    // Bloqueios expand badges (RAID portfolio table)
+    node.querySelectorAll('.raid-blk-badge[data-raid-expand]').forEach(badge=>{
+      badge.addEventListener('click', e=>{
+        e.stopPropagation();
+        const raidId = badge.dataset.raidExpand;
+        const row = node.querySelector('#expand-'+raidId);
+        if(!row) return;
+        const open = row.style.display !== 'none';
+        row.style.display = open ? 'none' : '';
+        badge.textContent = badge.textContent.replace(/[▾▴]/,'') + (open ? ' ▾' : ' ▴');
+      });
+    });
   }
 
   node.querySelectorAll('[data-rf]').forEach(b=>b.addEventListener('click',()=>{ view.raidPortfolioFilter=b.dataset.rf; render(); }));
@@ -2134,6 +2152,39 @@ function dashExpandTable(id, rows, headers, rowFn){
     html += '<div id="extra-'+id+'" style="display:none"><div class="scroll-x"><table class="w-full text-xs">'+thead+'<tbody>'+extra+'</tbody></table></div></div>';
   }
   return html;
+}
+
+function getBlockedTasksHtml(raidId, colspan){
+  const tasks = Object.entries(state.deals).flatMap(([cid, d])=>
+    (d.tasks||[]).filter(t=>t.bloqueio==='Sim' && t.raidId===raidId)
+      .map(t=>({...t, deal: d.name||d.company?.name||cid, dealId: cid}))
+  );
+  const inner = tasks.length
+    ? `<div style="padding:.5rem 1rem .75rem">
+        <div style="font-size:.68rem;font-weight:700;color:#991b1b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.4rem">
+          Tarefas impactadas (${tasks.length})
+        </div>
+        <div class="scroll-x">
+          <table class="w-full text-xs" style="background:#fff;border-radius:6px;overflow:hidden;border:1px solid #fecaca">
+            <thead><tr style="background:#fee2e2">
+              <th style="padding:.3rem .7rem;text-align:left">DEAL</th>
+              <th style="padding:.3rem .7rem;text-align:left">ÁREA</th>
+              <th style="padding:.3rem .7rem;text-align:left">TAREFA</th>
+              <th style="padding:.3rem .7rem;text-align:left">OWNER</th>
+            </tr></thead>
+            <tbody>${tasks.map(t=>`<tr style="border-top:1px solid #fecaca">
+              <td style="padding:.35rem .7rem">${dealLink(t.dealId, t.deal)}</td>
+              <td style="padding:.35rem .7rem">${areaLink(t.area)}</td>
+              <td style="padding:.35rem .7rem">${escapeHtml(t.task||'')}</td>
+              <td style="padding:.35rem .7rem">${ownerLink(t.owner)}</td>
+            </tr>`).join('')}</tbody>
+          </table>
+        </div>
+      </div>`
+    : `<div style="padding:.5rem 1rem;font-size:.75rem;color:#9ca3af">Nenhuma tarefa bloqueada encontrada.</div>`;
+  return `<tr class="raid-expand-row" id="expand-${raidId}" style="display:none">
+    <td colspan="${colspan}" style="padding:0;background:#fef2f2;border-bottom:2px solid #fecaca">${inner}</td>
+  </tr>`;
 }
 
 function renderDashboard(){
@@ -2385,8 +2436,9 @@ function renderDashboard(){
                   <td>${r.area?`<span class="deal-link" data-area="${escapeHtml(r.area)}">${escapeHtml(r.area)}</span>`:''}</td>
                   <td><span style="color:${r.severity==='high'?'#dc2626':r.severity==='med'?'#d97706':'#3b82f6'};font-weight:600">${SEVERITIES.find(s=>s.id===r.severity)?.label||''}</span></td>
                   <td>${r.owner?`<span class="deal-link" data-owner="${escapeHtml(r.owner)}">${escapeHtml(r.owner)}</span>`:''}</td>
-                  <td class="text-center">${r.blockCount>0?`<span style="background:#fee2e2;color:#991b1b;padding:.1rem .5rem;border-radius:9999px;font-weight:700">${r.blockCount}</span>`:'<span style="color:#9ca3af">0</span>'}</td>
-                </tr>`).join('')}
+                  <td class="text-center">${r.blockCount>0?`<span class="raid-blk-badge" data-raid-expand="${r.id}" style="background:#fee2e2;color:#991b1b;padding:.1rem .5rem;border-radius:9999px;font-weight:700;cursor:pointer;user-select:none" title="Ver tarefas impactadas">${r.blockCount} ▾</span>`:'<span style="color:#9ca3af">0</span>'}</td>
+                </tr>
+                ${getBlockedTasksHtml(r.id, 7)}`).join('')}
               </tbody>
             </table>
           </div>` : `
@@ -2567,6 +2619,19 @@ function renderDashboard(){
   // Toggle card Gatilhos por Área
   const triggersHeader = node.querySelector('#triggersHeader');
   if(triggersHeader) triggersHeader.addEventListener('click', ()=>{ view.triggersCardOpen = !view.triggersCardOpen; render(); });
+
+  // Bloqueios expand badges (dashboard Top 10)
+  node.querySelectorAll('.raid-blk-badge[data-raid-expand]').forEach(badge=>{
+    badge.addEventListener('click', e=>{
+      e.stopPropagation();
+      const raidId = badge.dataset.raidExpand;
+      const row = node.querySelector('#expand-'+raidId);
+      if(!row) return;
+      const open = row.style.display !== 'none';
+      row.style.display = open ? 'none' : '';
+      badge.textContent = badge.textContent.replace(/[▾▴]/,'') + (open ? ' ▾' : ' ▴');
+    });
+  });
 
   // KPI cards → navegação por atalho
   node.querySelectorAll('[data-kpi-nav]').forEach(card => {
