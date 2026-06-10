@@ -4673,7 +4673,7 @@ async function renderFreeComments(container, entityType, entityId){
     const list = rows.length ? rows.map(r=>{
       const actor = r.actor_name||r.actor_email||'—';
       let msg = '';
-      try{ msg = r.diff?.message || JSON.parse(r.diff||'{}').message || ''; }catch{ msg = ''; }
+      try{ msg = (typeof r.changes==='object' ? r.changes?.message : JSON.parse(r.changes||'{}').message) || ''; }catch{ msg = ''; }
       const color = stringToColor(actor);
       return `<div style="display:flex;gap:.65rem;align-items:flex-start">
         <div style="width:30px;height:30px;border-radius:99px;background:${color};color:#fff;display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:700;flex-shrink:0;font-family:'Roboto',sans-serif">${escapeHtml(initials(actor))}</div>
@@ -4705,13 +4705,24 @@ async function renderFreeComments(container, entityType, entityId){
       btn.disabled = true; btn.textContent = '…';
       try{
         const actor = session?.username||session?.email||'—';
+        // Derive company_id from entity if possible (audit_log requires it)
+        let companyId = null;
+        if(entityType==='tasks'){
+          for(const [cid, d] of Object.entries(state.deals||{})){
+            if((d.tasks||[]).some(t=>t.id===entityId)){ companyId=cid; break; }
+          }
+        } else if(entityType==='raid_items'){
+          const ri = (state.raid||[]).find(r=>r.id===entityId);
+          companyId = ri?.dealIds?.[0] || null;
+        }
         const { error } = await supa.from('audit_log').insert({
           entity_type: entityType,
           entity_id: entityId,
           action: 'comment',
           actor_name: actor,
           actor_email: session?.email||null,
-          diff: { message: msg },
+          changes: { message: msg },
+          company_id: companyId,
           ts: new Date().toISOString()
         });
         if(error) throw error;
