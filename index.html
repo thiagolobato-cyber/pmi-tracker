@@ -4134,7 +4134,9 @@ function openRaidModal(company, raidId){
         </form>
         ${existing ? `
         <div class="mt-6 pt-4 border-t">
-          <div class="text-sm font-semibold mb-3" style="color:var(--bhub-navy)">💬 Histórico / Próximos passos</div>
+          <div style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--bhub-muted);font-family:'Roboto',sans-serif;margin-bottom:.75rem;display:flex;align-items:center;gap:.4rem">
+            <span style="display:inline-block;width:3px;height:13px;border-radius:2px;background:#94a3b8"></span>Comentários
+          </div>
           <div id="raidCommentPanel"></div>
         </div>` : ''}
       </div>
@@ -4144,7 +4146,7 @@ function openRaidModal(company, raidId){
   const close = () => m.remove();
   if(existing){
     const raidPanel = m.querySelector('#raidCommentPanel');
-    if(raidPanel) renderCommentsPanel(raidPanel, 'raid', existing.id, null);
+    if(raidPanel) renderFreeComments(raidPanel, 'raid_items', existing.id);
   }
   m.querySelector('#cancel').onclick = close;
 
@@ -4222,140 +4224,388 @@ function openTaskModal(company, taskId){
   if(!company){ console.warn('openTaskModal: company ausente'); return; }
   const deal     = state.deals[company.id];
   const existing = taskId ? (deal?.tasks||[]).find(t=>t.id===taskId) : null;
-  const title    = existing ? 'Editar Tarefa' : 'Nova Tarefa';
+  const isNew    = !existing;
+  const title    = isNew ? 'Nova Tarefa' : 'Editar Tarefa';
 
+  // ── Status chip ──────────────────────────────────────────────
+  let statusChip = '';
+  if(existing){
+    const p = existing.completado||0;
+    if(p>=100)       statusChip = `<span class="status-done pill" style="font-size:.7rem">Done</span>`;
+    else if(existing.bloqueio==='Sim') statusChip = `<span class="status-late pill" style="font-size:.7rem">Bloqueado</span>`;
+    else if(p>0)     statusChip = `<span class="status-ontrack pill" style="font-size:.7rem">Em andamento</span>`;
+    else             statusChip = `<span class="status-empty pill" style="font-size:.7rem">Não iniciado</span>`;
+  }
+
+  // ── Prazo ↔ Data prevista ─────────────────────────────────────
+  const signDateObj = company.signDate ? parseDate(company.signDate) : null;
+  function prazoDays(prazo){ return parseInt(prazo)||0; }
+  function dueFromPrazo(p){
+    if(!signDateObj || isNaN(signDateObj.getTime())) return '';
+    const d = new Date(signDateObj); d.setDate(d.getDate() + prazoDays(p));
+    return toIso(d);
+  }
+  function prazoFromDue(iso){
+    if(!iso || !signDateObj || isNaN(signDateObj.getTime())) return 0;
+    const d = parseDate(iso); if(!d) return 0;
+    return Math.round((d.getTime()-signDateObj.getTime())/(1000*60*60*24));
+  }
+  const initPrazo = existing?.prazo||0;
+  const initDue   = dueFromPrazo(initPrazo);
+  const hasDueSync = !!signDateObj;
+
+  // ── Areas + RAID options ──────────────────────────────────────
   const allAreas = Array.from(new Set([
     ...DEFAULT_AREAS.map(a=>a.name),
     ...(state.template||[]).map(t=>t.area),
     ...(deal?.tasks||[]).map(t=>t.area)
-  ].filter(Boolean))).sort();
+  ].filter(Boolean)));
 
   const areaOpts = allAreas.map(a=>
     `<option value="${escapeHtml(a)}" ${existing?.area===a?'selected':''}>${escapeHtml(a)}</option>`
   ).join('');
 
-  const raidOpts = [
-    `<option value="">— Nenhuma —</option>`,
-    ...(state.raid||[]).filter(r=>(r.dealIds||[]).includes(company.id)||r.id===existing?.raidId).map(r=>
-      `<option value="${r.id}" ${existing?.raidId===r.id?'selected':''}>${escapeHtml(r.title||r.id)}</option>`
-    )
+  const raidList = (state.raid||[]).filter(r=>(r.dealIds||[]).includes(company.id)||r.id===existing?.raidId);
+  const raidOpts = [`<option value="">— Nenhuma —</option>`,
+    ...raidList.map(r=>`<option value="${r.id}" ${existing?.raidId===r.id?'selected':''}>${escapeHtml(r.title||r.id)}</option>`)
   ].join('');
 
+  // ── Delete button (role-aware) ────────────────────────────────
+  const delHtml = existing ? (
+    canAdmin()
+      ? `<button type="button" id="tmDel" class="btn" style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca">
+           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+           Excluir
+         </button>`
+      : canEdit()
+        ? `<button type="button" id="tmDel" class="btn btn-secondary" style="color:#b45309;border-color:#fde68a;font-size:.8rem">
+             Solicitar exclusão
+           </button>`
+        : ''
+  ) : '';
+
+  // ── Owner section (non-admin: read-only) ───────────────────────
+  const ownerHtml = ownerSelectHtml(existing?.owner||'', /*adminOnly=*/!canAdmin());
+  const ownerNote = !canAdmin() && !isNew
+    ? `<div style="font-size:.72rem;color:#6b7280;margin-top:.25rem;display:flex;align-items:center;gap:.3rem">
+         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+         Mudança de owner requer aprovação do admin
+       </div>`
+    : '';
+
+  const bloqueioSim = existing?.bloqueio==='Sim';
+  const hasRaid     = !!(existing?.raidId);
+
   const m = el(`
-  <div class="fixed inset-0 bg-black/40 z-20 flex items-center justify-center p-4" id="taskModalOverlay">
-    <div class="bg-white rounded-xl w-full max-w-2xl shadow-xl overflow-y-auto" style="max-height:90vh">
-      <div class="flex items-center justify-between p-5 border-b">
-        <div>
-          <h2 class="text-base font-semibold" style="color:var(--bhub-navy)">${title}</h2>
-          <div class="text-xs text-gray-500 mt-0.5">${escapeHtml(company.name)}</div>
+  <div class="fixed inset-0 z-20 flex items-center justify-center p-4"
+       id="taskModalOverlay"
+       style="background:rgba(15,23,39,.55);backdrop-filter:blur(3px)">
+    <div class="bg-white w-full flex flex-col"
+         style="max-width:680px;max-height:92vh;border-radius:18px;box-shadow:0 24px 64px rgba(15,23,39,.22)">
+
+      <!-- ══ HEADER ══ -->
+      <div class="flex items-center justify-between px-6 py-4"
+           style="border-bottom:1px solid var(--bhub-border);flex-shrink:0">
+        <div class="flex items-center gap-3">
+          <div style="width:38px;height:38px;border-radius:10px;background:#ede9fe;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5b21b6" stroke-width="2" stroke-linecap="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+          </div>
+          <div>
+            <div style="font-size:.95rem;font-weight:700;color:var(--bhub-navy);font-family:'Roboto',sans-serif;line-height:1.2">${title}</div>
+            <div style="font-size:.72rem;color:var(--bhub-muted);margin-top:.1rem">${escapeHtml(company.name)}</div>
+          </div>
         </div>
-        ${existing && canAdmin() ? `<button id="tmDel" class="btn btn-secondary text-xs" style="color:#991b1b;border-color:#fecaca">Excluir</button>` : ''}
+        <div class="flex items-center gap-2">
+          ${statusChip}
+          <button id="tmClose" style="width:32px;height:32px;border-radius:99px;background:#f1f5f9;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#64748b;transition:background .15s" onmouseover="this.style.background='#e2e8f0'" onmouseout="this.style.background='#f1f5f9'">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
       </div>
-      <form id="tmForm" class="p-5 space-y-4">
-        <div id="tmErr" class="text-xs rounded p-2 hidden" style="color:#991b1b;background:#fee2e2"></div>
-        <div class="grid grid-cols-2 gap-4">
-          <label class="block">REF
-            <input type="text" name="ref" value="${escapeHtml(existing?.ref||'')}" placeholder="ex: 1.1">
-          </label>
-          <label class="block">Área *
-            <select name="area">
-              <option value="">— Área —</option>
-              ${areaOpts}
+
+      <!-- ══ BODY ══ -->
+      <div class="flex-1 overflow-y-auto px-6 py-5" style="display:flex;flex-direction:column;gap:1.5rem">
+        <div id="tmErr" style="display:none;background:#fee2e2;color:#991b1b;border:1px solid #fecaca;border-radius:.75rem;padding:.65rem .85rem;font-size:.8rem"></div>
+
+        <!-- § Identificação -->
+        <div>
+          <div style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--bhub-muted);font-family:'Roboto',sans-serif;margin-bottom:.75rem;display:flex;align-items:center;gap:.4rem">
+            <span style="display:inline-block;width:3px;height:13px;border-radius:2px;background:#5b21b6"></span>Identificação
+          </div>
+          <div style="display:grid;grid-template-columns:100px 1fr;gap:.75rem">
+            <div>
+              <div style="font-size:.72rem;font-weight:600;color:var(--bhub-navy);margin-bottom:.3rem">REF</div>
+              <input type="text" name="ref" value="${escapeHtml(existing?.ref||'')}" placeholder="1.1" style="font-family:monospace">
+            </div>
+            <div>
+              <div style="font-size:.72rem;font-weight:600;color:var(--bhub-navy);margin-bottom:.3rem">Área <span style="color:#e53e3e">*</span></div>
+              <select name="area">
+                <option value="">— Área —</option>
+                ${areaOpts}
+              </select>
+            </div>
+          </div>
+          <div style="margin-top:.75rem">
+            <div style="font-size:.72rem;font-weight:600;color:var(--bhub-navy);margin-bottom:.3rem">Tarefa <span style="color:#e53e3e">*</span></div>
+            <textarea name="task" rows="3" required style="resize:vertical">${escapeHtml(existing?.task||'')}</textarea>
+          </div>
+        </div>
+
+        <!-- § Responsabilidade -->
+        <div>
+          <div style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--bhub-muted);font-family:'Roboto',sans-serif;margin-bottom:.75rem;display:flex;align-items:center;gap:.4rem">
+            <span style="display:inline-block;width:3px;height:13px;border-radius:2px;background:#0171E4"></span>Responsabilidade
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+            <div>
+              <div style="font-size:.72rem;font-weight:600;color:var(--bhub-navy);margin-bottom:.3rem">Owner</div>
+              ${ownerHtml}
+              ${ownerNote}
+            </div>
+            <div>
+              <div style="font-size:.72rem;font-weight:600;color:var(--bhub-navy);margin-bottom:.3rem">Ferramenta / Plataforma</div>
+              <input type="text" name="ferramenta" value="${escapeHtml(existing?.ferramenta||'')}">
+            </div>
+          </div>
+        </div>
+
+        <!-- § Progresso -->
+        <div>
+          <div style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--bhub-muted);font-family:'Roboto',sans-serif;margin-bottom:.75rem;display:flex;align-items:center;gap:.4rem">
+            <span style="display:inline-block;width:3px;height:13px;border-radius:2px;background:#16a34a"></span>Progresso
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+            <div>
+              <div style="font-size:.72rem;font-weight:600;color:var(--bhub-navy);margin-bottom:.3rem">
+                Data prevista
+                ${hasDueSync
+                  ? '<span style="font-size:.68rem;font-weight:400;color:var(--bhub-muted)">— sincroniza com prazo</span>'
+                  : '<span style="font-size:.68rem;font-weight:400;color:#b45309"> — cadastre a data de assinatura para habilitar</span>'}
+              </div>
+              <input type="date" id="tmDueDate" value="${initDue}" ${hasDueSync?'':'disabled style="opacity:.45;cursor:not-allowed"'}>
+            </div>
+            <div>
+              <div style="font-size:.72rem;font-weight:600;color:var(--bhub-navy);margin-bottom:.3rem">Prazo (dias corridos)</div>
+              <input type="number" name="prazo" id="tmPrazo" min="0" value="${initPrazo}">
+            </div>
+          </div>
+          <div style="margin-top:.75rem">
+            <div style="font-size:.72rem;font-weight:600;color:var(--bhub-navy);margin-bottom:.3rem">
+              % Concluído
+              <span id="tmPctLabel" style="font-weight:700;color:var(--bhub-blue);margin-left:.4rem">${existing?.completado||0}%</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:.75rem">
+              <input type="range" id="tmRange" min="0" max="100" value="${existing?.completado||0}"
+                     style="flex:1;height:6px;accent-color:var(--bhub-blue);cursor:pointer">
+              <input type="number" name="completado" id="tmPct" min="0" max="100" value="${existing?.completado||0}"
+                     style="width:70px;text-align:center">
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-top:.75rem">
+            <div>
+              <div style="font-size:.72rem;font-weight:600;color:var(--bhub-navy);margin-bottom:.3rem">Data real de conclusão</div>
+              <input type="date" name="dataRealConclusao" value="${existing?.dataRealConclusao?toIso(existing.dataRealConclusao):''}">
+            </div>
+            <div>
+              <div style="font-size:.72rem;font-weight:600;color:var(--bhub-navy);margin-bottom:.3rem">Último update</div>
+              <input type="date" name="ultimoUpdate" value="${existing?.ultimoUpdate?toIso(existing.ultimoUpdate):''}">
+            </div>
+          </div>
+          <div style="margin-top:.75rem">
+            <div style="font-size:.72rem;font-weight:600;color:var(--bhub-navy);margin-bottom:.3rem">Evidência</div>
+            <input type="text" name="evidencia" value="${escapeHtml(existing?.evidencia||'')}" placeholder="URL ou descrição">
+          </div>
+        </div>
+
+        <!-- § Bloqueio -->
+        <div>
+          <div style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--bhub-muted);font-family:'Roboto',sans-serif;margin-bottom:.75rem;display:flex;align-items:center;gap:.4rem">
+            <span style="display:inline-block;width:3px;height:13px;border-radius:2px;background:#f25461"></span>Bloqueio
+          </div>
+          <div>
+            <div style="font-size:.72rem;font-weight:600;color:var(--bhub-navy);margin-bottom:.3rem">Status de bloqueio</div>
+            <select name="bloqueio" id="tmBloqueio">
+              <option value="Não" ${!bloqueioSim?'selected':''}>Não bloqueado</option>
+              <option value="Sim" ${bloqueioSim?'selected':''}>⛔ Bloqueado</option>
             </select>
-          </label>
+          </div>
+          <div id="bloqueioDetails" style="margin-top:.75rem;display:flex;flex-direction:column;gap:.75rem;${bloqueioSim?'':'display:none'}">
+            <div id="raidWarning" style="border-radius:.875rem;padding:.75rem 1rem;font-size:.8rem;display:flex;align-items:flex-start;gap:.5rem;background:#fffbeb;border:1px solid #fde68a;color:#92400e;${hasRaid?'display:none':''}">
+              <svg style="flex-shrink:0;margin-top:.1rem" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              <div><strong>Atenção:</strong> Tarefas bloqueadas devem ter uma Ação de Mitigação vinculada. Selecione abaixo ou crie uma na aba <strong>Ações de Mitigação</strong>.</div>
+            </div>
+            <div>
+              <div style="font-size:.72rem;font-weight:600;color:var(--bhub-navy);margin-bottom:.3rem">Ação de Mitigação vinculada</div>
+              <select name="raidId" id="tmRaid">${raidOpts}</select>
+            </div>
+            <div>
+              <div style="font-size:.72rem;font-weight:600;color:var(--bhub-navy);margin-bottom:.3rem">Descrição do bloqueio</div>
+              <input type="text" name="bloqueioDescricao" value="${escapeHtml(existing?.bloqueioDescricao||'')}">
+            </div>
+          </div>
         </div>
-        <label class="block">Tarefa *
-          <textarea name="task" rows="3" required>${escapeHtml(existing?.task||'')}</textarea>
-        </label>
-        <div class="grid grid-cols-2 gap-4">
-          <label class="block">Responsável (Owner)
-            ${ownerSelectHtml(existing?.owner||'')}
-          </label>
-          <label class="block">Ferramenta / Plataforma
-            <input type="text" name="ferramenta" value="${escapeHtml(existing?.ferramenta||'')}">
-          </label>
-        </div>
-        <div class="grid grid-cols-3 gap-4">
-          <label class="block">Prazo (dias)
-            <input type="number" name="prazo" min="0" value="${existing?.prazo||0}">
-          </label>
-          <label class="block">% Concluído
-            <input type="number" name="completado" min="0" max="100" value="${existing?.completado||0}">
-          </label>
-          <label class="block">Bloqueio
-            <select name="bloqueio">
-              <option value="Não" ${existing?.bloqueio!=='Sim'?'selected':''}>Não</option>
-              <option value="Sim" ${existing?.bloqueio==='Sim'?'selected':''}>Sim</option>
-            </select>
-          </label>
-        </div>
-        <div class="grid grid-cols-2 gap-4">
-          <label class="block">Data real de conclusão
-            <input type="date" name="dataRealConclusao" value="${existing?.dataRealConclusao?toIso(existing.dataRealConclusao):''}">
-          </label>
-          <label class="block">Último update
-            <input type="date" name="ultimoUpdate" value="${existing?.ultimoUpdate?toIso(existing.ultimoUpdate):''}">
-          </label>
-        </div>
-        <label class="block">Próximo Passo
-          <input type="text" name="proximoPasso" value="${escapeHtml(existing?.proximoPasso||'')}">
-        </label>
-        <label class="block">Evidência
-          <input type="text" name="evidencia" value="${escapeHtml(existing?.evidencia||'')}" placeholder="URL ou descrição">
-        </label>
-        <label class="block">Descrição do bloqueio
-          <input type="text" name="bloqueioDescricao" value="${escapeHtml(existing?.bloqueioDescricao||'')}">
-        </label>
-        <label class="block">Ação de Mitigação vinculada
-          <select name="raidId">${raidOpts}</select>
-        </label>
-        <div class="flex justify-end gap-2 pt-2 border-t">
+
+        <!-- § Comentários -->
+        ${existing ? `<div>
+          <div style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--bhub-muted);font-family:'Roboto',sans-serif;margin-bottom:.75rem;display:flex;align-items:center;gap:.4rem">
+            <span style="display:inline-block;width:3px;height:13px;border-radius:2px;background:#94a3b8"></span>Comentários
+          </div>
+          <div id="tmHistory"></div>
+        </div>` : ''}
+      </div>
+
+      <!-- ══ FOOTER ══ -->
+      <div style="border-top:1px solid var(--bhub-border);padding:1rem 1.5rem;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;border-radius:0 0 18px 18px;background:#fafafa">
+        <div>${delHtml}</div>
+        <div style="display:flex;gap:.5rem">
           <button type="button" id="tmCancel" class="btn btn-secondary">Cancelar</button>
-          <button type="submit" class="btn btn-primary">${existing ? 'Salvar' : 'Criar'}</button>
+          <button type="button" id="tmSave" class="btn btn-primary">
+            ${isNew ? '+ Criar tarefa' : 'Salvar alterações'}
+          </button>
         </div>
-      </form>
+      </div>
     </div>
   </div>`);
 
   document.body.appendChild(m);
   const close = ()=>m.remove();
+  m.querySelector('#tmClose').onclick = close;
   m.querySelector('#tmCancel').onclick = close;
-  m.addEventListener('click', e=>{ if(e.target===m) close(); });
+  m.addEventListener('click', e=>{ if(e.target.id==='taskModalOverlay') close(); });
 
+  // ── Prazo ↔ Data prevista sync ────────────────────────────────
+  const prazoInput = m.querySelector('#tmPrazo');
+  const dueDateInput = m.querySelector('#tmDueDate');
+  if(hasDueSync){
+    prazoInput.addEventListener('input', ()=>{
+      const v = dueFromPrazo(prazoInput.value);
+      if(v) dueDateInput.value = v;
+    });
+    dueDateInput.addEventListener('change', ()=>{
+      const v = prazoFromDue(dueDateInput.value);
+      if(v >= 0) prazoInput.value = v;
+    });
+  }
+
+  // ── % Concluído slider ↔ input ────────────────────────────────
+  const rangeEl = m.querySelector('#tmRange');
+  const pctEl   = m.querySelector('#tmPct');
+  const pctLbl  = m.querySelector('#tmPctLabel');
+  rangeEl.addEventListener('input', ()=>{ pctEl.value=rangeEl.value; pctLbl.textContent=rangeEl.value+'%'; });
+  pctEl.addEventListener('input',   ()=>{ rangeEl.value=pctEl.value; pctLbl.textContent=pctEl.value+'%'; });
+
+  // ── Bloqueio toggle ───────────────────────────────────────────
+  const bloqSel  = m.querySelector('#tmBloqueio');
+  const bloqDets = m.querySelector('#bloqueioDetails');
+  const raidWarn = m.querySelector('#raidWarning');
+  const raidSel  = m.querySelector('#tmRaid');
+  function updateBloqueioUi(){
+    const isSim = bloqSel.value==='Sim';
+    bloqDets.style.display = isSim ? 'flex' : 'none';
+    if(isSim) updateRaidWarning();
+  }
+  function updateRaidWarning(){
+    if(raidWarn) raidWarn.style.display = (!raidSel||!raidSel.value) ? 'flex' : 'none';
+  }
+  bloqSel.addEventListener('change', updateBloqueioUi);
+  if(raidSel) raidSel.addEventListener('change', updateRaidWarning);
+  updateBloqueioUi();
+
+  // ── Delete ────────────────────────────────────────────────────
   const delBtn = m.querySelector('#tmDel');
   if(delBtn) delBtn.onclick = async ()=>{
-    if(!confirm('Excluir esta tarefa permanentemente?')) return;
-    try{
-      const { error } = await supa.from('tasks').delete().eq('id', existing.id);
-      if(error) throw error;
-      if(deal) deal.tasks = deal.tasks.filter(t=>t.id!==existing.id);
-      close(); render();
-    }catch(err){ alert('Erro ao excluir: '+(err.message||err)); }
+    if(canAdmin()){
+      // Admin: styled confirm then direct delete
+      const conf = el(`
+        <div class="fixed inset-0 z-30 flex items-center justify-center" style="background:rgba(15,23,39,.5);backdrop-filter:blur(2px)">
+          <div class="bg-white rounded-2xl p-6 shadow-2xl" style="max-width:380px;width:100%">
+            <div style="font-size:.95rem;font-weight:700;color:var(--bhub-navy);margin-bottom:.5rem;font-family:'Roboto',sans-serif">Excluir tarefa?</div>
+            <div style="font-size:.82rem;color:var(--bhub-muted);margin-bottom:1.25rem">Esta ação é permanente e não pode ser desfeita.</div>
+            <div style="display:flex;gap:.5rem;justify-content:flex-end">
+              <button id="confNo" class="btn btn-secondary">Cancelar</button>
+              <button id="confYes" class="btn" style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca">Excluir permanentemente</button>
+            </div>
+          </div>
+        </div>`);
+      document.body.appendChild(conf);
+      conf.querySelector('#confNo').onclick = ()=>conf.remove();
+      conf.querySelector('#confYes').onclick = async ()=>{
+        conf.remove();
+        try{
+          const { error } = await supa.from('tasks').delete().eq('id', existing.id);
+          if(error) throw error;
+          if(deal) deal.tasks = deal.tasks.filter(t=>t.id!==existing.id);
+          close(); render();
+        }catch(err){ alert('Erro ao excluir: '+(err.message||err)); }
+      };
+    } else {
+      // Non-admin owner: create deletion_request
+      const conf2 = el(`
+        <div class="fixed inset-0 z-30 flex items-center justify-center" style="background:rgba(15,23,39,.5);backdrop-filter:blur(2px)">
+          <div class="bg-white rounded-2xl p-6 shadow-2xl" style="max-width:400px;width:100%">
+            <div style="display:flex;gap:.75rem;align-items:flex-start;margin-bottom:1rem">
+              <div style="width:40px;height:40px;border-radius:99px;background:#fef3c7;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              </div>
+              <div>
+                <div style="font-size:.95rem;font-weight:700;color:var(--bhub-navy);font-family:'Roboto',sans-serif">Solicitar exclusão</div>
+                <div style="font-size:.82rem;color:var(--bhub-muted);margin-top:.3rem">Sua solicitação será enviada ao admin para aprovação. A tarefa permanecerá visível até ser aprovada.</div>
+              </div>
+            </div>
+            <div style="display:flex;gap:.5rem;justify-content:flex-end">
+              <button id="confNo" class="btn btn-secondary">Cancelar</button>
+              <button id="confYes" class="btn btn-primary">Enviar solicitação</button>
+            </div>
+          </div>
+        </div>`);
+      document.body.appendChild(conf2);
+      conf2.querySelector('#confNo').onclick = ()=>conf2.remove();
+      conf2.querySelector('#confYes').onclick = async ()=>{
+        conf2.remove();
+        try{
+          const { data, error } = await supa.from('deletion_requests').insert({
+            task_id: existing.id,
+            company_id: company.id,
+            requested_by_id: session?.id,
+            requested_by_name: session?.username||session?.email||'—',
+            status: 'pending',
+            task_ref: existing.ref||'',
+            task_desc: existing.task||''
+          }).select().single();
+          if(error) throw error;
+          if(!state.deletionRequests) state.deletionRequests = [];
+          state.deletionRequests.push(data);
+          close(); render();
+        }catch(err){ alert('Erro ao solicitar exclusão: '+(err.message||err)); }
+      };
+    }
   };
 
-  m.querySelector('#tmForm').onsubmit = async e=>{
-    e.preventDefault();
-    const fd  = new FormData(e.target);
-    const showErr = msg=>{ const el2=m.querySelector('#tmErr'); el2.textContent=msg; el2.classList.remove('hidden'); };
-    if(!fd.get('task')?.trim()) return showErr('A descrição da tarefa é obrigatória.');
+  // ── Save ──────────────────────────────────────────────────────
+  m.querySelector('#tmSave').onclick = async ()=>{
+    const showErr = msg=>{ const e2=m.querySelector('#tmErr'); e2.textContent=msg; e2.style.display='block'; e2.scrollIntoView({behavior:'smooth',block:'nearest'}); };
+    const taskVal = m.querySelector('[name="task"]').value?.trim();
+    if(!taskVal) return showErr('A descrição da tarefa é obrigatória.');
     const payload = {
-      ref:              fd.get('ref')||'',
-      area:             fd.get('area')||'',
-      task:             fd.get('task')||'',
-      owner:            fd.get('owner')||'',
-      ferramenta:       fd.get('ferramenta')||'',
-      prazo:            parseInt(fd.get('prazo'))||0,
-      completado:       parseInt(fd.get('completado'))||0,
-      bloqueio:         fd.get('bloqueio')||'Não',
-      bloqueioDescricao:fd.get('bloqueioDescricao')||'',
-      dataRealConclusao:fd.get('dataRealConclusao')||'',
-      ultimoUpdate:     fd.get('ultimoUpdate')||'',
-      proximoPasso:     fd.get('proximoPasso')||'',
-      evidencia:        fd.get('evidencia')||'',
-      raidId:           fd.get('raidId')||null,
+      ref:              m.querySelector('[name="ref"]').value||'',
+      area:             m.querySelector('[name="area"]').value||'',
+      task:             taskVal,
+      owner:            m.querySelector('[name="owner"]')?.value||existing?.owner||'',
+      ferramenta:       m.querySelector('[name="ferramenta"]').value||'',
+      prazo:            parseInt(prazoInput.value)||0,
+      completado:       parseInt(pctEl.value)||0,
+      bloqueio:         bloqSel.value||'Não',
+      bloqueioDescricao:m.querySelector('[name="bloqueioDescricao"]')?.value||'',
+      dataRealConclusao:m.querySelector('[name="dataRealConclusao"]').value||'',
+      ultimoUpdate:     m.querySelector('[name="ultimoUpdate"]').value||'',
+      proximoPasso:     existing?.proximoPasso||'',
+      evidencia:        m.querySelector('[name="evidencia"]').value||'',
+      raidId:           raidSel?.value||null,
       phaseId:          existing?.phaseId||'',
-      pendingApproval:  existing?.pendingApproval||false
+      pendingApproval:  isNew ? !canAdmin() : (existing?.pendingApproval||false)
     };
+    const saveBtn = m.querySelector('#tmSave');
+    saveBtn.disabled = true; saveBtn.textContent = 'Salvando…';
     try{
       if(existing){
         const { error } = await supa.from('tasks').update(taskToDb(payload, company.id)).eq('id', existing.id);
@@ -4364,51 +4614,134 @@ function openTaskModal(company, taskId){
       } else {
         const { data, error } = await supa.from('tasks').insert(taskToDb(payload, company.id)).select().single();
         if(error) throw error;
-        const newTask = taskFromDb(data);
         if(!deal.tasks) deal.tasks = [];
-        deal.tasks.push(newTask);
+        deal.tasks.push(taskFromDb(data));
+        if(!canAdmin()){
+          // Mostra aviso de aprovação pendente
+          const toast = el(`<div style="position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%);background:#1e40af;color:#fff;padding:.65rem 1.1rem;border-radius:.875rem;font-size:.82rem;z-index:99;box-shadow:0 4px 20px rgba(0,0,0,.2);display:flex;align-items:center;gap:.5rem">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+            Tarefa criada e aguardando aprovação do admin
+          </div>`);
+          document.body.appendChild(toast);
+          setTimeout(()=>toast.remove(), 4000);
+        }
       }
       close(); render();
-    }catch(err){ showErr('Erro: '+(err.message||err)); }
+    }catch(err){ saveBtn.disabled=false; saveBtn.textContent=isNew?'+ Criar tarefa':'Salvar alterações'; showErr('Erro: '+(err.message||err)); }
   };
+
+  // ── Comments ─────────────────────────────────────────────────
+  if(existing){
+    const histEl = m.querySelector('#tmHistory');
+    if(histEl) renderFreeComments(histEl, 'tasks', existing.id);
+  }
 }
 
 /* ===================================================================
-   renderCommentsPanel — painel de histórico/comentários (audit_log)
-   container : elemento DOM onde renderizar
-   type      : 'raid' | 'task'
-   entityId  : UUID do item
+   renderFreeComments — painel de comentários livres
+   container  : elemento DOM onde renderizar
+   entityType : 'tasks' | 'raid_items'
+   entityId   : UUID do item
 =================================================================== */
-async function renderCommentsPanel(container, type, entityId){
+async function renderFreeComments(container, entityType, entityId){
   if(!container) return;
-  const entityType = type==='raid' ? 'raid_items' : 'tasks';
-  container.innerHTML = `<div class="text-xs text-gray-400 py-2">Carregando histórico…</div>`;
-  try{
-    const { data, error } = await supa.from('audit_log').select('*')
-      .eq('entity_type', entityType).eq('entity_id', entityId)
-      .order('ts', {ascending:false}).limit(50);
-    if(error) throw error;
-    if(!data||!data.length){
-      container.innerHTML = `<div class="text-xs text-gray-400 py-2">Sem histórico de alterações registrado.</div>`;
-      return;
-    }
-    container.innerHTML = `<div class="space-y-2 text-xs">${data.map(r=>{
-      const when = new Date(r.ts).toLocaleString('pt-BR');
-      const actor = r.actor_name||r.actor_email||'sistema';
-      const actLabel = r.action==='insert'?'criou':r.action==='update'?'alterou':'removeu';
-      const color = r.action==='insert'?'#15803d':r.action==='update'?'#1e40af':'#b91c1c';
-      const diff = r.diff ? diffHtml(r.diff) : '';
-      return `<div class="border-l-4 pl-3 py-1.5 rounded-r" style="border-color:${color};background:#fafafa">
-        <div class="flex justify-between flex-wrap gap-1">
-          <span><b>${escapeHtml(actor)}</b> ${actLabel}</span>
-          <span class="text-gray-400">${when}</span>
-        </div>
-        ${diff?`<div class="mt-1 text-gray-600">${diff}</div>`:''}
-      </div>`;
-    }).join('')}</div>`;
-  }catch(err){
-    container.innerHTML = `<div class="text-xs text-red-500">Erro ao carregar histórico: ${escapeHtml(err.message||String(err))}</div>`;
+
+  function initials(name){
+    return (name||'?').split(' ').slice(0,2).map(w=>w[0]||'').join('').toUpperCase()||'?';
   }
+  function timeAgo(iso){
+    const d = new Date(iso), now = new Date();
+    const diff = Math.floor((now-d)/1000);
+    if(diff<60)   return 'agora';
+    if(diff<3600) return Math.floor(diff/60)+'min atrás';
+    if(diff<86400)return Math.floor(diff/3600)+'h atrás';
+    return d.toLocaleDateString('pt-BR',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+  }
+
+  async function load(){
+    container.innerHTML = `<div style="font-size:.75rem;color:#9ca3af;padding:.5rem 0">Carregando…</div>`;
+    try{
+      const { data, error } = await supa.from('audit_log').select('*')
+        .eq('entity_type', entityType).eq('entity_id', entityId)
+        .eq('action','comment')
+        .order('ts', {ascending:true}).limit(100);
+      if(error) throw error;
+      renderComments(data||[]);
+    }catch(err){
+      container.innerHTML = `<div style="font-size:.75rem;color:#ef4444">Erro ao carregar comentários.</div>`;
+    }
+  }
+
+  function renderComments(rows){
+    const list = rows.length ? rows.map(r=>{
+      const actor = r.actor_name||r.actor_email||'—';
+      let msg = '';
+      try{ msg = r.diff?.message || JSON.parse(r.diff||'{}').message || ''; }catch{ msg = ''; }
+      const color = stringToColor(actor);
+      return `<div style="display:flex;gap:.65rem;align-items:flex-start">
+        <div style="width:30px;height:30px;border-radius:99px;background:${color};color:#fff;display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:700;flex-shrink:0;font-family:'Roboto',sans-serif">${escapeHtml(initials(actor))}</div>
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:baseline;gap:.5rem;margin-bottom:.25rem">
+            <span style="font-size:.8rem;font-weight:700;color:var(--bhub-navy)">${escapeHtml(actor)}</span>
+            <span style="font-size:.68rem;color:#9ca3af">${timeAgo(r.ts)}</span>
+          </div>
+          <div style="font-size:.82rem;color:#374151;line-height:1.5;background:#f8fafc;border-radius:0 .75rem .75rem .75rem;padding:.5rem .7rem;border:1px solid #e2e8f0">${escapeHtml(msg)}</div>
+        </div>
+      </div>`;
+    }).join('') : `<div style="font-size:.8rem;color:#9ca3af;text-align:center;padding:1.25rem 0">Nenhum comentário ainda. Seja o primeiro!</div>`;
+
+    container.innerHTML = `
+      <div id="cmtList" style="display:flex;flex-direction:column;gap:.85rem;margin-bottom:1rem">${list}</div>
+      <div style="display:flex;gap:.5rem;align-items:flex-end">
+        <textarea id="cmtInput" rows="2" placeholder="Escreva um comentário…"
+          style="flex:1;resize:none;border-radius:.75rem;font-size:.82rem;padding:.5rem .7rem;border:1px solid var(--bhub-border);font-family:inherit;transition:border-color .2s"
+          onfocus="this.style.borderColor='var(--bhub-blue)'" onblur="this.style.borderColor='var(--bhub-border)'"></textarea>
+        <button id="cmtSend" style="padding:.5rem .9rem;border-radius:.75rem;background:var(--bhub-blue);color:#fff;border:none;cursor:pointer;font-size:.8rem;font-weight:600;font-family:'Roboto',sans-serif;white-space:nowrap;flex-shrink:0;transition:background .15s"
+          onmouseover="this.style.background='var(--bhub-blue-700)'" onmouseout="this.style.background='var(--bhub-blue)'">Enviar</button>
+      </div>`;
+
+    container.querySelector('#cmtSend').onclick = async ()=>{
+      const input = container.querySelector('#cmtInput');
+      const msg = input.value.trim();
+      if(!msg) return;
+      const btn = container.querySelector('#cmtSend');
+      btn.disabled = true; btn.textContent = '…';
+      try{
+        const actor = session?.username||session?.email||'—';
+        const { error } = await supa.from('audit_log').insert({
+          entity_type: entityType,
+          entity_id: entityId,
+          action: 'comment',
+          actor_name: actor,
+          actor_email: session?.email||null,
+          diff: { message: msg },
+          ts: new Date().toISOString()
+        });
+        if(error) throw error;
+        input.value = '';
+        await load(); // reload comments
+      }catch(err){
+        btn.disabled=false; btn.textContent='Enviar';
+        alert('Erro ao enviar comentário: '+(err.message||err));
+      }
+    };
+
+    // Ctrl+Enter to send
+    const input = container.querySelector('#cmtInput');
+    if(input) input.addEventListener('keydown', e=>{
+      if((e.ctrlKey||e.metaKey) && e.key==='Enter') container.querySelector('#cmtSend').click();
+    });
+  }
+
+  // Deterministic color from name string
+  function stringToColor(str){
+    let h = 0;
+    for(let i=0;i<str.length;i++) h = str.charCodeAt(i) + ((h<<5)-h);
+    const hue = ((h%360)+360)%360;
+    return `hsl(${hue},55%,40%)`;
+  }
+
+  await load();
 }
 
 /* ===== Synergy Tracker ===== */
