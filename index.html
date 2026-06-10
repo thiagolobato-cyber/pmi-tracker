@@ -6352,6 +6352,15 @@ function renderHoje(){
 
   const decisions = allRaid
     .filter(r => r.decisaoDesc && r.status==='open')
+    .map(r => {
+      // Relação do usuário logado com esta decisão
+      const iAmOwner      = isMe(r.owner);
+      const iAmParticipant = allTasks.some(t => t.raidId === r.id && isMe(t.owner));
+      const _relation = iAmOwner ? 'owner' : iAmParticipant ? 'participant' : null;
+      return {...r, _relation};
+    })
+    // Não-admins só veem decisões onde têm relação direta
+    .filter(r => canAdmin() || r._relation)
     .sort((a,b) => (b.severity==='high'?2:b.severity==='med'?1:0) - (a.severity==='high'?2:a.severity==='med'?1:0));
 
   const myUpcoming = allTasks
@@ -6400,10 +6409,24 @@ function renderHoje(){
   }
   function decisionRow(r){
     const sev = r.severity==='high'?'Alta':r.severity==='med'?'Média':'Baixa';
-    // data-raid-id → navega para Ações de Mitigação e abre o modal de edição
+    // Badge de relação
+    const relBadge = r._relation==='owner'
+      ? `<span style="display:inline-flex;align-items:center;gap:.25rem;font-size:.65rem;font-weight:700;padding:.15rem .5rem;border-radius:99px;background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe;white-space:nowrap">
+           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+           Você é o owner
+         </span>`
+      : r._relation==='participant'
+        ? `<span style="display:inline-flex;align-items:center;gap:.25rem;font-size:.65rem;font-weight:700;padding:.15rem .5rem;border-radius:99px;background:#f3e8ff;color:#6b21a8;border:1px solid #e9d5ff;white-space:nowrap">
+             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+             Você é participante
+           </span>`
+        : '';
     return `<div class="hoje-row" data-raid-id="${r.id}" style="cursor:pointer">
       <div class="hoje-row-left">
-        <div class="hoje-row-task" title="${escapeHtml(r.title)}">${escapeHtml(r.title)}</div>
+        <div class="hoje-row-task" title="${escapeHtml(r.title)}" style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
+          <span>${escapeHtml(r.title)}</span>
+          ${relBadge}
+        </div>
         <div class="hoje-row-meta">
           <span>${escapeHtml(r._deal?.name||'')}</span><span class="sep">·</span>
           <span>${escapeHtml(r.area||'—')}</span>
