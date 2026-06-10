@@ -5203,14 +5203,31 @@ function describeAuditChanges(row){
     })
     .slice(0,8);
   if(!entries.length) return '';
+  function resolveVal(k, raw){
+    if(_auditEmpty(raw)) return null;
+    const s = String(raw);
+    // UUIDs for raid_id → resolve to RAID title
+    if(k==='raid_id'||k==='raid_item_id'){
+      const r = state.raid.find(x=>x.id===s);
+      return r ? (r.title||s).slice(0,80) : s.slice(0,36);
+    }
+    // company_id → company name
+    if(k==='company_id'||k==='deal_id'){
+      const c = state.companies.find(x=>x.id===s);
+      return c ? c.name : s.slice(0,36);
+    }
+    return s.slice(0,80);
+  }
   return entries.map(([k,v])=>{
     const label = AUDIT_FIELD_LABELS[k] || k.replace(/_/g,' ');
-    const ov = _auditEmpty(v?.old)
+    const ovText = resolveVal(k, v?.old);
+    const nvText = resolveVal(k, v?.new);
+    const ov = ovText===null
       ? `<span style="color:#9ca3af">vazio</span>`
-      : `<span style="background:#fee2e2;color:#991b1b;padding:.05rem .3rem;border-radius:3px">${escapeHtml(String(v.old).slice(0,80))}</span>`;
-    const nv = _auditEmpty(v?.new)
+      : `<span style="background:#fee2e2;color:#991b1b;padding:.05rem .3rem;border-radius:3px">${escapeHtml(ovText)}</span>`;
+    const nv = nvText===null
       ? `<span style="color:#9ca3af">vazio</span>`
-      : `<span style="background:#dcfce7;color:#166534;padding:.05rem .3rem;border-radius:3px;font-weight:600">${escapeHtml(String(v.new).slice(0,80))}</span>`;
+      : `<span style="background:#dcfce7;color:#166534;padding:.05rem .3rem;border-radius:3px;font-weight:600">${escapeHtml(nvText)}</span>`;
     return `<span style="color:#6b7280;font-size:.68rem">${escapeHtml(label)}</span>&nbsp;${ov}&nbsp;→&nbsp;${nv}`;
   }).join('<br>');
 }
@@ -5232,9 +5249,8 @@ function renderDealHistorico(company){
           <select id="histType" class="text-xs" style="width:160px">
             <option value="">Todas as entidades</option>
             <option value="tasks">Tarefas</option>
-            <option value="raid_items">RAID</option>
+            <option value="raid_items">Ação de Mitigação</option>
             <option value="synergies">Sinergias</option>
-            <option value="health_entries">Health</option>
             <option value="comments">Comentários</option>
             <option value="companies">Empresa</option>
           </select>
