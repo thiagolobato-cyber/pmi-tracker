@@ -6374,7 +6374,8 @@ function renderHoje(){
 
   // Estado local: filtro de deal + filtro de pessoa + limites de paginação por seção
   let filterDeal = '';
-  let filterOwner = '';
+  // Owners só veem suas próprias tarefas; admins podem ver todos
+  let filterOwner = canAdmin() ? '' : '__me__';
   const limits = { late: PAGE, dec: PAGE, up: PAGE };
 
   const hour = new Date().getHours();
@@ -6526,12 +6527,13 @@ function renderHoje(){
           <option value="">Todos os deals${dealList.length>0?` (${dealList.length})`:''}</option>
           ${dealList.map(([id,name])=>`<option value="${id}">${escapeHtml(name)}</option>`).join('')}
         </select>
+        ${canAdmin() ? `
         <span style="font-size:.78rem;color:var(--bhub-muted);font-weight:600;white-space:nowrap;margin-left:.25rem">Pessoa:</span>
         <select id="ownerFilter" style="min-width:160px">
           <option value="">Todo mundo</option>
           <option value="__me__">⭐ Meu nome (${escapeHtml([...meTokens][0]||'eu')})</option>
           ${allOwners.filter(o=>!isMe(o)).map(o=>`<option value="${escapeHtml(o)}">${escapeHtml(o)}</option>`).join('')}
-        </select>
+        </select>` : ''}
       </div>
 
       <!-- Seção 1: Tarefas atrasadas -->
