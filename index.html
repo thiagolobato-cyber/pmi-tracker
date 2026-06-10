@@ -4213,6 +4213,204 @@ function openRaidModal(company, raidId){
   };
 }
 
+/* ===================================================================
+   openTaskModal — cria ou edita uma tarefa de um deal
+   company  : objeto { id, name, ... }
+   taskId   : string | undefined  (undefined = nova tarefa)
+=================================================================== */
+function openTaskModal(company, taskId){
+  if(!company){ console.warn('openTaskModal: company ausente'); return; }
+  const deal     = state.deals[company.id];
+  const existing = taskId ? (deal?.tasks||[]).find(t=>t.id===taskId) : null;
+  const title    = existing ? 'Editar Tarefa' : 'Nova Tarefa';
+
+  const allAreas = Array.from(new Set([
+    ...DEFAULT_AREAS.map(a=>a.name),
+    ...(state.template||[]).map(t=>t.area),
+    ...(deal?.tasks||[]).map(t=>t.area)
+  ].filter(Boolean))).sort();
+
+  const areaOpts = allAreas.map(a=>
+    `<option value="${escapeHtml(a)}" ${existing?.area===a?'selected':''}>${escapeHtml(a)}</option>`
+  ).join('');
+
+  const raidOpts = [
+    `<option value="">— Nenhuma —</option>`,
+    ...(state.raid||[]).filter(r=>(r.dealIds||[]).includes(company.id)||r.id===existing?.raidId).map(r=>
+      `<option value="${r.id}" ${existing?.raidId===r.id?'selected':''}>${escapeHtml(r.title||r.id)}</option>`
+    )
+  ].join('');
+
+  const m = el(`
+  <div class="fixed inset-0 bg-black/40 z-20 flex items-center justify-center p-4" id="taskModalOverlay">
+    <div class="bg-white rounded-xl w-full max-w-2xl shadow-xl overflow-y-auto" style="max-height:90vh">
+      <div class="flex items-center justify-between p-5 border-b">
+        <div>
+          <h2 class="text-base font-semibold" style="color:var(--bhub-navy)">${title}</h2>
+          <div class="text-xs text-gray-500 mt-0.5">${escapeHtml(company.name)}</div>
+        </div>
+        ${existing && canAdmin() ? `<button id="tmDel" class="btn btn-secondary text-xs" style="color:#991b1b;border-color:#fecaca">Excluir</button>` : ''}
+      </div>
+      <form id="tmForm" class="p-5 space-y-4">
+        <div id="tmErr" class="text-xs rounded p-2 hidden" style="color:#991b1b;background:#fee2e2"></div>
+        <div class="grid grid-cols-2 gap-4">
+          <label class="block">REF
+            <input type="text" name="ref" value="${escapeHtml(existing?.ref||'')}" placeholder="ex: 1.1">
+          </label>
+          <label class="block">Área *
+            <select name="area">
+              <option value="">— Área —</option>
+              ${areaOpts}
+            </select>
+          </label>
+        </div>
+        <label class="block">Tarefa *
+          <textarea name="task" rows="3" required>${escapeHtml(existing?.task||'')}</textarea>
+        </label>
+        <div class="grid grid-cols-2 gap-4">
+          <label class="block">Responsável (Owner)
+            ${ownerSelectHtml(existing?.owner||'')}
+          </label>
+          <label class="block">Ferramenta / Plataforma
+            <input type="text" name="ferramenta" value="${escapeHtml(existing?.ferramenta||'')}">
+          </label>
+        </div>
+        <div class="grid grid-cols-3 gap-4">
+          <label class="block">Prazo (dias)
+            <input type="number" name="prazo" min="0" value="${existing?.prazo||0}">
+          </label>
+          <label class="block">% Concluído
+            <input type="number" name="completado" min="0" max="100" value="${existing?.completado||0}">
+          </label>
+          <label class="block">Bloqueio
+            <select name="bloqueio">
+              <option value="Não" ${existing?.bloqueio!=='Sim'?'selected':''}>Não</option>
+              <option value="Sim" ${existing?.bloqueio==='Sim'?'selected':''}>Sim</option>
+            </select>
+          </label>
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <label class="block">Data real de conclusão
+            <input type="date" name="dataRealConclusao" value="${existing?.dataRealConclusao?toIso(existing.dataRealConclusao):''}">
+          </label>
+          <label class="block">Último update
+            <input type="date" name="ultimoUpdate" value="${existing?.ultimoUpdate?toIso(existing.ultimoUpdate):''}">
+          </label>
+        </div>
+        <label class="block">Próximo Passo
+          <input type="text" name="proximoPasso" value="${escapeHtml(existing?.proximoPasso||'')}">
+        </label>
+        <label class="block">Evidência
+          <input type="text" name="evidencia" value="${escapeHtml(existing?.evidencia||'')}" placeholder="URL ou descrição">
+        </label>
+        <label class="block">Descrição do bloqueio
+          <input type="text" name="bloqueioDescricao" value="${escapeHtml(existing?.bloqueioDescricao||'')}">
+        </label>
+        <label class="block">Ação de Mitigação vinculada
+          <select name="raidId">${raidOpts}</select>
+        </label>
+        <div class="flex justify-end gap-2 pt-2 border-t">
+          <button type="button" id="tmCancel" class="btn btn-secondary">Cancelar</button>
+          <button type="submit" class="btn btn-primary">${existing ? 'Salvar' : 'Criar'}</button>
+        </div>
+      </form>
+    </div>
+  </div>`);
+
+  document.body.appendChild(m);
+  const close = ()=>m.remove();
+  m.querySelector('#tmCancel').onclick = close;
+  m.addEventListener('click', e=>{ if(e.target===m) close(); });
+
+  const delBtn = m.querySelector('#tmDel');
+  if(delBtn) delBtn.onclick = async ()=>{
+    if(!confirm('Excluir esta tarefa permanentemente?')) return;
+    try{
+      const { error } = await supa.from('tasks').delete().eq('id', existing.id);
+      if(error) throw error;
+      if(deal) deal.tasks = deal.tasks.filter(t=>t.id!==existing.id);
+      close(); render();
+    }catch(err){ alert('Erro ao excluir: '+(err.message||err)); }
+  };
+
+  m.querySelector('#tmForm').onsubmit = async e=>{
+    e.preventDefault();
+    const fd  = new FormData(e.target);
+    const showErr = msg=>{ const el2=m.querySelector('#tmErr'); el2.textContent=msg; el2.classList.remove('hidden'); };
+    if(!fd.get('task')?.trim()) return showErr('A descrição da tarefa é obrigatória.');
+    const payload = {
+      ref:              fd.get('ref')||'',
+      area:             fd.get('area')||'',
+      task:             fd.get('task')||'',
+      owner:            fd.get('owner')||'',
+      ferramenta:       fd.get('ferramenta')||'',
+      prazo:            parseInt(fd.get('prazo'))||0,
+      completado:       parseInt(fd.get('completado'))||0,
+      bloqueio:         fd.get('bloqueio')||'Não',
+      bloqueioDescricao:fd.get('bloqueioDescricao')||'',
+      dataRealConclusao:fd.get('dataRealConclusao')||'',
+      ultimoUpdate:     fd.get('ultimoUpdate')||'',
+      proximoPasso:     fd.get('proximoPasso')||'',
+      evidencia:        fd.get('evidencia')||'',
+      raidId:           fd.get('raidId')||null,
+      phaseId:          existing?.phaseId||'',
+      pendingApproval:  existing?.pendingApproval||false
+    };
+    try{
+      if(existing){
+        const { error } = await supa.from('tasks').update(taskToDb(payload, company.id)).eq('id', existing.id);
+        if(error) throw error;
+        Object.assign(existing, payload);
+      } else {
+        const { data, error } = await supa.from('tasks').insert(taskToDb(payload, company.id)).select().single();
+        if(error) throw error;
+        const newTask = taskFromDb(data);
+        if(!deal.tasks) deal.tasks = [];
+        deal.tasks.push(newTask);
+      }
+      close(); render();
+    }catch(err){ showErr('Erro: '+(err.message||err)); }
+  };
+}
+
+/* ===================================================================
+   renderCommentsPanel — painel de histórico/comentários (audit_log)
+   container : elemento DOM onde renderizar
+   type      : 'raid' | 'task'
+   entityId  : UUID do item
+=================================================================== */
+async function renderCommentsPanel(container, type, entityId){
+  if(!container) return;
+  const entityType = type==='raid' ? 'raid_items' : 'tasks';
+  container.innerHTML = `<div class="text-xs text-gray-400 py-2">Carregando histórico…</div>`;
+  try{
+    const { data, error } = await supa.from('audit_log').select('*')
+      .eq('entity_type', entityType).eq('entity_id', entityId)
+      .order('ts', {ascending:false}).limit(50);
+    if(error) throw error;
+    if(!data||!data.length){
+      container.innerHTML = `<div class="text-xs text-gray-400 py-2">Sem histórico de alterações registrado.</div>`;
+      return;
+    }
+    container.innerHTML = `<div class="space-y-2 text-xs">${data.map(r=>{
+      const when = new Date(r.ts).toLocaleString('pt-BR');
+      const actor = r.actor_name||r.actor_email||'sistema';
+      const actLabel = r.action==='insert'?'criou':r.action==='update'?'alterou':'removeu';
+      const color = r.action==='insert'?'#15803d':r.action==='update'?'#1e40af':'#b91c1c';
+      const diff = r.diff ? diffHtml(r.diff) : '';
+      return `<div class="border-l-4 pl-3 py-1.5 rounded-r" style="border-color:${color};background:#fafafa">
+        <div class="flex justify-between flex-wrap gap-1">
+          <span><b>${escapeHtml(actor)}</b> ${actLabel}</span>
+          <span class="text-gray-400">${when}</span>
+        </div>
+        ${diff?`<div class="mt-1 text-gray-600">${diff}</div>`:''}
+      </div>`;
+    }).join('')}</div>`;
+  }catch(err){
+    container.innerHTML = `<div class="text-xs text-red-500">Erro ao carregar histórico: ${escapeHtml(err.message||String(err))}</div>`;
+  }
+}
+
 /* ===== Synergy Tracker ===== */
 function renderDealSynergies(company, deal){
   const syns = (deal.synergies||[]);
@@ -5178,9 +5376,9 @@ function openTemplateModal(id){
 
   // Auto-gera REF com base na área selecionada
   function nextRefForArea(areaName){
-    const entry = DEFAULT_AREAS.find(a=>a.name===areaName);
-    if(!entry) return '';
-    const prefix = entry.n.split('.')[0]; // "1.0" → "1"
+    const idx = DEFAULT_AREAS.findIndex(a=>a.name===areaName);
+    // Áreas canônicas → prefixo 1-based; áreas customizadas → após o último canônico
+    const prefix = idx >= 0 ? idx + 1 : DEFAULT_AREAS.length + 1;
     const nums = state.template
       .filter(x=>x.area===areaName && x.id!==t.id)
       .map(x=>{ const p=(x.ref||'').split('.'); return p.length>=2?parseInt(p[1]):0; })
