@@ -4702,7 +4702,7 @@ function openTaskModal(company, taskId){
       owner:            m.querySelector('[name="owner"]')?.value||existing?.owner||'',
       ferramenta:       existing?.ferramenta||'',
       prazo:            parseInt(prazoInput.value)||0,
-      completado:       parseInt(pctEl.value)||0,
+      completado:       parseInt(m.querySelector('[name="completado"]')?.value)||existing?.completado||0,
       bloqueio:         bloqSel.value||'Não',
       bloqueioDescricao:m.querySelector('[name="bloqueioDescricao"]')?.value||'',
       dataRealConclusao:m.querySelector('[name="dataRealConclusao"]').value||'',
