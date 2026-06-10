@@ -3196,15 +3196,44 @@ function openCompanyModal(existing){
     }catch(err){ alert('Erro ao salvar: '+(err.message||err)); }
   };
   const del = m.querySelector('#delCo');
-  if(del) del.onclick = async ()=>{
-    if(!confirm('Excluir esta empresa e todas as suas tarefas?')) return;
-    try{
-      const { error } = await supa.from('companies').delete().eq('id', existing.id);
-      if(error) throw error;
-      state.companies = state.companies.filter(c=>c.id!==existing.id);
-      delete state.deals[existing.id];
-      m.remove(); view.tab='empresas'; view.dealId=null; render();
-    }catch(err){ alert('Erro: '+(err.message||err)); }
+  if(del) del.onclick = ()=>{
+    // Double-confirmation modal
+    const conf = el(`
+      <div class="fixed inset-0 bg-black/60 z-30 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl text-center">
+          <div style="font-size:2rem;margin-bottom:.5rem">⚠️</div>
+          <div style="font-size:1rem;font-weight:700;color:#111827;margin-bottom:.4rem">Excluir "${escapeHtml(existing.name)}"?</div>
+          <p style="font-size:.82rem;color:#6b7280;margin-bottom:1.2rem">Esta ação é <b>irreversível</b>. Todas as tarefas, histórico e ações de mitigação vinculadas serão excluídos permanentemente.</p>
+          <p style="font-size:.78rem;font-weight:600;color:#991b1b;margin-bottom:1rem">Digite o nome do deal para confirmar:</p>
+          <input id="confName" placeholder="${escapeHtml(existing.name)}" style="width:100%;margin-bottom:.75rem;border-color:#fca5a5">
+          <div id="confErr" style="font-size:.75rem;color:#dc2626;margin-bottom:.5rem;display:none">Nome incorreto.</div>
+          <div class="flex gap-2">
+            <button id="confCancel" class="btn btn-secondary" style="flex:1">Cancelar</button>
+            <button id="confOk" class="btn btn-danger" style="flex:1">Excluir definitivamente</button>
+          </div>
+        </div>
+      </div>`);
+    document.body.appendChild(conf);
+    conf.querySelector('#confCancel').onclick = ()=>conf.remove();
+    conf.querySelector('#confOk').onclick = async ()=>{
+      const typed = conf.querySelector('#confName').value.trim();
+      if(typed.toLowerCase() !== existing.name.trim().toLowerCase()){
+        conf.querySelector('#confErr').style.display='block'; return;
+      }
+      conf.querySelector('#confOk').disabled = true;
+      conf.querySelector('#confOk').textContent = 'Excluindo…';
+      try{
+        // Delete audit_log first (FK constraint)
+        await supa.from('audit_log').delete().eq('company_id', existing.id);
+        // Delete related data
+        await supa.from('raid_deal_links').delete().eq('company_id', existing.id);
+        const { error } = await supa.from('companies').delete().eq('id', existing.id);
+        if(error) throw error;
+        state.companies = state.companies.filter(c=>c.id!==existing.id);
+        delete state.deals[existing.id];
+        conf.remove(); m.remove(); view.tab='empresas'; view.dealId=null; render();
+      }catch(err){ alert('Erro: '+(err.message||err)); conf.remove(); }
+    };
   };
 }
 
@@ -4324,11 +4353,18 @@ function openTaskModal(company, taskId){
   // ── Status chip ──────────────────────────────────────────────
   let statusChip = '';
   if(existing){
-    const p = existing.completado||0;
-    if(p>=100)       statusChip = `<span class="status-done pill" style="font-size:.7rem">Done</span>`;
-    else if(existing.bloqueio==='Sim') statusChip = `<span class="status-late pill" style="font-size:.7rem">Bloqueado</span>`;
-    else if(p>0)     statusChip = `<span class="status-ontrack pill" style="font-size:.7rem">Em andamento</span>`;
-    else             statusChip = `<span class="status-empty pill" style="font-size:.7rem">Não iniciado</span>`;
+    const cf = computeTaskFields(existing, company);
+    const st = cf.status;
+    if(st==='done' || existing.dataRealConclusao)
+      statusChip = `<span class="status-done pill" style="font-size:.7rem">Done</span>`;
+    else if(existing.bloqueio==='Sim')
+      statusChip = `<span class="status-late pill" style="font-size:.7rem">Bloqueado</span>`;
+    else if(st==='late')
+      statusChip = `<span class="status-late pill" style="font-size:.7rem">Atrasado</span>`;
+    else if(st==='ontrack')
+      statusChip = `<span class="status-ontrack pill" style="font-size:.7rem">Em andamento</span>`;
+    else
+      statusChip = `<span class="status-empty pill" style="font-size:.7rem">Não iniciado</span>`;
   }
 
   // ── Prazo ↔ Data prevista ─────────────────────────────────────
@@ -4480,18 +4516,7 @@ function openTaskModal(company, taskId){
               <input type="number" name="prazo" id="tmPrazo" min="0" value="${initPrazo}">
             </div>
           </div>
-          <div style="margin-top:.75rem">
-            <div style="font-size:.72rem;font-weight:600;color:var(--bhub-navy);margin-bottom:.3rem">
-              % Concluído
-              <span id="tmPctLabel" style="font-weight:700;color:var(--bhub-blue);margin-left:.4rem">${existing?.completado||0}%</span>
-            </div>
-            <div style="display:flex;align-items:center;gap:.75rem">
-              <input type="range" id="tmRange" min="0" max="100" value="${existing?.completado||0}"
-                     style="flex:1;height:6px;accent-color:var(--bhub-blue);cursor:pointer">
-              <input type="number" name="completado" id="tmPct" min="0" max="100" value="${existing?.completado||0}"
-                     style="width:70px;text-align:center">
-            </div>
-          </div>
+          <input type="hidden" name="completado" value="${existing?.completado||0}">
           <div style="margin-top:.75rem">
             <div style="font-size:.72rem;font-weight:600;color:var(--bhub-navy);margin-bottom:.3rem">Data real de conclusão</div>
             <input type="date" name="dataRealConclusao" value="${existing?.dataRealConclusao?toIso(existing.dataRealConclusao):''}">
@@ -4571,13 +4596,6 @@ function openTaskModal(company, taskId){
       if(v >= 0) prazoInput.value = v;
     });
   }
-
-  // ── % Concluído slider ↔ input ────────────────────────────────
-  const rangeEl = m.querySelector('#tmRange');
-  const pctEl   = m.querySelector('#tmPct');
-  const pctLbl  = m.querySelector('#tmPctLabel');
-  rangeEl.addEventListener('input', ()=>{ pctEl.value=rangeEl.value; pctLbl.textContent=rangeEl.value+'%'; });
-  pctEl.addEventListener('input',   ()=>{ rangeEl.value=pctEl.value; pctLbl.textContent=pctEl.value+'%'; });
 
   // ── Bloqueio toggle ───────────────────────────────────────────
   const bloqSel  = m.querySelector('#tmBloqueio');
