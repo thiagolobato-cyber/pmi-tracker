@@ -3863,7 +3863,7 @@ function renderDeal(){
             <option value="__all__">Todos os deals</option>
             ${state.companies.map(c=>`<option value="${c.id}" ${c.id===company.id?'selected':''}>${c.name}</option>`).join('')}
           </select>
-          ${canEdit() ? `<button id="editCo" class="btn btn-secondary">⚙ Editar</button>`:''}
+          ${canAdmin() ? `<button id="editCo" class="btn btn-secondary">⚙ Editar</button>`:''}
         </div>
       </div>
 
