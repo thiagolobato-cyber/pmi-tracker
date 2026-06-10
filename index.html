@@ -665,6 +665,7 @@ function raidFromDb(r){
     decisaoDesc: r.decisao_desc||'', premissaDesc: r.premissa_desc||'',
     severity: r.severity||'med', status: r.status||'open',
     owner: r.owner||'', dueDate: r.due_date||'', mitigation: r.mitigation||'',
+    participantes: Array.isArray(r.participants) ? r.participants : (r.participants ? (()=>{ try{ return JSON.parse(r.participants); }catch(e){ return []; } })() : []),
     createdAt: r.created_at,
     dealIds: []  // populated after loading raid_deal_links
   };
@@ -678,7 +679,8 @@ function raidToDb(r){
     risco_desc: r.riscoDesc||'', issue_desc: r.issueDesc||'',
     decisao_desc: r.decisaoDesc||'', premissa_desc: r.premissaDesc||'',
     severity: r.severity||'med', status: r.status||'open',
-    owner: r.owner||'', due_date: emptyDate(r.dueDate), mitigation: r.mitigation||''
+    owner: r.owner||'', due_date: emptyDate(r.dueDate), mitigation: r.mitigation||'',
+    participants: r.participantes||[]
   };
 }
 
@@ -1523,7 +1525,7 @@ function renderCobranca(){
             <span style="display:inline-flex;align-items:center;justify-content:center;width:1.8rem;height:1.8rem;border-radius:.45rem;background:#fee2e2;color:#991b1b">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r=".5" fill="currentColor"/></svg>
             </span>
-            Cobrança
+            Acompanhamento
           </h1>
           <p class="subtitle">Tarefas atrasadas por área e responsável — ${isFiltered ? totalLate+' de '+totalAll : totalAll} tarefa${totalAll!==1?'s':''} em atraso</p>
         </div>
@@ -1662,7 +1664,7 @@ function renderShell(){
 function renderSidebar(){
   const pmoTabs = canAdmin() ? [
     ['homebroker', 'Visão Estratégica', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>'],
-    ['cobranca',   'Cobrança','<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>'],
+    ['cobranca',   'Acompanhamento','<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>'],
   ] : [];
   const portfolioTabs = [
     ['dashboard','Dashboard',      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>'],
@@ -2063,12 +2065,8 @@ function renderRaidPortfolio(){
       },0);
       const tr = document.createElement('tr');
       if(r.status==='closed') tr.className='opacity-50';
-      // Participantes: owners únicos de tarefas vinculadas a este RAID
-      const participants = [...new Set(
-        (r.dealIds||[]).flatMap(cid=>(state.deals[cid]?.tasks||[])
-          .filter(t=>t.raidId===r.id && t.owner)
-          .map(t=>t.owner))
-      )].filter(p=>p !== r.owner); // exclui owner já listado na coluna owner
+      // Participantes: lista explícita salva no RAID item
+      const participants = (r.participantes||[]).filter(p=>p && p !== r.owner);
       const participantsHtml = participants.length
         ? participants.map(p=>{
             const initials = p.split(' ').slice(0,2).map(w=>w[0]||'').join('').toUpperCase();
@@ -2157,7 +2155,7 @@ function dashExpandTable(id, rows, headers, rowFn){
 function getBlockedTasksHtml(raidId, colspan){
   const tasks = Object.entries(state.deals).flatMap(([cid, d])=>
     (d.tasks||[]).filter(t=>t.bloqueio==='Sim' && t.raidId===raidId)
-      .map(t=>({...t, deal: d.name||d.company?.name||cid, dealId: cid}))
+      .map(t=>({...t, deal: state.companies.find(x=>x.id===cid)?.name||cid, dealId: cid}))
   );
   const inner = tasks.length
     ? `<div style="padding:.5rem 1rem .75rem">
@@ -3989,7 +3987,7 @@ function renderDealTasks(company, deal, tasks){
                   const approveBtn = t.pendingApproval && canAdmin()
                     ? ` <button data-approve-task="${t.id}" data-company-id="${company.id}" title="Aprovar tarefa" style="margin-left:.25rem;font-size:.65rem;padding:.1rem .4rem;border-radius:.5rem;background:#dcfce7;color:#166534;border:1px solid #bbf7d0;cursor:pointer;font-weight:600">✓ Aprovar</button><button data-reject-task="${t.id}" data-company-id="${company.id}" title="Rejeitar e excluir" style="font-size:.65rem;padding:.1rem .4rem;border-radius:.5rem;background:#fee2e2;color:#991b1b;border:1px solid #fecaca;cursor:pointer;font-weight:600">✕</button>`
                     : '';
-                  return `<tr class="dt-row"${t.pendingApproval?' style="opacity:.55;background:#f8faff"':''}>
+                  return `<tr class="dt-row" data-task-edit="${t.id}" style="${t.pendingApproval?'opacity:.55;background:#f8faff;':''}cursor:pointer" title="Clique para editar">
                   <td class="text-xs">${t.ref||''}</td>
                   <td>${t.task||''}${pendingBadge}${approveBtn}${hasPendingDel?` <span title="Exclusão aguardando aprovação do admin" style="display:inline-block;font-size:.65rem;padding:.1rem .35rem;border-radius:.75rem;background:#fef3c7;color:#92400e;border:1px solid #fde68a;font-weight:600;white-space:nowrap">⏳ Excl. pendente</span>`:''}</td>
                   <td><span class="pill ${statusClass(t._f.status)}">${statusLabel(t._f.status)}</span></td>
@@ -4031,6 +4029,12 @@ function renderDealTasks(company, deal, tasks){
   const addTask = node.querySelector('#addTask');
   if(addTask) addTask.onclick = ()=>openTaskModal(company);
   node.querySelectorAll('[data-edit]').forEach(b=>b.onclick = ()=>openTaskModal(company, b.dataset.edit));
+  node.querySelectorAll('tr.dt-row[data-task-edit]').forEach(row=>{
+    row.addEventListener('click', e=>{
+      if(e.target.closest('button, a, input, select')) return;
+      openTaskModal(company, row.dataset.taskEdit);
+    });
+  });
 
   // Approve / reject pending task creation
   node.querySelectorAll('[data-approve-task]').forEach(btn=>btn.addEventListener('click', async ()=>{
@@ -4169,6 +4173,14 @@ function openRaidModal(company, raidId){
           <label class="block">Prazo *
             <input name="dueDate" type="date" required value="${existing?.dueDate?toIso(parseDate(existing.dueDate)):''}" />
           </label>
+          <label class="block col-span-2">Participantes
+            <div class="text-xs text-gray-400 mb-1">Pessoas envolvidas além do owner</div>
+            <div class="grid grid-cols-2 gap-1 p-2 border rounded-lg bg-gray-50 max-h-28 overflow-y-auto">
+              ${(state.users||[]).map(u=>`<label class="flex items-center gap-1.5 text-xs cursor-pointer">
+                <input type="checkbox" name="participantes" value="${escapeHtml(u.username)}" ${(existing?.participantes||[]).includes(u.username)?'checked':''}> ${escapeHtml(u.username)}
+              </label>`).join('')}
+            </div>
+          </label>
           <label class="block">Status
             <select name="status">
               ${RAID_STATUSES.map(s=>`<option value="${s.id}" ${(existing?.status||'open')===s.id?'selected':''}>${s.label}</option>`).join('')}
@@ -4266,6 +4278,7 @@ function openRaidModal(company, raidId){
       severity: fd.get('severity')||'med', status: fd.get('status')||'open',
       owner: fd.get('owner')||'', dueDate: fd.get('dueDate')||'',
       mitigation: fd.get('mitigation')||'',
+      participantes: Array.from(m.querySelectorAll('input[name="participantes"]:checked')).map(cb=>cb.value),
     };
     try{
       if(existing){
