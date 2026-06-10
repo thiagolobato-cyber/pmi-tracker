@@ -2425,12 +2425,12 @@ function renderDashboard(){
           ${topPortfolioRisks.length ? `
           <div class="scroll-x">
             <table class="w-full text-xs">
-              <thead><tr><th>AÇÃO DE MITIGAÇÃO</th><th>ASPECTOS</th><th>DEAL</th><th>ÁREA</th><th>SEVERIDADE</th><th>OWNER</th><th class="text-center">BLOQUEIOS</th></tr></thead>
+              <thead><tr><th>AÇÃO DE MITIGAÇÃO</th><th>ASPECTOS</th><th>DEALS AFETADOS</th><th>ÁREA</th><th>SEVERIDADE</th><th>OWNER</th><th class="text-center">BLOQUEIOS</th></tr></thead>
               <tbody>
                 ${topPortfolioRisks.map(r=>`<tr>
                   <td class="font-medium">${escapeHtml(r.title)}</td>
                   <td>${raidAspectBadges(r)}</td>
-                  <td>${r.dealId?`<span class="deal-link" data-summary="${r.dealId}">${escapeHtml(r.deal)}</span>`:escapeHtml(r.deal)}</td>
+                  <td>${(r.dealIds||[]).map(id=>{ const c=state.companies.find(x=>x.id===id); return c?`<span class="deal-link" data-summary="${id}">${escapeHtml(c.name)}</span>`:'' }).filter(Boolean).join(', ')||'—'}</td>
                   <td>${r.area?`<span class="deal-link" data-area="${escapeHtml(r.area)}">${escapeHtml(r.area)}</span>`:''}</td>
                   <td><span style="color:${r.severity==='high'?'#dc2626':r.severity==='med'?'#d97706':'#3b82f6'};font-weight:600">${SEVERITIES.find(s=>s.id===r.severity)?.label||''}</span></td>
                   <td>${r.owner?`<span class="deal-link" data-owner="${escapeHtml(r.owner)}">${escapeHtml(r.owner)}</span>`:''}</td>
