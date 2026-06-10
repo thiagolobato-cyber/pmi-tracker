@@ -3223,10 +3223,13 @@ function openCompanyModal(existing){
       conf.querySelector('#confOk').disabled = true;
       conf.querySelector('#confOk').textContent = 'Excluindo…';
       try{
-        // Delete audit_log first (FK constraint)
+        // Delete all child records with FK constraints before deleting company
         await supa.from('audit_log').delete().eq('company_id', existing.id);
-        // Delete related data
         await supa.from('raid_deal_links').delete().eq('company_id', existing.id);
+        await supa.from('tasks').delete().eq('company_id', existing.id);
+        await supa.from('synergies').delete().eq('company_id', existing.id);
+        await supa.from('health_entries').delete().eq('company_id', existing.id);
+        await supa.from('deletion_requests').delete().eq('company_id', existing.id);
         const { error } = await supa.from('companies').delete().eq('id', existing.id);
         if(error) throw error;
         state.companies = state.companies.filter(c=>c.id!==existing.id);
@@ -4518,8 +4521,21 @@ function openTaskModal(company, taskId){
           </div>
           <input type="hidden" name="completado" value="${existing?.completado||0}">
           <div style="margin-top:.75rem">
+            <div style="font-size:.72rem;font-weight:600;color:var(--bhub-navy);margin-bottom:.35rem">Concluído</div>
+            <div style="display:flex;align-items:center;gap:.6rem">
+              <button type="button" id="tmConcluido" data-on="${existing?.dataRealConclusao?'1':'0'}"
+                style="display:flex;align-items:center;gap:.4rem;padding:.3rem .75rem;border-radius:999px;border:2px solid;font-size:.78rem;font-weight:600;cursor:pointer;transition:all .15s;
+                  ${existing?.dataRealConclusao
+                    ? 'background:#16a34a;border-color:#16a34a;color:#fff'
+                    : 'background:#f3f4f6;border-color:#d1d5db;color:#6b7280'}">
+                <span id="tmConcluidoIcon">${existing?.dataRealConclusao?'✓':'○'}</span>
+                <span id="tmConcluidoLabel">${existing?.dataRealConclusao?'Sim':'Não'}</span>
+              </button>
+            </div>
+          </div>
+          <div style="margin-top:.75rem">
             <div style="font-size:.72rem;font-weight:600;color:var(--bhub-navy);margin-bottom:.3rem">Data real de conclusão</div>
-            <input type="date" name="dataRealConclusao" value="${existing?.dataRealConclusao?toIso(existing.dataRealConclusao):''}">
+            <input type="date" name="dataRealConclusao" id="tmDataReal" value="${existing?.dataRealConclusao?toIso(existing.dataRealConclusao):''}">
           </div>
           <div style="margin-top:.75rem">
             <div style="font-size:.72rem;font-weight:600;color:var(--bhub-navy);margin-bottom:.3rem">Evidência</div>
@@ -4613,6 +4629,32 @@ function openTaskModal(company, taskId){
   bloqSel.addEventListener('change', updateBloqueioUi);
   if(raidSel) raidSel.addEventListener('change', updateRaidWarning);
   updateBloqueioUi();
+
+  // ── Concluído toggle ──────────────────────────────────────────
+  const concluidoBtn = m.querySelector('#tmConcluido');
+  const dataRealInput = m.querySelector('#tmDataReal');
+  function updateConcluidoBtn(isOn){
+    concluidoBtn.dataset.on = isOn ? '1' : '0';
+    concluidoBtn.querySelector('#tmConcluidoIcon').textContent = isOn ? '✓' : '○';
+    concluidoBtn.querySelector('#tmConcluidoLabel').textContent = isOn ? 'Sim' : 'Não';
+    concluidoBtn.style.background = isOn ? '#16a34a' : '#f3f4f6';
+    concluidoBtn.style.borderColor = isOn ? '#16a34a' : '#d1d5db';
+    concluidoBtn.style.color = isOn ? '#fff' : '#6b7280';
+  }
+  concluidoBtn.addEventListener('click', ()=>{
+    const nowOn = concluidoBtn.dataset.on !== '1';
+    updateConcluidoBtn(nowOn);
+    if(nowOn && !dataRealInput.value){
+      dataRealInput.value = new Date().toISOString().slice(0,10);
+    } else if(!nowOn){
+      dataRealInput.value = '';
+    }
+  });
+  // If date is manually cleared, uncheck the toggle
+  dataRealInput.addEventListener('change', ()=>{
+    if(!dataRealInput.value) updateConcluidoBtn(false);
+    else updateConcluidoBtn(true);
+  });
 
   // ── Delete ────────────────────────────────────────────────────
   const delBtn = m.querySelector('#tmDel');
