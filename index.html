@@ -5574,14 +5574,6 @@ function renderDealBriefing(company, deal, tasks){
           <div class="kpi"><div class="kpi-label">Sinergia</div><div class="kpi-value">${synPct}%</div></div>
         </div>
 
-        <!-- Status por área -->
-        <section>
-          <div class="text-sm font-semibold mb-2" style="color:var(--bhub-navy)">Status por área (último RAG)</div>
-          <div class="flex flex-wrap gap-2">
-            ${areaRags.map(a=>`<div class="flex items-center gap-2 px-2.5 py-1 rounded-md border" style="border-color:var(--bhub-border)"><span class="text-xs">${escapeHtml(a.area)}</span><span class="rag rag-${a.rag}" style="font-size:.6rem;padding:.1rem .35rem"><span class="rag-dot"></span>${a.rag==='g'?'G':a.rag==='a'?'A':a.rag==='r'?'R':'—'}</span></div>`).join('') || `<div class="text-xs text-gray-500">Sem registros de health.</div>`}
-          </div>
-        </section>
-
         <div class="grid lg:grid-cols-2 gap-5">
           <!-- Top atrasadas -->
           <section class="bhub-card p-4">
