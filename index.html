@@ -4335,14 +4335,17 @@ function openTaskModal(company, taskId){
           <div style="display:grid;grid-template-columns:100px 1fr;gap:.75rem">
             <div>
               <div style="font-size:.72rem;font-weight:600;color:var(--bhub-navy);margin-bottom:.3rem">REF</div>
-              <input type="text" name="ref" value="${escapeHtml(existing?.ref||'')}" placeholder="1.1" style="font-family:monospace">
+              ${canAdmin()
+                ? `<input type="text" name="ref" value="${escapeHtml(existing?.ref||'')}" placeholder="1.1" style="font-family:monospace">`
+                : `<div style="font-family:monospace;font-size:.875rem;padding:.45rem .7rem;border-radius:.625rem;background:var(--bhub-beige-soft);color:var(--bhub-navy);border:1px solid var(--bhub-border)">${escapeHtml(existing?.ref||'—')}</div>
+                   <input type="hidden" name="ref" value="${escapeHtml(existing?.ref||'')}">`}
             </div>
             <div>
-              <div style="font-size:.72rem;font-weight:600;color:var(--bhub-navy);margin-bottom:.3rem">Área <span style="color:#e53e3e">*</span></div>
-              <select name="area">
-                <option value="">— Área —</option>
-                ${areaOpts}
-              </select>
+              <div style="font-size:.72rem;font-weight:600;color:var(--bhub-navy);margin-bottom:.3rem">Área</div>
+              ${canAdmin()
+                ? `<select name="area"><option value="">— Área —</option>${areaOpts}</select>`
+                : `<div style="font-size:.875rem;padding:.45rem .7rem;border-radius:.625rem;background:var(--bhub-beige-soft);color:var(--bhub-navy);border:1px solid var(--bhub-border)">${escapeHtml(existing?.area||'—')}</div>
+                   <input type="hidden" name="area" value="${escapeHtml(existing?.area||'')}">`}
             </div>
           </div>
           <div style="margin-top:.75rem">
@@ -4356,16 +4359,10 @@ function openTaskModal(company, taskId){
           <div style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--bhub-muted);font-family:'Roboto',sans-serif;margin-bottom:.75rem;display:flex;align-items:center;gap:.4rem">
             <span style="display:inline-block;width:3px;height:13px;border-radius:2px;background:#0171E4"></span>Responsabilidade
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
-            <div>
-              <div style="font-size:.72rem;font-weight:600;color:var(--bhub-navy);margin-bottom:.3rem">Owner</div>
-              ${ownerHtml}
-              ${ownerNote}
-            </div>
-            <div>
-              <div style="font-size:.72rem;font-weight:600;color:var(--bhub-navy);margin-bottom:.3rem">Ferramenta / Plataforma</div>
-              <input type="text" name="ferramenta" value="${escapeHtml(existing?.ferramenta||'')}">
-            </div>
+          <div>
+            <div style="font-size:.72rem;font-weight:600;color:var(--bhub-navy);margin-bottom:.3rem">Owner</div>
+            ${ownerHtml}
+            ${ownerNote}
           </div>
         </div>
 
@@ -4401,15 +4398,9 @@ function openTaskModal(company, taskId){
                      style="width:70px;text-align:center">
             </div>
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-top:.75rem">
-            <div>
-              <div style="font-size:.72rem;font-weight:600;color:var(--bhub-navy);margin-bottom:.3rem">Data real de conclusão</div>
-              <input type="date" name="dataRealConclusao" value="${existing?.dataRealConclusao?toIso(existing.dataRealConclusao):''}">
-            </div>
-            <div>
-              <div style="font-size:.72rem;font-weight:600;color:var(--bhub-navy);margin-bottom:.3rem">Último update</div>
-              <input type="date" name="ultimoUpdate" value="${existing?.ultimoUpdate?toIso(existing.ultimoUpdate):''}">
-            </div>
+          <div style="margin-top:.75rem">
+            <div style="font-size:.72rem;font-weight:600;color:var(--bhub-navy);margin-bottom:.3rem">Data real de conclusão</div>
+            <input type="date" name="dataRealConclusao" value="${existing?.dataRealConclusao?toIso(existing.dataRealConclusao):''}">
           </div>
           <div style="margin-top:.75rem">
             <div style="font-size:.72rem;font-weight:600;color:var(--bhub-navy);margin-bottom:.3rem">Evidência</div>
@@ -4586,18 +4577,24 @@ function openTaskModal(company, taskId){
     const showErr = msg=>{ const e2=m.querySelector('#tmErr'); e2.textContent=msg; e2.style.display='block'; e2.scrollIntoView({behavior:'smooth',block:'nearest'}); };
     const taskVal = m.querySelector('[name="task"]').value?.trim();
     if(!taskVal) return showErr('A descrição da tarefa é obrigatória.');
+    // Validação: bloqueio sem RAID vinculado
+    if(bloqSel.value==='Sim' && !(raidSel?.value)){
+      // highlight the RAID select
+      if(raidSel){ raidSel.style.borderColor='#f25461'; raidSel.style.boxShadow='0 0 0 3px rgba(242,84,97,.15)'; setTimeout(()=>{ raidSel.style.borderColor=''; raidSel.style.boxShadow=''; },3000); }
+      return showErr('Tarefas bloqueadas precisam de uma Ação de Mitigação vinculada. Selecione uma no campo acima ou crie uma na aba Ações de Mitigação.');
+    }
     const payload = {
-      ref:              m.querySelector('[name="ref"]').value||'',
-      area:             m.querySelector('[name="area"]').value||'',
+      ref:              m.querySelector('[name="ref"]').value||existing?.ref||'',
+      area:             m.querySelector('[name="area"]').value||existing?.area||'',
       task:             taskVal,
       owner:            m.querySelector('[name="owner"]')?.value||existing?.owner||'',
-      ferramenta:       m.querySelector('[name="ferramenta"]').value||'',
+      ferramenta:       existing?.ferramenta||'',
       prazo:            parseInt(prazoInput.value)||0,
       completado:       parseInt(pctEl.value)||0,
       bloqueio:         bloqSel.value||'Não',
       bloqueioDescricao:m.querySelector('[name="bloqueioDescricao"]')?.value||'',
       dataRealConclusao:m.querySelector('[name="dataRealConclusao"]').value||'',
-      ultimoUpdate:     m.querySelector('[name="ultimoUpdate"]').value||'',
+      ultimoUpdate:     existing?.ultimoUpdate||'',
       proximoPasso:     existing?.proximoPasso||'',
       evidencia:        m.querySelector('[name="evidencia"]').value||'',
       raidId:           raidSel?.value||null,
