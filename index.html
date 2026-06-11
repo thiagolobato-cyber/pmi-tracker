@@ -3920,13 +3920,7 @@ function renderDealAll(){
   Object.values(byDeal).forEach(g=>g.tasks.sort(sortByRef));
   const dealGroups = Object.values(byDeal).sort((a,b)=>a.company.name.localeCompare(b.company.name));
 
-  const rows = dealGroups.map(g=>{
-    // Sub-group by bloco within deal
-    const blocoGroups = {};
-    g.tasks.forEach(t=>{ const b=t.bloco||''; if(!blocoGroups[b]) blocoGroups[b]=[]; blocoGroups[b].push(t); });
-    const blocoOrder = Object.keys(blocoGroups).sort((x,y)=>{ if(!x&&y) return 1; if(x&&!y) return -1; return x.localeCompare(y); });
-    const hasBloco = blocoOrder.some(b=>b!=='');
-    return `
+  const rows = dealGroups.map(g=>`
     <section class="bhub-card overflow-hidden">
       <div class="bhub-card-header">
         <span class="deal-link font-semibold" data-open="${g.company.id}" style="cursor:pointer">${escapeHtml(g.company.name)}</span>
@@ -3938,27 +3932,22 @@ function renderDealAll(){
             <th>REF</th><th class="min-w-[18rem]">TAREFA</th><th>STATUS</th><th>OWNER</th><th>PRAZO</th><th>PREVISTA</th><th>REAL</th><th>%</th><th>ATRASO</th><th>BLOQ.</th>
           </tr></thead>
           <tbody>
-            ${blocoOrder.map(b=>{
-              const bTasks = blocoGroups[b];
-              const bHeader = (hasBloco && b) ? `<tr><td colspan="10" style="padding:.25rem .75rem;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--bhub-blue);background:#eff6ff;border-top:2px solid #dbeafe">${escapeHtml(b)}</td></tr>` : '';
-              return bHeader + bTasks.map(t=>`<tr class="dt-row">
-                <td class="text-xs">${t.ref||''}</td>
-                <td>${escapeHtml(t.task||'')}</td>
-                <td><span class="pill ${statusClass(t._f.status)}">${statusLabel(t._f.status)}</span></td>
-                <td>${escapeHtml(t.owner||'')}</td>
-                <td class="text-center">${t.prazo||0}</td>
-                <td>${t._f.dataPrevista?fmtDate(t._f.dataPrevista):''}</td>
-                <td>${t._f.dataReal?fmtDate(t._f.dataReal):''}</td>
-                <td class="text-right">${t.completado||0}%</td>
-                <td class="text-right ${t._f.atraso!=null&&t._f.atraso>0?'text-red-700':'text-green-700'}">${t._f.atraso??''}</td>
-                <td>${t.bloqueio==='Sim'?'<span class="pill status-late">Sim</span>':'<span class="pill status-empty">Não</span>'}</td>
-              </tr>`).join('');
-            }).join('')}
+            ${g.tasks.map(t=>`<tr class="dt-row">
+              <td class="text-xs">${t.ref||''}</td>
+              <td>${escapeHtml(t.task||'')}</td>
+              <td><span class="pill ${statusClass(t._f.status)}">${statusLabel(t._f.status)}</span></td>
+              <td>${escapeHtml(t.owner||'')}</td>
+              <td class="text-center">${t.prazo||0}</td>
+              <td>${t._f.dataPrevista?fmtDate(t._f.dataPrevista):''}</td>
+              <td>${t._f.dataReal?fmtDate(t._f.dataReal):''}</td>
+              <td class="text-right">${t.completado||0}%</td>
+              <td class="text-right ${t._f.atraso!=null&&t._f.atraso>0?'text-red-700':'text-green-700'}">${t._f.atraso??''}</td>
+              <td>${t.bloqueio==='Sim'?'<span class="pill status-late">Sim</span>':'<span class="pill status-empty">Não</span>'}</td>
+            </tr>`).join('')}
           </tbody>
         </table>
       </div>
-    </section>`;
-  }).join('') || `<div class="bhub-card" style="padding:2.5rem 1rem;text-align:center"><div style="width:38px;height:38px;border-radius:99px;background:#f5f3ff;display:flex;align-items:center;justify-content:center;margin:0 auto .75rem"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5b21b6" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div><div style="font-size:.88rem;font-weight:600;color:#0f172a;margin-bottom:.25rem">Nenhuma tarefa encontrada</div><div style="font-size:.75rem;color:#9ca3af">Tente ajustar os filtros de status, área ou responsável</div></div>`;
+    </section>`).join('') || `<div class="bhub-card" style="padding:2.5rem 1rem;text-align:center"><div style="width:38px;height:38px;border-radius:99px;background:#f5f3ff;display:flex;align-items:center;justify-content:center;margin:0 auto .75rem"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5b21b6" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div><div style="font-size:.88rem;font-weight:600;color:#0f172a;margin-bottom:.25rem">Nenhuma tarefa encontrada</div><div style="font-size:.75rem;color:#9ca3af">Tente ajustar os filtros de status, área ou responsável</div></div>`;
 
   const node = el(`
     <div class="space-y-4">
@@ -4173,57 +4162,45 @@ function renderDealTasks(company, deal, tasks){
           ${canEdit() ? `<button id="addTask" class="btn btn-primary">+ Tarefa</button>`:''}
         </div>
       </div>
-      ${areasInOrder.map(a => {
-        const areaTasks = grouped[a];
-        // Sub-group by bloco within area
-        const blocoGroups = {};
-        areaTasks.forEach(t=>{ const b=t.bloco||''; if(!blocoGroups[b]) blocoGroups[b]=[]; blocoGroups[b].push(t); });
-        const blocoOrder = Object.keys(blocoGroups).sort((x,y)=>{ if(!x&&y) return 1; if(x&&!y) return -1; return x.localeCompare(y); });
-        const hasBloco = blocoOrder.some(b=>b!=='');
-        const colCount = canEdit()?13:12;
-        const taskRows = blocoOrder.map(b=>{
-          const bTasks = blocoGroups[b];
-          const bHeader = (hasBloco && b) ? `<tr><td colspan="${colCount}" style="padding:.25rem .75rem;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--bhub-blue);background:#eff6ff;border-top:2px solid #dbeafe">${escapeHtml(b)}</td></tr>` : '';
-          return bHeader + bTasks.map(t=>{
-            const hasPendingDel = state.deletionRequests.some(r=>r.task_id===t.id);
-            const pendingBadge = t.pendingApproval
-              ? ` <span title="Aguardando aprovação do admin para ser ativada" style="display:inline-block;font-size:.65rem;padding:.1rem .35rem;border-radius:.75rem;background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe;font-weight:600;white-space:nowrap">⏳ Aguard. aprovação</span>`
-              : '';
-            const approveBtn = t.pendingApproval && canAdmin()
-              ? ` <button data-approve-task="${t.id}" data-company-id="${company.id}" title="Aprovar tarefa" style="margin-left:.25rem;font-size:.65rem;padding:.1rem .4rem;border-radius:.5rem;background:#dcfce7;color:#166534;border:1px solid #bbf7d0;cursor:pointer;font-weight:600">✓ Aprovar</button><button data-reject-task="${t.id}" data-company-id="${company.id}" title="Rejeitar e excluir" style="font-size:.65rem;padding:.1rem .4rem;border-radius:.5rem;background:#fee2e2;color:#991b1b;border:1px solid #fecaca;cursor:pointer;font-weight:600">✕</button>`
-              : '';
-            return `<tr class="dt-row" data-task-edit="${t.id}" style="${t.pendingApproval?'opacity:.55;background:#f8faff;':''}cursor:pointer" title="Clique para editar">
-            <td class="text-xs">${t.ref||''}</td>
-            <td>${escapeHtml(t.task||'')}${pendingBadge}${approveBtn}${hasPendingDel?` <span title="Exclusão aguardando aprovação do admin" style="display:inline-block;font-size:.65rem;padding:.1rem .35rem;border-radius:.75rem;background:#fef3c7;color:#92400e;border:1px solid #fde68a;font-weight:600;white-space:nowrap">⏳ Excl. pendente</span>`:''}</td>
-            <td><span class="pill ${statusClass(t._f.status)}">${statusLabel(t._f.status)}</span></td>
-            <td>${t.owner?`<span class="deal-link" data-owner="${escapeHtml(t.owner)}">${escapeHtml(t.owner)}</span>`:''}</td>
-            <td class="text-center">${t.prazo||0}</td>
-            <td>${t._f.dataPrevista?fmtDate(t._f.dataPrevista):''}</td>
-            <td>${t._f.dataReal?fmtDate(t._f.dataReal):''}</td>
-            <td class="text-right">${t.completado||0}%</td>
-            <td class="text-right ${t._f.atraso!=null && t._f.atraso>0?'text-red-700':'text-green-700'}">${t._f.atraso ?? (t._f.diasAtraso ? '+'+t._f.diasAtraso : '')}</td>
-            <td>${t.ultimoUpdate?fmtDate(t.ultimoUpdate):''}</td>
-            <td>${t.proximoPasso||''}</td>
-            <td>${t.bloqueio==='Sim'?'<span class="pill status-late">Sim</span>':'<span class="pill status-empty">Não</span>'}</td>
-            ${canEdit()?`<td><button class="btn btn-secondary" data-edit="${t.id}">✎</button></td>`:''}
-          </tr>`;
-          }).join('');
-        }).join('');
-        return `
+      ${areasInOrder.map(a => `
         <section class="bhub-card overflow-hidden">
           <div class="bhub-card-header"><span class="deal-link" data-area="${escapeHtml(a)}" title="Ver snapshot da área">${escapeHtml(a)}</span>
-            <span class="text-xs text-gray-500 font-normal ml-2">(${areaTasks.length} tarefas • ${areaTasks.filter(t=>t._f.status==='done').length} done)</span>
+            <span class="text-xs text-gray-500 font-normal ml-2">(${grouped[a].length} tarefas • ${grouped[a].filter(t=>t._f.status==='done').length} done)</span>
           </div>
           <div class="scroll-x">
             <table class="w-full">
               <thead><tr>
                 <th>REF</th><th class="min-w-[18rem]">TAREFA</th><th>STATUS</th><th>OWNER</th><th>PRAZO</th><th>PREVISTA</th><th>REAL</th><th>%</th><th>ATRASO</th><th>ÚLT.UPD</th><th>PRÓX.PASSO</th><th>BLOQ.</th>${canEdit()?'<th></th>':''}
               </tr></thead>
-              <tbody>${taskRows}</tbody>
+              <tbody>
+                ${grouped[a].map(t=>{
+                  const hasPendingDel = state.deletionRequests.some(r=>r.task_id===t.id);
+                  const pendingBadge = t.pendingApproval
+                    ? ` <span title="Aguardando aprovação do admin para ser ativada" style="display:inline-block;font-size:.65rem;padding:.1rem .35rem;border-radius:.75rem;background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe;font-weight:600;white-space:nowrap">⏳ Aguard. aprovação</span>`
+                    : '';
+                  const approveBtn = t.pendingApproval && canAdmin()
+                    ? ` <button data-approve-task="${t.id}" data-company-id="${company.id}" title="Aprovar tarefa" style="margin-left:.25rem;font-size:.65rem;padding:.1rem .4rem;border-radius:.5rem;background:#dcfce7;color:#166534;border:1px solid #bbf7d0;cursor:pointer;font-weight:600">✓ Aprovar</button><button data-reject-task="${t.id}" data-company-id="${company.id}" title="Rejeitar e excluir" style="font-size:.65rem;padding:.1rem .4rem;border-radius:.5rem;background:#fee2e2;color:#991b1b;border:1px solid #fecaca;cursor:pointer;font-weight:600">✕</button>`
+                    : '';
+                  return `<tr class="dt-row" data-task-edit="${t.id}" style="${t.pendingApproval?'opacity:.55;background:#f8faff;':''}cursor:pointer" title="Clique para editar">
+                  <td class="text-xs">${t.ref||''}</td>
+                  <td>${escapeHtml(t.task||'')}${pendingBadge}${approveBtn}${hasPendingDel?` <span title="Exclusão aguardando aprovação do admin" style="display:inline-block;font-size:.65rem;padding:.1rem .35rem;border-radius:.75rem;background:#fef3c7;color:#92400e;border:1px solid #fde68a;font-weight:600;white-space:nowrap">⏳ Excl. pendente</span>`:''}</td>
+                  <td><span class="pill ${statusClass(t._f.status)}">${statusLabel(t._f.status)}</span></td>
+                  <td>${t.owner?`<span class="deal-link" data-owner="${escapeHtml(t.owner)}">${escapeHtml(t.owner)}</span>`:''}</td>
+                  <td class="text-center">${t.prazo||0}</td>
+                  <td>${t._f.dataPrevista?fmtDate(t._f.dataPrevista):''}</td>
+                  <td>${t._f.dataReal?fmtDate(t._f.dataReal):''}</td>
+                  <td class="text-right">${t.completado||0}%</td>
+                  <td class="text-right ${t._f.atraso!=null && t._f.atraso>0?'text-red-700':'text-green-700'}">${t._f.atraso ?? (t._f.diasAtraso ? '+'+t._f.diasAtraso : '')}</td>
+                  <td>${t.ultimoUpdate?fmtDate(t.ultimoUpdate):''}</td>
+                  <td>${t.proximoPasso||''}</td>
+                  <td>${t.bloqueio==='Sim'?'<span class="pill status-late">Sim</span>':'<span class="pill status-empty">Não</span>'}</td>
+                  ${canEdit()?`<td><button class="btn btn-secondary" data-edit="${t.id}">✎</button></td>`:''}
+                </tr>`; }).join('')}
+              </tbody>
             </table>
           </div>
-        </section>`;
-      }).join('') || `<div class="bhub-card p-8 text-center text-gray-500 text-sm">Nenhuma tarefa. Use "Criar a partir do Template" ou adicione tarefas manualmente.</div>`}
+        </section>
+      `).join('') || `<div class="bhub-card p-8 text-center text-gray-500 text-sm">Nenhuma tarefa. Use "Criar a partir do Template" ou adicione tarefas manualmente.</div>`}
     </div>
   `);
   const seed = node.querySelector('#seed');
