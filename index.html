@@ -615,7 +615,7 @@ function saveState(){ /* no-op */ }
 
 /* ---------- DB Mappers (camelCase <-> snake_case) ---------- */
 function companyFromDb(c){ return { id: c.id, name: c.name, signDate: c.sign_date || '' }; }
-function companyToDb(c){ return { name: c.name, sign_date: emptyDate(c.signDate) }; }
+function companyToDb(c){ return { name: c.name, sign_date: emptyDate(c.signDate), workspace: WS }; }
 
 function tplFromDb(t){
   return { id: t.id, ref: t.ref||'', area: t.area||'', bloco: t.bloco||'', task: t.task||'', defaultOwner: t.default_owner||'', defaultPrazo: t.default_prazo||0, ordering: t.ordering||0, predecessorRefs: t.predecessor_refs||'', pendingApproval: t.pending_approval||false };
@@ -734,10 +734,19 @@ async function applySession(sess){
   if(!sess || !sess.user){ session = null; return; }
   let profile = null;
   try {
-    const { data, error } = await supa.from('profiles').select('id,username,role').eq('id', sess.user.id).maybeSingle();
+    const { data, error } = await supa.from('profiles').select('id,username,role,workspace').eq('id', sess.user.id).maybeSingle();
     if (error) console.warn('profile load error', error);
     profile = data;
   } catch(e){ console.warn('profile fetch threw', e); }
+  const profileWs = profile?.workspace || 'pmi';
+  const isAdminRole = (profile?.role || 'leitor') === 'admin';
+  // Verifica acesso ao workspace — admin sempre passa; outros só se tiverem permissão
+  if(!isAdminRole && profileWs !== 'ambos' && profileWs !== WS){
+    session = null;
+    _wsAccessDenied = true;
+    return;
+  }
+  _wsAccessDenied = false;
   session = {
     id: sess.user.id,
     email: sess.user.email,
@@ -885,8 +894,8 @@ async function fetchAll(makeBuilder){
 async function reloadState(){
   if(!session){ state = defaultState(); return; }
   const [profiles, companies, template, tasks, raid, raidLinks, syn, health, delReqs] = await Promise.all([
-    supa.from('profiles').select('id,username,role,manager_username').order('username',{nullsFirst:false}),
-    supa.from('companies').select('*').order('name'),
+    supa.from('profiles').select('id,username,role,manager_username,workspace').order('username',{nullsFirst:false}),
+    supa.from('companies').select('*').eq('workspace', WS).order('name'),
     fetchAll(() => supa.from('template_tasks').select('*').order('ordering').order('ref')),
     fetchAll(() => supa.from('tasks').select('*')),
     fetchAll(() => supa.from('raid_items').select('*')),
@@ -901,7 +910,7 @@ async function reloadState(){
   if(errs.length){ console.warn('reloadState errors', errs); }
 
   state = defaultState();
-  state.users = (profiles.data||[]).map(p => ({ id: p.id, username: p.username || '(sem nome)', role: p.role || 'leitor', managerUsername: p.manager_username || null }));
+  state.users = (profiles.data||[]).map(p => ({ id: p.id, username: p.username || '(sem nome)', role: p.role || 'leitor', managerUsername: p.manager_username || null, workspace: p.workspace || 'pmi' }));
 
   // Build global RAID portfolio with dealIds from links
   const linksByRaid = {};
@@ -1345,6 +1354,7 @@ function renderLogin(){
           <div class="font-display text-base font-semibold mt-5" style="color:var(--bhub-navy)">${isTech ? 'Projetos Tech' : 'PMI Tracker'}</div>
           <div class="text-xs mt-1" style="color:var(--bhub-muted)">${isTech ? 'Gestão de projetos de tecnologia' : 'Acompanhamento de Integração M&A'}</div>
         </div>
+        ${_wsAccessDenied ? `<div class="rounded-lg p-3 mb-5 text-xs border" style="background:#fee2e2;border-color:#fecaca;color:#991b1b"><div class="flex items-start gap-2"><span>🚫</span><div>Você não tem permissão para acessar este workspace. Fale com o administrador.</div></div></div>` : ''}
         ${_authBanner ? `<div class="rounded-lg p-3 mb-5 text-xs border" style="background:#FFF8E1;border-color:#F0C97B;color:#7A4A02"><div class="flex items-start gap-2"><span>ℹ️</span><div>${_authBanner.friendly.replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))}</div></div></div>` : ''}
         <form id="loginForm" class="space-y-4">
           <div>
@@ -6565,6 +6575,51 @@ function openEditGestorModal(user){
   };
 }
 
+function openEditWorkspaceModal(user){
+  const m = el(`
+  <div class="fixed inset-0 bg-black/40 z-20 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl w-full max-w-sm p-6 shadow-xl">
+      <div class="text-lg font-semibold mb-1" style="font-family:'Roboto'">Acesso ao Workspace</div>
+      <p class="text-sm text-gray-500 mb-4">Define em quais ambientes <strong>${escapeHtml(user.username)}</strong> pode entrar.</p>
+      <form id="wsForm" class="space-y-3">
+        <div>
+          <label class="text-xs font-semibold uppercase tracking-wider" style="color:var(--bhub-muted)">Workspace permitido</label>
+          <select name="workspace">
+            <option value="pmi"   ${(user.workspace||'pmi')==='pmi'   ?'selected':''}>PMI Tracker apenas</option>
+            <option value="tech"  ${(user.workspace||'pmi')==='tech'  ?'selected':''}>Projetos Tech apenas</option>
+            <option value="ambos" ${(user.workspace||'pmi')==='ambos' ?'selected':''}>PMI + Tech (ambos)</option>
+          </select>
+        </div>
+        <div id="wsErr" class="text-xs rounded-lg p-2 hidden" style="color:#991b1b;background:#fee2e2"></div>
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" id="cancelWs" class="btn btn-secondary">Cancelar</button>
+          <button class="btn btn-primary" id="saveWsBtn">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>`);
+  document.body.appendChild(m);
+  m.querySelector('#cancelWs').onclick = ()=>m.remove();
+  m.querySelector('#wsForm').onsubmit = async (e)=>{
+    e.preventDefault();
+    const val = new FormData(e.target).get('workspace') || 'pmi';
+    const btn = m.querySelector('#saveWsBtn');
+    const errEl = m.querySelector('#wsErr');
+    btn.disabled=true; btn.textContent='Salvando…';
+    errEl.classList.add('hidden');
+    try{
+      const {error} = await supa.from('profiles').update({ workspace: val }).eq('id', user.id);
+      if(error) throw error;
+      m.remove();
+      await reloadState(); render();
+    }catch(err){
+      errEl.textContent = err.message||'Erro ao salvar workspace';
+      errEl.classList.remove('hidden');
+      btn.disabled=false; btn.textContent='Salvar';
+    }
+  };
+}
+
 function openInviteUserModal(prefillUsername=''){
   const m = el(`
   <div class="fixed inset-0 bg-black/40 z-20 flex items-center justify-center p-4">
@@ -7463,26 +7518,32 @@ function renderUsuarios(){
 
       <div class="bhub-card overflow-hidden">
         <table class="w-full">
-          <thead><tr><th>Usuário</th><th>Perfil</th><th>Gestor Direto</th>${isAdmin?'<th style="width:12rem">Ações</th>':''}</tr></thead>
+          <thead><tr><th>Usuário</th><th>Perfil</th><th>Gestor Direto</th><th>Workspace</th>${isAdmin?'<th style="width:14rem">Ações</th>':''}</tr></thead>
           <tbody>
-            ${state.users.length ? state.users.map(u=>`<tr>
+            ${state.users.length ? state.users.map(u=>{
+              const wsLabel = u.workspace==='tech'?'Tech':u.workspace==='ambos'?'PMI + Tech':'PMI';
+              const wsBg    = u.workspace==='tech'?'#ede9fe':u.workspace==='ambos'?'#dbeafe':'#dde9fa';
+              const wsColor = u.workspace==='tech'?'#5b21b6':u.workspace==='ambos'?'#1e40af':'#005bb8';
+              return `<tr>
               <td>
                 <div class="font-medium">${escapeHtml(u.username)}</div>
                 ${session && u.id===session.id?'<div class="text-xs text-gray-400">(você)</div>':''}
               </td>
               <td><span class="role-pill role-${u.role}">${u.role}</span></td>
               <td class="text-xs text-gray-500">${escapeHtml(u.managerUsername||'—')}</td>
+              <td><span style="font-size:.7rem;font-weight:700;padding:.15rem .55rem;border-radius:9999px;background:${wsBg};color:${wsColor}">${wsLabel}</span></td>
               ${isAdmin ? `<td>
                 <div class="flex gap-1 flex-wrap">
                   <button class="btn btn-secondary" data-edit-uid="${u.id}" style="padding:.25rem .55rem;font-size:.72rem" title="Editar nome de owner">Nome</button>
                   <button class="btn btn-secondary" data-gestor-uid="${u.id}" style="padding:.25rem .55rem;font-size:.72rem" title="Definir gestor direto">Gestor</button>
+                  <button class="btn btn-secondary" data-ws-uid="${u.id}" style="padding:.25rem .55rem;font-size:.72rem" title="Definir workspace">WS</button>
                   ${u.id!==session?.id ? `
                     <button class="btn btn-secondary" data-role-uid="${u.id}" style="padding:.25rem .55rem;font-size:.72rem" title="Alterar perfil">Perfil</button>
                     <button class="btn btn-danger" data-remove-uid="${u.id}" style="padding:.25rem .55rem;font-size:.72rem" title="Remover acesso">✕</button>
                   ` : ''}
                 </div>
               </td>` : ''}
-            </tr>`).join('') : `<tr><td colspan="${isAdmin?5:4}" class="py-10">
+            </tr>`;}).join('') : `<tr><td colspan="${isAdmin?5:4}" class="py-10">
               <div class="flex flex-col items-center gap-3 text-gray-500 text-center">
                 <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color:#d1d5db">
                   <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/>
@@ -7518,6 +7579,13 @@ function renderUsuarios(){
       btn.onclick = ()=>{
         const u = state.users.find(x=>x.id===btn.dataset.gestorUid);
         if(u) openEditGestorModal(u);
+      };
+    });
+
+    node.querySelectorAll('[data-ws-uid]').forEach(btn=>{
+      btn.onclick = ()=>{
+        const u = state.users.find(x=>x.id===btn.dataset.wsUid);
+        if(u) openEditWorkspaceModal(u);
       };
     });
 
@@ -7778,6 +7846,7 @@ function stopRealtime(){
 // Acontece quando o usuario clica em magic link expirado ou ja usado.
 // Retorna { code, friendly } ou null. Sempre limpa o hash da URL.
 let _authBanner = null;
+let _wsAccessDenied = false;
 function detectAuthErrorFragment(){
   const hash = location.hash || '';
   if(!hash.startsWith('#') || !hash.includes('error')) return null;
