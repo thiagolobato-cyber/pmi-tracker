@@ -1954,7 +1954,7 @@ function renderShell(){
 
   const content = el(`<main class="content-area"></main>`);
   // Guard: se estiver em modo Tech e tentar acessar aba exclusiva do PMI, redireciona
-  if(isTech && ['dashboard','hoje','executiva','raid','homebroker','cobranca','template'].includes(view.tab)){
+  if(isTech && ['dashboard','raid','homebroker','template'].includes(view.tab)){
     view.tab = 'empresas';
   }
   if(view.tab==='hoje') content.appendChild(renderHoje());
@@ -1986,13 +1986,15 @@ function renderSidebar(){
   const pmoTabs = (() => {
     const tabs = [];
     if(isPMI && canAdmin()) tabs.push(['homebroker', 'Visão Estratégica', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>']);
-    if(isPMI && canViewAcompanhamento()) tabs.push(['cobranca', 'Acompanhamento', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>']);
+    if(canViewAcompanhamento()) tabs.push(['cobranca', 'Acompanhamento', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>']);
     if(isLider()) tabs.push(['lider', 'Painel do Líder', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/><line x1="22" y1="11" x2="22" y2="17"/><line x1="19" y1="14" x2="25" y2="14"/></svg>']);
     return tabs;
   })();
   const portfolioTabs = isTech ? [
-    ['empresas',      'Projetos',             '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="8" height="14" rx="1"/><rect x="13" y="3" width="8" height="17" rx="1"/><line x1="6" y1="10" x2="8" y2="10"/><line x1="6" y1="14" x2="8" y2="14"/><line x1="16" y1="7" x2="18" y2="7"/><line x1="16" y1="11" x2="18" y2="11"/><line x1="16" y1="15" x2="18" y2="15"/></svg>'],
-    ['tech_tarefas',  'Tarefas por projeto',  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><polyline points="3 6 4 7 6 5"/><polyline points="3 12 4 13 6 11"/><polyline points="3 18 4 19 6 17"/></svg>'],
+    ['hoje',          'Minhas Tarefas',        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L13.09 8.26L19 7L15.45 12L19 17L13.09 15.74L12 22L10.91 15.74L5 17L8.55 12L5 7L10.91 8.26L12 2Z"/></svg>'],
+    ['empresas',      'Projetos',              '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="8" height="14" rx="1"/><rect x="13" y="3" width="8" height="17" rx="1"/><line x1="6" y1="10" x2="8" y2="10"/><line x1="6" y1="14" x2="8" y2="14"/><line x1="16" y1="7" x2="18" y2="7"/><line x1="16" y1="11" x2="18" y2="11"/><line x1="16" y1="15" x2="18" y2="15"/></svg>'],
+    ['tech_tarefas',  'Tarefas por projeto',   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><polyline points="3 6 4 7 6 5"/><polyline points="3 12 4 13 6 11"/><polyline points="3 18 4 19 6 17"/></svg>'],
+    ['executiva',     'Visão Executiva',        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l3-3 4 4 5-7"/></svg>'],
   ] : [
     ['dashboard','Dashboard',      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>'],
     ['hoje',     'Visão Usuário',  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L13.09 8.26L19 7L15.45 12L19 17L13.09 15.74L12 22L10.91 15.74L5 17L8.55 12L5 7L10.91 8.26L12 2Z"/></svg>'],
@@ -3372,7 +3374,7 @@ function renderEmpresas(){
     const m = STATUS_META[statusFilter];
     return `<div id="statusFilterBanner" style="display:flex;align-items:center;gap:.6rem;padding:.5rem .85rem;border-radius:.5rem;background:${m.bg};border:1px solid ${m.color}33;margin-bottom:.25rem">
       <span style="font-size:.8rem;font-weight:600;color:${m.color}">Filtro ativo: ${m.label}</span>
-      <span style="font-size:.75rem;color:#6b7280">${raw.length} deal${raw.length!==1?'s':''} encontrado${raw.length!==1?'s':''}</span>
+      <span style="font-size:.75rem;color:#6b7280">${raw.length} ${isTech ? 'projeto' : 'deal'}${raw.length!==1?'s':''} encontrado${raw.length!==1?'s':''}</span>
       <button id="clearStatusFilter" style="margin-left:auto;font-size:.72rem;color:${m.color};background:none;border:1px solid ${m.color}66;border-radius:.35rem;padding:.15rem .5rem;cursor:pointer">✕ Limpar filtro</button>
     </div>`;
   })();
@@ -3382,15 +3384,15 @@ function renderEmpresas(){
       ${statusBanner}
       <div class="flex items-center justify-between flex-wrap gap-2">
         <div>
-          <h1 class="text-xl font-bold">Deals</h1>
-          <p class="text-sm text-gray-500">Clique na linha para abrir o detalhe do deal</p>
+          <h1 class="text-xl font-bold">${isTech ? 'Projetos' : 'Deals'}</h1>
+          <p class="text-sm text-gray-500">Clique na linha para abrir o detalhe do ${isTech ? 'projeto' : 'deal'}</p>
         </div>
         <div class="flex items-center gap-2">
           <div class="relative">
             <svg style="position:absolute;left:.6rem;top:50%;transform:translateY(-50%);width:14px;height:14px;color:var(--bhub-muted);pointer-events:none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input id="empSearch" type="text" placeholder="Buscar empresa…" value="${escapeHtml(view.empresasSearch||'')}" style="padding:.45rem .7rem .45rem 2rem;width:200px;font-size:.85rem" />
+            <input id="empSearch" type="text" placeholder="${isTech ? 'Buscar projeto…' : 'Buscar empresa…'}" value="${escapeHtml(view.empresasSearch||'')}" style="padding:.45rem .7rem .45rem 2rem;width:200px;font-size:.85rem" />
           </div>
-          ${canEdit() ? `<button id="addCo" class="btn btn-primary">+ Nova empresa</button>` : ''}
+          ${canEdit() ? `<button id="addCo" class="btn btn-primary">+ ${isTech ? 'Novo projeto' : 'Nova empresa'}</button>` : ''}
         </div>
       </div>
 
@@ -3398,8 +3400,8 @@ function renderEmpresas(){
         <table class="w-full">
           <thead><tr>
             <th style="width:2rem">#</th>
-            ${thSort('name','EMPRESA')}
-            ${thSort('date','ASSINATURA')}
+            ${thSort('name', isTech ? 'PROJETO' : 'EMPRESA')}
+            ${thSort('date', isTech ? 'INÍCIO' : 'ASSINATURA')}
             ${thSort('total','TASKS')}
             ${thSort('pct','%')}
             ${thSort('done','DONE')}
@@ -3420,16 +3422,16 @@ function renderEmpresas(){
               <td class="text-center" style="color:var(--bhub-red);font-weight:600">${d.late||'—'}</td>
               <td class="text-center" style="color:#92400e;font-weight:600">${d.blocked||'—'}</td>
               <td class="text-center">
-                <button class="btn btn-secondary" data-open="${d.company.id}" style="padding:.3rem .6rem;font-size:.75rem" title="Abrir deal">→</button>
+                <button class="btn btn-secondary" data-open="${d.company.id}" style="padding:.3rem .6rem;font-size:.75rem" title="${isTech ? 'Abrir projeto' : 'Abrir deal'}">→</button>
               </td>
             </tr>`).join('') || `<tr><td colspan="9" class="py-10">
               <div class="flex flex-col items-center gap-3 text-gray-500 text-center">
                 <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color:#d1d5db">
                   <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M3 9h18"/>
                 </svg>
-                <div class="font-medium" style="color:var(--bhub-navy)">${searchQ?'Nenhuma empresa encontrada para "'+escapeHtml(searchQ)+'"':'Nenhuma empresa cadastrada ainda'}</div>
-                ${!searchQ ? `<div class="text-sm">Importe a planilha do Modelo Ouro ou cadastre manualmente para começar.</div>` : ''}
-                ${canEdit() && !searchQ ? `<button id="emptyAddCo" class="btn btn-primary mt-2">+ Nova empresa</button>` : ''}
+                <div class="font-medium" style="color:var(--bhub-navy)">${searchQ ? (isTech?'Nenhum projeto encontrado para "':'Nenhuma empresa encontrada para "')+escapeHtml(searchQ)+'"' : (isTech?'Nenhum projeto cadastrado ainda':'Nenhuma empresa cadastrada ainda')}</div>
+                ${!searchQ ? `<div class="text-sm">${isTech ? 'Cadastre projetos manualmente para começar.' : 'Importe a planilha do Modelo Ouro ou cadastre manualmente para começar.'}</div>` : ''}
+                ${canEdit() && !searchQ ? `<button id="emptyAddCo" class="btn btn-primary mt-2">+ ${isTech ? 'Novo projeto' : 'Nova empresa'}</button>` : ''}
               </div>
             </td></tr>`}
           </tbody>
@@ -3490,11 +3492,11 @@ function openCompanyModal(existing){
   const m = el(`
   <div class="fixed inset-0 bg-black/40 z-20 flex items-center justify-center p-4">
     <div class="bg-white rounded-xl w-full max-w-md p-6 shadow-xl">
-      <div class="text-lg font-semibold mb-4">${existing?'Editar empresa':'Nova empresa'}</div>
+      <div class="text-lg font-semibold mb-4">${existing ? (isTech ? 'Editar projeto' : 'Editar empresa') : (isTech ? 'Novo projeto' : 'Nova empresa')}</div>
       <form id="coForm" class="space-y-3">
         <div><label class="text-xs font-medium">Nome *</label><input name="name" required value="${existing?.name||''}"/></div>
-        <div><label class="text-xs font-medium">Data de assinatura</label><input name="signDate" type="date" value="${existing?.signDate||''}"/></div>
-        ${!existing ? `<label class="text-xs flex items-center gap-2 mt-2"><input type="checkbox" name="useTpl" checked> Criar tarefas a partir do Template</label>`:''}
+        <div><label class="text-xs font-medium">${isTech ? 'Data de início' : 'Data de assinatura'}</label><input name="signDate" type="date" value="${existing?.signDate||''}"/></div>
+        ${!existing && isPMI ? `<label class="text-xs flex items-center gap-2 mt-2"><input type="checkbox" name="useTpl" checked> Criar tarefas a partir do Template</label>`:''}
         <div class="flex justify-end gap-2 pt-4">
           ${existing?`<button type="button" id="delCo" class="btn btn-danger mr-auto">Excluir</button>`:''}
           <button type="button" class="btn btn-secondary" id="cancel">Cancelar</button>
@@ -4171,7 +4173,7 @@ function renderDeal(){
 
   const company = state.companies.find(c=>c.id===view.dealId) || state.companies[0];
   if(!company){
-    return el(`<div class="text-sm text-gray-500">Nenhum deal selecionado.</div>`);
+    return el(`<div class="text-sm text-gray-500">${isTech ? 'Nenhum projeto selecionado.' : 'Nenhum deal selecionado.'}</div>`);
   }
   view.dealId = company.id;
   const deal = dealOf(company.id);
@@ -4195,7 +4197,11 @@ function renderDeal(){
     historico: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" style="display:inline;vertical-align:-2px;margin-right:.35rem"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
     briefing:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" style="display:inline;vertical-align:-2px;margin-right:.35rem"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>',
   };
-  const subtabs = [
+  const subtabs = isTech ? [
+    ['tarefas',   ICN.tarefas   + 'Tarefas',   total],
+    ['historico', ICN.historico + 'Histórico', null],
+    ['briefing',  ICN.briefing  + 'Briefing',  null],
+  ] : [
     ['tarefas',   ICN.tarefas   + 'Tarefas',    total],
     ['raid',      ICN.raid      + raidTooltipLabel('Ações de Mitigação'), openRaid],
     ['sinergias', ICN.sinergias + 'Sinergias',  (deal.synergies||[]).length],
@@ -4217,26 +4223,26 @@ function renderDeal(){
     <div class="space-y-4">
       <div class="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <div class="text-xs text-gray-500"><button class="hover:underline" id="back">← Empresas</button></div>
+          <div class="text-xs text-gray-500"><button class="hover:underline" id="back">← ${isTech ? 'Projetos' : 'Empresas'}</button></div>
           <h1 class="text-xl font-bold">${company.name}</h1>
-          <div class="text-sm text-gray-500">Assinatura: ${company.signDate?fmtDate(company.signDate):'—'} • ${total} tarefas • ${pct}% concluído</div>
+          <div class="text-sm text-gray-500">${isTech ? 'Início' : 'Assinatura'}: ${company.signDate?fmtDate(company.signDate):'—'} • ${total} tarefas • ${pct}% concluído</div>
         </div>
         <div class="flex gap-2 items-start">
           <select id="dealSel" class="w-56">
-            <option value="__all__">Todos os deals</option>
+            <option value="__all__">${isTech ? 'Todos os projetos' : 'Todos os deals'}</option>
             ${state.companies.map(c=>`<option value="${c.id}" ${c.id===company.id?'selected':''}>${c.name}</option>`).join('')}
           </select>
           ${canAdmin() ? `<button id="editCo" class="btn btn-secondary">⚙ Editar</button>`:''}
         </div>
       </div>
 
-      <div class="grid grid-cols-2 md:grid-cols-6 gap-2">
+      <div class="grid grid-cols-2 ${isTech ? 'md:grid-cols-4' : 'md:grid-cols-6'} gap-2">
         <div class="mini-stat"><div class="lbl">Progresso</div><div class="val">${pct}%</div></div>
         <div class="mini-stat"><div class="lbl">Tasks Done</div><div class="val">${done}/${total}</div></div>
         <div class="mini-stat"><div class="lbl">Atrasadas</div><div class="val" style="color:var(--bhub-red)">${late}</div></div>
         <div class="mini-stat"><div class="lbl">Bloqueios</div><div class="val" style="color:#92400e">${blocked}</div></div>
-        <div class="mini-stat"><div class="lbl">Ações de Mitigação abertas</div><div class="val">${openRaid}</div></div>
-        <div class="mini-stat"><div class="lbl">Sinergia captura</div><div class="val">${synPct}%</div></div>
+        ${isPMI ? `<div class="mini-stat"><div class="lbl">Ações de Mitigação abertas</div><div class="val">${openRaid}</div></div>` : ''}
+        ${isPMI ? `<div class="mini-stat"><div class="lbl">Sinergia captura</div><div class="val">${synPct}%</div></div>` : ''}
       </div>
 
       <div class="subtabs">
