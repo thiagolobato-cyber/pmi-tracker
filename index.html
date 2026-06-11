@@ -526,6 +526,11 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 const SUPABASE_FUNCTIONS_URL = `${SUPABASE_URL}/functions/v1`;
 const supa = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+/* ---------- Workspace ---------- */
+const WS     = new URLSearchParams(location.search).get('ws') || 'pmi';
+const isPMI  = WS !== 'tech';
+const isTech = WS === 'tech';
+
 /* ---------- Indicador global "salvando…" ---------- */
 let _savingOps = 0;
 function _bumpSaving(delta){
@@ -586,7 +591,7 @@ const AREA_TRIGGERS = {
 /* ---------- State ---------- */
 let state = defaultState();
 let session = null; // { id, email, username, role }
-let view = { tab:'dashboard', dealId:null, dealTab:'tarefas', executiveArea:'todas', raidFilter:'all', raidPortfolioFilter:'all', raidDealFilter:[], synergyFilter:'all', dashFilters:{deals:[],areas:[],owners:[]}, empresasSearch:'', empresasSortCol:'date', empresasSortDir:'desc', sidebarCollapsed:false, executivaDealSearch:'', execPdfDeals:null, triggersCardOpen:true };
+let view = { tab: isTech ? 'empresas' : 'dashboard', dealId:null, dealTab:'tarefas', executiveArea:'todas', raidFilter:'all', raidPortfolioFilter:'all', raidDealFilter:[], synergyFilter:'all', dashFilters:{deals:[],areas:[],owners:[]}, empresasSearch:'', empresasSortCol:'date', empresasSortDir:'desc', sidebarCollapsed:false, executivaDealSearch:'', execPdfDeals:null, triggersCardOpen:true };
 
 // Tooltip explicativo do acrônimo RAID dentro de Ações de Mitigação
 function raidTooltipLabel(text){
@@ -775,7 +780,7 @@ async function logout(){
   // Limpa estado e renderiza ANTES de esperar a rede — usuário sai visualmente imediato
   session = null;
   state = defaultState();
-  view = { tab:'dashboard', dealId:null, dealTab:'tarefas', executiveArea:DEFAULT_AREAS[0]?.name||'', raidFilter:'all', raidPortfolioFilter:'all', raidDealFilter:[], synergyFilter:'all', dashFilters:{deals:[],areas:[],owners:[]}, empresasSearch:'', empresasSortCol:'date', empresasSortDir:'desc', sidebarCollapsed:false, executivaDealSearch:'', execPdfDeals:null, triggersCardOpen:true };
+  view = { tab: isTech ? 'empresas' : 'dashboard', dealId:null, dealTab:'tarefas', executiveArea:DEFAULT_AREAS[0]?.name||'', raidFilter:'all', raidPortfolioFilter:'all', raidDealFilter:[], synergyFilter:'all', dashFilters:{deals:[],areas:[],owners:[]}, empresasSearch:'', empresasSortCol:'date', empresasSortDir:'desc', sidebarCollapsed:false, executivaDealSearch:'', execPdfDeals:null, triggersCardOpen:true };
   render();
   // signOut com timeout de 3s para não travar
   try { await Promise.race([supa.auth.signOut({scope:'global'}), new Promise(r=>setTimeout(r,3000))]); } catch(e){}
@@ -1337,8 +1342,8 @@ function renderLogin(){
       <div class="bg-white rounded-3xl p-10 w-full max-w-sm border border-[color:var(--bhub-border)]" style="box-shadow:0 24px 60px rgba(15,23,39,.35)">
         <div class="text-center mb-8">
           <img src="bhub-logo.png" alt="BHub" class="mx-auto" style="height:56px;width:auto;border-radius:8px" />
-          <div class="font-display text-base font-semibold mt-5" style="color:var(--bhub-navy)">PMI Tracker</div>
-          <div class="text-xs mt-1" style="color:var(--bhub-muted)">Acompanhamento de Integração M&A</div>
+          <div class="font-display text-base font-semibold mt-5" style="color:var(--bhub-navy)">${isTech ? 'Projetos Tech' : 'PMI Tracker'}</div>
+          <div class="text-xs mt-1" style="color:var(--bhub-muted)">${isTech ? 'Gestão de projetos de tecnologia' : 'Acompanhamento de Integração M&A'}</div>
         </div>
         ${_authBanner ? `<div class="rounded-lg p-3 mb-5 text-xs border" style="background:#FFF8E1;border-color:#F0C97B;color:#7A4A02"><div class="flex items-start gap-2"><span>ℹ️</span><div>${_authBanner.friendly.replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))}</div></div></div>` : ''}
         <form id="loginForm" class="space-y-4">
@@ -1608,6 +1613,140 @@ function renderLiderPanel(){
   return node;
 }
 
+function renderTechTarefas(){
+  const today = new Date(); today.setHours(0,0,0,0);
+  if(!view.techTarefasFilters) view.techTarefasFilters = { dealId:'', owner:'', status:'' };
+
+  // Collect all tasks across all projects
+  const allTasks = [];
+  state.companies.forEach(c => {
+    const deal = state.deals[c.id];
+    if(!deal) return;
+    (deal.tasks||[]).forEach(t => {
+      const f = computeTaskFields(t, c);
+      allTasks.push({ ...t, dealId: c.id, dealName: c.name, _f: f });
+    });
+  });
+
+  // Filter
+  const fDeal   = view.techTarefasFilters.dealId;
+  const fOwner  = view.techTarefasFilters.owner;
+  const fStatus = view.techTarefasFilters.status;
+  const filtered = allTasks.filter(t => {
+    if(fDeal   && t.dealId      !== fDeal)   return false;
+    if(fOwner  && (t.owner||'') !== fOwner)  return false;
+    if(fStatus && t._f.status   !== fStatus) return false;
+    return true;
+  });
+
+  const uniqueDeals  = Array.from(new Set(allTasks.map(t=>t.dealId))).map(id=>({id, name:(allTasks.find(t=>t.dealId===id)||{}).dealName||id})).sort((a,b)=>a.name.localeCompare(b.name));
+  const uniqueOwners = Array.from(new Set(allTasks.map(t=>t.owner||'').filter(Boolean))).sort();
+
+  // Group by deal
+  const byDeal = {};
+  filtered.forEach(t => {
+    if(!byDeal[t.dealId]) byDeal[t.dealId] = { name: t.dealName, tasks: [] };
+    byDeal[t.dealId].tasks.push(t);
+  });
+
+  const isFiltered = fDeal || fOwner || fStatus;
+  const node = el(`
+    <div class="space-y-5">
+      <div class="page-header">
+        <div>
+          <h1 style="display:flex;align-items:center;gap:.5rem">
+            <span style="display:inline-flex;align-items:center;justify-content:center;width:1.8rem;height:1.8rem;border-radius:.45rem;background:#ede9fe;color:#5b21b6">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><polyline points="3 6 4 7 6 5"/><polyline points="3 12 4 13 6 11"/><polyline points="3 18 4 19 6 17"/></svg>
+            </span>
+            Tarefas por projeto
+          </h1>
+          <p class="subtitle">${filtered.length} tarefa${filtered.length!==1?'s':''} ${isFiltered?'filtradas ':''} em ${Object.keys(byDeal).length} projeto${Object.keys(byDeal).length!==1?'s':''}</p>
+        </div>
+      </div>
+
+      <!-- Filtros -->
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:.5rem">
+        <select id="ttFiltroProj" style="font-size:.75rem;padding:.25rem .5rem;border:1px solid ${fDeal?'#7F77DD':'var(--bhub-border)'};border-radius:999px;background:${fDeal?'#ede9fe':'#fff'};color:${fDeal?'#5b21b6':'var(--bhub-navy)'};font-weight:${fDeal?'700':'400'};cursor:pointer;max-width:200px">
+          <option value="">Todos os projetos</option>
+          ${uniqueDeals.map(d=>`<option value="${escapeHtml(d.id)}" ${fDeal===d.id?'selected':''}>${escapeHtml(d.name)}</option>`).join('')}
+        </select>
+        <select id="ttFiltroOwner" style="font-size:.75rem;padding:.25rem .5rem;border:1px solid ${fOwner?'#7F77DD':'var(--bhub-border)'};border-radius:999px;background:${fOwner?'#ede9fe':'#fff'};color:${fOwner?'#5b21b6':'var(--bhub-navy)'};font-weight:${fOwner?'700':'400'};cursor:pointer;max-width:180px">
+          <option value="">Responsável</option>
+          ${uniqueOwners.map(o=>`<option value="${escapeHtml(o)}" ${fOwner===o?'selected':''}>${escapeHtml(o)}</option>`).join('')}
+        </select>
+        <select id="ttFiltroStatus" style="font-size:.75rem;padding:.25rem .5rem;border:1px solid ${fStatus?'#7F77DD':'var(--bhub-border)'};border-radius:999px;background:${fStatus?'#ede9fe':'#fff'};color:${fStatus?'#5b21b6':'var(--bhub-navy)'};font-weight:${fStatus?'700':'400'};cursor:pointer">
+          <option value="">Status</option>
+          <option value="late" ${fStatus==='late'?'selected':''}>Atrasadas</option>
+          <option value="ontrack" ${fStatus==='ontrack'?'selected':''}>No prazo</option>
+          <option value="done" ${fStatus==='done'?'selected':''}>Concluídas</option>
+          <option value="blocked" ${fStatus==='blocked'?'selected':''}>Bloqueadas</option>
+        </select>
+        ${isFiltered ? `<button id="ttClearFilters" style="font-size:.72rem;padding:.22rem .6rem;border:1px solid #c4b5fd;border-radius:999px;background:#fff;cursor:pointer;color:#5b21b6;font-weight:600">✕ Limpar</button>` : ''}
+      </div>
+
+      ${Object.keys(byDeal).length === 0 ? `
+        <div class="bhub-card p-10 text-center text-gray-400">
+          <div style="font-size:2rem;margin-bottom:.5rem">📋</div>
+          <div class="font-medium text-gray-600">Nenhuma tarefa encontrada</div>
+        </div>` : Object.entries(byDeal).map(([dealId, deal]) => {
+          const late    = deal.tasks.filter(t=>t._f.status==='late').length;
+          const done    = deal.tasks.filter(t=>t._f.status==='done').length;
+          const blocked = deal.tasks.filter(t=>t.bloqueio==='Sim').length;
+          const total   = deal.tasks.length;
+          const pct     = total ? Math.round(done/total*100) : 0;
+          return `
+          <section class="bhub-card overflow-hidden">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:.65rem 1rem;background:var(--bhub-beige-soft);border-bottom:1px solid var(--bhub-border)">
+              <div style="display:flex;align-items:center;gap:.55rem;flex-wrap:wrap">
+                <span class="deal-link font-bold" data-open="${escapeHtml(dealId)}" style="font-size:.9rem;color:var(--bhub-navy)">${escapeHtml(deal.name)}</span>
+                ${late>0?`<span style="font-size:.72rem;padding:.1rem .5rem;border-radius:9999px;background:#fee2e2;color:#991b1b;font-weight:700">${late} atrasada${late!==1?'s':''}</span>`:''}
+                ${blocked>0?`<span style="font-size:.72rem;padding:.1rem .5rem;border-radius:9999px;background:#fef3c7;color:#92400e;font-weight:700">${blocked} bloqueio${blocked!==1?'s':''}</span>`:''}
+                <span style="font-size:.72rem;color:var(--bhub-muted)">${pct}% concluído</span>
+              </div>
+              <span style="font-size:.72rem;color:var(--bhub-muted)">${total} tarefa${total!==1?'s':''}</span>
+            </div>
+            <div class="scroll-x">
+              <table class="w-full">
+                <thead><tr>
+                  <th style="width:4rem">REF</th>
+                  <th style="width:10rem">ÁREA</th>
+                  <th>TAREFA</th>
+                  <th style="width:9rem">OWNER</th>
+                  <th style="width:7rem">PRAZO</th>
+                  <th style="width:7rem">STATUS</th>
+                </tr></thead>
+                <tbody>
+                  ${deal.tasks.map(t=>`
+                  <tr class="row-clickable" data-open="${escapeHtml(dealId)}">
+                    <td style="font-family:monospace;font-size:.75rem">${escapeHtml(t.ref||'—')}</td>
+                    <td style="font-size:.75rem">${escapeHtml(t.area||'—')}</td>
+                    <td style="max-width:22rem;font-size:.8rem">${escapeHtml(t.task||'')}</td>
+                    <td style="font-size:.75rem">${escapeHtml(t.owner||'—')}</td>
+                    <td style="white-space:nowrap;font-size:.75rem">${t._f.dataPrevista?fmtDate(t._f.dataPrevista):'—'}</td>
+                    <td><span class="pill ${statusClass(t._f.status)}">${statusLabel(t._f.status)}</span></td>
+                  </tr>`).join('')}
+                </tbody>
+              </table>
+            </div>
+          </section>`;
+        }).join('')}
+    </div>
+  `);
+
+  // Filtros
+  node.querySelector('#ttFiltroProj')?.addEventListener('change', e=>{view.techTarefasFilters.dealId=e.target.value;render();});
+  node.querySelector('#ttFiltroOwner')?.addEventListener('change', e=>{view.techTarefasFilters.owner=e.target.value;render();});
+  node.querySelector('#ttFiltroStatus')?.addEventListener('change', e=>{view.techTarefasFilters.status=e.target.value;render();});
+  node.querySelector('#ttClearFilters')?.addEventListener('click', ()=>{view.techTarefasFilters={dealId:'',owner:'',status:''};render();});
+
+  // Click em linha → abre deal
+  node.querySelectorAll('[data-open]').forEach(b=>{
+    b.addEventListener('click', ()=>{ view.tab='deal'; view.dealId=b.dataset.open; view.dealTab='tarefas'; render(); });
+  });
+
+  return node;
+}
+
 function renderCobranca(){
   // Collect all late tasks across all deals
   const today = new Date(); today.setHours(0,0,0,0);
@@ -1804,6 +1943,10 @@ function renderShell(){
   mainArea.appendChild(renderTopbar());
 
   const content = el(`<main class="content-area"></main>`);
+  // Guard: se estiver em modo Tech e tentar acessar aba exclusiva do PMI, redireciona
+  if(isTech && ['dashboard','hoje','executiva','raid','homebroker','cobranca','template'].includes(view.tab)){
+    view.tab = 'empresas';
+  }
   if(view.tab==='hoje') content.appendChild(renderHoje());
   else if(view.tab==='dashboard') content.appendChild(renderDashboard());
   else if(view.tab==='executiva') content.appendChild(renderExecutiva());
@@ -1812,6 +1955,7 @@ function renderShell(){
   else if(view.tab==='homebroker') content.appendChild(renderHomebroker());
   else if(view.tab==='cobranca' && canViewAcompanhamento()) content.appendChild(renderCobranca());
   else if(view.tab==='lider' && isLider()) content.appendChild(renderLiderPanel());
+  else if(view.tab==='tech_tarefas') content.appendChild(renderTechTarefas());
   else if(view.tab==='template') content.appendChild(renderTemplate());
   else if(view.tab==='deal') content.appendChild(renderDeal());
   else if(view.tab==='usuarios') content.appendChild(renderUsuarios());
@@ -1831,19 +1975,24 @@ function renderShell(){
 function renderSidebar(){
   const pmoTabs = (() => {
     const tabs = [];
-    if(canAdmin()) tabs.push(['homebroker', 'Visão Estratégica', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>']);
-    if(canViewAcompanhamento()) tabs.push(['cobranca', 'Acompanhamento', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>']);
+    if(isPMI && canAdmin()) tabs.push(['homebroker', 'Visão Estratégica', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>']);
+    if(isPMI && canViewAcompanhamento()) tabs.push(['cobranca', 'Acompanhamento', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>']);
     if(isLider()) tabs.push(['lider', 'Painel do Líder', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/><line x1="22" y1="11" x2="22" y2="17"/><line x1="19" y1="14" x2="25" y2="14"/></svg>']);
     return tabs;
   })();
-  const portfolioTabs = [
+  const portfolioTabs = isTech ? [
+    ['empresas',      'Projetos',             '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="8" height="14" rx="1"/><rect x="13" y="3" width="8" height="17" rx="1"/><line x1="6" y1="10" x2="8" y2="10"/><line x1="6" y1="14" x2="8" y2="14"/><line x1="16" y1="7" x2="18" y2="7"/><line x1="16" y1="11" x2="18" y2="11"/><line x1="16" y1="15" x2="18" y2="15"/></svg>'],
+    ['tech_tarefas',  'Tarefas por projeto',  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><polyline points="3 6 4 7 6 5"/><polyline points="3 12 4 13 6 11"/><polyline points="3 18 4 19 6 17"/></svg>'],
+  ] : [
     ['dashboard','Dashboard',      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>'],
     ['hoje',     'Visão Usuário',  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L13.09 8.26L19 7L15.45 12L19 17L13.09 15.74L12 22L10.91 15.74L5 17L8.55 12L5 7L10.91 8.26L12 2Z"/></svg>'],
     ['executiva','Visão Executiva','<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l3-3 4 4 5-7"/></svg>'],
     ['empresas', 'Deals',          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="8" height="14" rx="1"/><rect x="13" y="3" width="8" height="17" rx="1"/><line x1="6" y1="10" x2="8" y2="10"/><line x1="6" y1="14" x2="8" y2="14"/><line x1="16" y1="7" x2="18" y2="7"/><line x1="16" y1="11" x2="18" y2="11"/><line x1="16" y1="15" x2="18" y2="15"/></svg>'],
     ['raid',     'Ação de Mitigação','<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L3 6v6c0 5 4 9 9 10 5-1 9-5 9-10V6l-9-4z"/><path d="M12 8v4"/><circle cx="12" cy="16" r=".5" fill="currentColor"/></svg>'],
   ];
-  const configTabs = [
+  const configTabs = isTech ? [
+    ['usuarios', 'Usuários',  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9.5" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>'],
+  ] : [
     ['template', 'Template',  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="13" y2="16"/></svg>'],
     ['usuarios', 'Usuários',  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9.5" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>'],
   ];
@@ -1857,11 +2006,13 @@ function renderSidebar(){
     <aside class="sidebar ${collapsed}" id="appSidebar">
       <div class="sidebar-brand">
         <div class="bhub-logo" style="height:30px;width:30px;color:#fff">${BHUB_LOGO_ICON}</div>
-        <div class="logo-text">PMI <span class="blue">Tracker</span></div>
+        ${isTech
+          ? `<div class="logo-text">Projetos <span style="color:#9f8ff0">Tech</span></div>`
+          : `<div class="logo-text">PMI <span class="blue">Tracker</span></div>`}
       </div>
       <nav class="sidebar-nav">
         ${pmoTabs.length ? '<div class="sidebar-group-label">Gestão</div>'+tabHtml(pmoTabs) : ''}
-        <div class="sidebar-group-label" style="margin-top:.5rem">Portfólio</div>
+        <div class="sidebar-group-label" style="margin-top:.5rem">${isTech ? 'Projetos' : 'Portfólio'}</div>
         ${tabHtml(portfolioTabs)}
         <div class="sidebar-group-label" style="margin-top:.5rem">Configurações</div>
         ${tabHtml(configTabs.filter(([k])=> k!=='usuarios' || canAdmin()))}
@@ -4567,6 +4718,10 @@ function openTaskModal(company, taskId){
   const areaOpts = allAreas.map(a=>
     `<option value="${escapeHtml(a)}" ${existing?.area===a?'selected':''}>${escapeHtml(a)}</option>`
   ).join('');
+  // Tech: área livre; PMI: select fixo
+  const areaFieldHtml = isTech
+    ? `<input type="text" name="area" value="${escapeHtml(existing?.area||'')}" placeholder="Nome da área…" />`
+    : `<select name="area"><option value="">— Área —</option>${areaOpts}</select>`;
 
   const raidList = (state.raid||[]).filter(r=>(r.dealIds||[]).includes(company.id)||r.id===existing?.raidId);
   const raidOpts = [`<option value="">— Nenhuma —</option>`,
@@ -4646,7 +4801,7 @@ function openTaskModal(company, taskId){
             <div>
               <div style="font-size:.72rem;font-weight:600;color:var(--bhub-navy);margin-bottom:.3rem">Área</div>
               ${canAdmin()
-                ? `<select name="area"><option value="">— Área —</option>${areaOpts}</select>`
+                ? areaFieldHtml
                 : `<div style="font-size:.875rem;padding:.45rem .7rem;border-radius:.625rem;background:var(--bhub-beige-soft);color:var(--bhub-navy);border:1px solid var(--bhub-border)">${escapeHtml(existing?.area||'—')}</div>
                    <input type="hidden" name="area" value="${escapeHtml(existing?.area||'')}">`}
             </div>
