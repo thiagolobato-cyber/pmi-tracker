@@ -1612,6 +1612,12 @@ function renderCobranca(){
   // Collect all late tasks across all deals
   const today = new Date(); today.setHours(0,0,0,0);
   if(!view.cobrancaFilters) view.cobrancaFilters = { trigger:'', dealId:'', owner:'' };
+
+  // Se não for admin, filtra apenas liderados do usuário logado
+  const lideradoNames = canAdmin()
+    ? null  // null = sem filtro (vê tudo)
+    : new Set(getLiderados().map(u => (u.username||'').trim().toLowerCase()));
+
   const allLateTasks = [];
   state.companies.forEach(c => {
     const deal = state.deals[c.id];
@@ -1619,6 +1625,8 @@ function renderCobranca(){
     (deal.tasks||[]).forEach(t => {
       const f = computeTaskFields(t, c);
       if(f.status !== 'late') return;
+      // Filtro por liderado (apenas para não-admins)
+      if(lideradoNames && !lideradoNames.has((t.owner||'').trim().toLowerCase())) return;
       const dias = f.dataPrevista ? businessDaysBetween(f.dataPrevista, today) : null;
       allLateTasks.push({ dealId:c.id, deal:c.name, area:t.area||'Sem área', owner:t.owner||'Sem responsável', task:t.task||'', dataPrevista:f.dataPrevista, dias: dias !== null ? dias : '?' });
     });
@@ -1685,7 +1693,7 @@ function renderCobranca(){
             </span>
             Acompanhamento
           </h1>
-          <p class="subtitle">Tarefas atrasadas por área e responsável — ${isFiltered ? totalLate+' de '+totalAll : totalAll} tarefa${totalAll!==1?'s':''} em atraso</p>
+          <p class="subtitle">Tarefas atrasadas por área e responsável${lideradoNames ? ` — equipe de ${escapeHtml(session.username||'')}` : ''} — ${isFiltered ? totalLate+' de '+totalAll : totalAll} tarefa${totalAll!==1?'s':''} em atraso</p>
         </div>
         ${totalAll > 0 ? `<button id="cobrancaCopyBtn" class="btn btn-primary" style="gap:.4rem">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
