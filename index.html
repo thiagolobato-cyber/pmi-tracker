@@ -591,7 +591,7 @@ const AREA_TRIGGERS = {
 /* ---------- State ---------- */
 let state = defaultState();
 let session = null; // { id, email, username, role }
-let view = { tab: isTech ? 'empresas' : 'dashboard', dealId:null, dealTab:'tarefas', executiveArea:'todas', raidFilter:'all', raidPortfolioFilter:'all', raidDealFilter:[], synergyFilter:'all', dashFilters:{deals:[],areas:[],owners:[]}, empresasSearch:'', empresasSortCol:'date', empresasSortDir:'desc', sidebarCollapsed:false, executivaDealSearch:'', execPdfDeals:null, triggersCardOpen:true };
+let view = { tab: 'dashboard', dealId:null, dealTab:'tarefas', executiveArea:'todas', raidFilter:'all', raidPortfolioFilter:'all', raidDealFilter:[], synergyFilter:'all', dashFilters:{deals:[],areas:[],owners:[]}, empresasSearch:'', empresasSortCol:'date', empresasSortDir:'desc', sidebarCollapsed:false, executivaDealSearch:'', execPdfDeals:null, triggersCardOpen:true };
 
 // Tooltip explicativo do acrônimo RAID dentro de Ações de Mitigação
 function raidTooltipLabel(text){
@@ -789,7 +789,7 @@ async function logout(){
   // Limpa estado e renderiza ANTES de esperar a rede — usuário sai visualmente imediato
   session = null;
   state = defaultState();
-  view = { tab: isTech ? 'empresas' : 'dashboard', dealId:null, dealTab:'tarefas', executiveArea:DEFAULT_AREAS[0]?.name||'', raidFilter:'all', raidPortfolioFilter:'all', raidDealFilter:[], synergyFilter:'all', dashFilters:{deals:[],areas:[],owners:[]}, empresasSearch:'', empresasSortCol:'date', empresasSortDir:'desc', sidebarCollapsed:false, executivaDealSearch:'', execPdfDeals:null, triggersCardOpen:true };
+  view = { tab: 'dashboard', dealId:null, dealTab:'tarefas', executiveArea:DEFAULT_AREAS[0]?.name||'', raidFilter:'all', raidPortfolioFilter:'all', raidDealFilter:[], synergyFilter:'all', dashFilters:{deals:[],areas:[],owners:[]}, empresasSearch:'', empresasSortCol:'date', empresasSortDir:'desc', sidebarCollapsed:false, executivaDealSearch:'', execPdfDeals:null, triggersCardOpen:true };
   render();
   // signOut com timeout de 3s para não travar
   try { await Promise.race([supa.auth.signOut({scope:'global'}), new Promise(r=>setTimeout(r,3000))]); } catch(e){}
@@ -834,7 +834,11 @@ function ownerSelectHtml(currentOwner='', adminOnly=false){
     return `<div class="text-sm px-2 py-1.5 rounded" style="background:var(--bhub-beige-soft);color:var(--bhub-navy)">${escapeHtml(displayName)}</div>
             <input type="hidden" name="owner" value="${escapeHtml(currentOwner||'')}">`;
   }
-  const users = (state && state.users) ? state.users : [];
+  const allUsers = (state && state.users) ? state.users : [];
+  // Em Tech, mostrar apenas usuários com workspace='tech' ou 'ambos'
+  const users = isTech
+    ? allUsers.filter(u => u.workspace === 'tech' || u.workspace === 'ambos')
+    : allUsers;
   if(!users.length){
     return `<select name="owner" disabled title="Cadastre usuários em Usuários antes de atribuir responsáveis">
       <option value="">⚠ Nenhum usuário cadastrado</option>
@@ -1757,6 +1761,120 @@ function renderTechTarefas(){
   return node;
 }
 
+function renderTechDashboard(){
+  const data = aggregate(); // reuse existing aggregate — works for tech too
+  const total   = data.reduce((s,d)=>s+d.total,0);
+  const done    = data.reduce((s,d)=>s+d.done,0);
+  const late    = data.reduce((s,d)=>s+d.late,0);
+  const blocked = data.reduce((s,d)=>s+d.blocked,0);
+  const pct     = total > 0 ? Math.round(done/total*100) : 0;
+  const PURPLE  = '#9f8ff0';
+
+  const kpis = [
+    { label:'Projetos',        value: data.length,  icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="6" width="8" height="14" rx="1"/><rect x="13" y="3" width="8" height="17" rx="1"/></svg>', nav:'empresas' },
+    { label:'Total de Tarefas',value: total,         icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>' },
+    { label:'Concluídas',      value: done+'  ('+pct+'%)', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9 12l2 2 4-4"/></svg>' },
+    { label:'Atrasadas',       value: late,          icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>', warn: late>0 },
+    { label:'Bloqueadas',      value: blocked,       icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>', warn: blocked>0 },
+  ];
+
+  const kpiHtml = kpis.map(k=>`
+    <div class="kpi" ${k.nav?`data-kpi-nav="${k.nav}" style="cursor:pointer"`:''}
+         style="background:#fff;border:1px solid #e5e7eb;border-radius:.75rem;padding:1.25rem 1.5rem;display:flex;align-items:center;gap:1rem;box-shadow:0 1px 4px rgba(0,0,0,.05)">
+      <div style="width:2.5rem;height:2.5rem;border-radius:.5rem;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:${k.warn?'#fee2e2':'#ede9ff'};color:${k.warn?'#dc2626':PURPLE}">
+        ${k.icon}
+      </div>
+      <div>
+        <div style="font-size:1.5rem;font-weight:700;color:${k.warn?'#dc2626':'#111827'}">${k.value}</div>
+        <div style="font-size:.78rem;color:#6b7280;margin-top:.1rem">${k.label}</div>
+      </div>
+    </div>`).join('');
+
+  // Progress bar
+  const progressHtml = `
+    <div style="background:#fff;border:1px solid #e5e7eb;border-radius:.75rem;padding:1.25rem 1.5rem;box-shadow:0 1px 4px rgba(0,0,0,.05)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem">
+        <span style="font-weight:600;color:#111827">Progresso Geral do Portfolio</span>
+        <span style="font-size:1.1rem;font-weight:700;color:${PURPLE}">${pct}%</span>
+      </div>
+      <div style="height:.6rem;background:#ede9ff;border-radius:9999px;overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:${PURPLE};border-radius:9999px;transition:width .4s"></div>
+      </div>
+      <div style="display:flex;gap:2rem;margin-top:.6rem;font-size:.78rem;color:#6b7280">
+        <span>${done} concluídas</span>
+        <span>${total-done} restantes</span>
+        ${late?`<span style="color:#dc2626">${late} atrasadas</span>`:''}
+        ${blocked?`<span style="color:#f59e0b">${blocked} bloqueadas</span>`:''}
+      </div>
+    </div>`;
+
+  // Projects table
+  const rowsHtml = data.length === 0
+    ? `<tr><td colspan="6" style="text-align:center;padding:2rem;color:#9ca3af">Nenhum projeto cadastrado ainda.</td></tr>`
+    : data.map(d=>{
+        const statusColor = d.late > 0 ? '#dc2626' : d.pct===100 ? '#16a34a' : PURPLE;
+        const statusLabel = d.pct===100 ? 'Concluído' : d.late > 0 ? 'Atrasado' : d.total===0 ? 'Sem tarefas' : 'Em andamento';
+        return `<tr style="cursor:pointer;border-bottom:1px solid #f3f4f6" data-open="${d.company.id}">
+          <td style="padding:.75rem 1rem;font-weight:500;color:#111827">${escapeHtml(d.company.name)}</td>
+          <td style="padding:.75rem 1rem;text-align:center">${d.total}</td>
+          <td style="padding:.75rem 1rem">
+            <div style="display:flex;align-items:center;gap:.5rem">
+              <div style="flex:1;height:.45rem;background:#ede9ff;border-radius:9999px;overflow:hidden;min-width:4rem">
+                <div style="height:100%;width:${d.pct}%;background:${PURPLE};border-radius:9999px"></div>
+              </div>
+              <span style="font-size:.8rem;font-weight:600;color:${PURPLE};min-width:2.5rem">${d.pct}%</span>
+            </div>
+          </td>
+          <td style="padding:.75rem 1rem;text-align:center;color:${d.late>0?'#dc2626':'#6b7280'};font-weight:${d.late>0?'600':'400'}">${d.late}</td>
+          <td style="padding:.75rem 1rem;text-align:center;color:${d.blocked>0?'#f59e0b':'#6b7280'};font-weight:${d.blocked>0?'600':'400'}">${d.blocked}</td>
+          <td style="padding:.75rem 1rem">
+            <span style="display:inline-block;padding:.2rem .6rem;border-radius:9999px;font-size:.72rem;font-weight:600;background:${statusColor}18;color:${statusColor}">${statusLabel}</span>
+          </td>
+        </tr>`;
+      }).join('');
+
+  const tableHtml = `
+    <div style="background:#fff;border:1px solid #e5e7eb;border-radius:.75rem;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.05)">
+      <div style="padding:1rem 1.5rem;border-bottom:1px solid #f3f4f6">
+        <h2 style="font-size:1rem;font-weight:600;color:#111827">Projetos</h2>
+      </div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse">
+          <thead>
+            <tr style="background:#fafafa;font-size:.75rem;color:#6b7280;text-transform:uppercase;letter-spacing:.05em">
+              <th style="padding:.6rem 1rem;text-align:left">Projeto</th>
+              <th style="padding:.6rem 1rem;text-align:center">Tarefas</th>
+              <th style="padding:.6rem 1rem;text-align:left">Progresso</th>
+              <th style="padding:.6rem 1rem;text-align:center">Atrasadas</th>
+              <th style="padding:.6rem 1rem;text-align:center">Bloqueadas</th>
+              <th style="padding:.6rem 1rem;text-align:left">Status</th>
+            </tr>
+          </thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </div>
+    </div>`;
+
+  const node = document.createElement('div');
+  node.style.cssText = 'padding:1.5rem;display:flex;flex-direction:column;gap:1.25rem;max-width:1200px;margin:0 auto';
+  node.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem">
+      <h1 style="font-size:1.4rem;font-weight:700;color:#111827">Dashboard</h1>
+      <span style="font-size:.8rem;color:#9ca3af">${data.length} projeto${data.length!==1?'s':''} · ${total} tarefa${total!==1?'s':''}</span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem">${kpiHtml}</div>
+    ${progressHtml}
+    ${tableHtml}`;
+
+  node.querySelectorAll('[data-kpi-nav]').forEach(el=>
+    el.addEventListener('click', ()=>{ view.tab=el.dataset.kpiNav; render(); })
+  );
+  node.querySelectorAll('tr[data-open]').forEach(tr=>
+    tr.addEventListener('click', ()=>{ view.tab='empresas'; view.dealId=tr.dataset.open; render(); })
+  );
+  return node;
+}
+
 function renderCobranca(){
   // Collect all late tasks across all deals
   const today = new Date(); today.setHours(0,0,0,0);
@@ -1852,12 +1970,12 @@ function renderCobranca(){
 
       <!-- Filtros compactos -->
       <div style="display:flex;flex-wrap:wrap;align-items:center;gap:.5rem">
-        <select id="cobrFiltroGatilho" style="font-size:.75rem;padding:.25rem .5rem;border:1px solid ${fTrigger?'#0171E4':'var(--bhub-border)'};border-radius:999px;background:${fTrigger?'#eff6ff':'#fff'};color:${fTrigger?'#0171E4':'var(--bhub-navy)'};font-weight:${fTrigger?'700':'400'};cursor:pointer;max-width:180px">
+        ${isPMI ? `<select id="cobrFiltroGatilho" style="font-size:.75rem;padding:.25rem .5rem;border:1px solid ${fTrigger?'#0171E4':'var(--bhub-border)'};border-radius:999px;background:${fTrigger?'#eff6ff':'#fff'};color:${fTrigger?'#0171E4':'var(--bhub-navy)'};font-weight:${fTrigger?'700':'400'};cursor:pointer;max-width:180px">
           <option value="">Gatilho</option>
           ${uniqueTriggers.map(t=>`<option value="${escapeHtml(t)}" ${fTrigger===t?'selected':''}>${escapeHtml(t)}</option>`).join('')}
-        </select>
+        </select>` : ''}
         <select id="cobrFiltroDeal" style="font-size:.75rem;padding:.25rem .5rem;border:1px solid ${fDealId?'#0171E4':'var(--bhub-border)'};border-radius:999px;background:${fDealId?'#eff6ff':'#fff'};color:${fDealId?'#0171E4':'var(--bhub-navy)'};font-weight:${fDealId?'700':'400'};cursor:pointer;max-width:180px">
-          <option value="">Deal</option>
+          <option value="">${isTech ? 'Projeto' : 'Deal'}</option>
           ${uniqueDeals.map(d=>`<option value="${escapeHtml(d.id)}" ${fDealId===d.id?'selected':''}>${escapeHtml(d.name)}</option>`).join('')}
         </select>
         <select id="cobrFiltroOwner" style="font-size:.75rem;padding:.25rem .5rem;border:1px solid ${fOwner?'#0171E4':'var(--bhub-border)'};border-radius:999px;background:${fOwner?'#eff6ff':'#fff'};color:${fOwner?'#0171E4':'var(--bhub-navy)'};font-weight:${fOwner?'700':'400'};cursor:pointer;max-width:180px">
@@ -1882,7 +2000,7 @@ function renderCobranca(){
               <div style="display:flex;align-items:center;gap:.55rem">
                 <span style="font-size:.9rem;font-weight:700;color:var(--bhub-navy)">${escapeHtml(area)}</span>
                 <span style="font-size:.72rem;padding:.1rem .5rem;border-radius:9999px;background:#fee2e2;color:#991b1b;font-weight:700">${areaTotal} atrasada${areaTotal!==1?'s':''}</span>
-                ${gatilho ? `<span style="font-size:.72rem;color:var(--bhub-muted)">Gatilho: <strong>${escapeHtml(gatilho)}</strong></span>` : ''}
+                ${isPMI && gatilho ? `<span style="font-size:.72rem;color:var(--bhub-muted)">Gatilho: <strong>${escapeHtml(gatilho)}</strong></span>` : ''}
               </div>
             </div>
             <div style="padding:.5rem 0">
@@ -1897,7 +2015,7 @@ function renderCobranca(){
                   <div class="scroll-x">
                   <table class="w-full text-xs" style="margin-bottom:.3rem">
                     <thead><tr>
-                      <th style="text-align:left;padding:.2rem .4rem;font-size:.68rem;color:var(--bhub-muted)">DEAL</th>
+                      <th style="text-align:left;padding:.2rem .4rem;font-size:.68rem;color:var(--bhub-muted)">${isTech ? 'PROJETO' : 'DEAL'}</th>
                       <th style="text-align:left;padding:.2rem .4rem;font-size:.68rem;color:var(--bhub-muted)">TAREFA</th>
                       <th style="text-align:right;padding:.2rem .4rem;font-size:.68rem;color:var(--bhub-muted)">VENCEU</th>
                       <th style="text-align:right;padding:.2rem .4rem;font-size:.68rem;color:var(--bhub-muted)">D.U. ATRASO</th>
@@ -1954,11 +2072,11 @@ function renderShell(){
 
   const content = el(`<main class="content-area"></main>`);
   // Guard: se estiver em modo Tech e tentar acessar aba exclusiva do PMI, redireciona
-  if(isTech && ['dashboard','raid','homebroker','template'].includes(view.tab)){
+  if(isTech && ['raid','homebroker','template'].includes(view.tab)){
     view.tab = 'empresas';
   }
   if(view.tab==='hoje') content.appendChild(renderHoje());
-  else if(view.tab==='dashboard') content.appendChild(renderDashboard());
+  else if(view.tab==='dashboard') content.appendChild(isTech ? renderTechDashboard() : renderDashboard());
   else if(view.tab==='executiva') content.appendChild(renderExecutiva());
   else if(view.tab==='empresas') content.appendChild(renderEmpresas());
   else if(view.tab==='raid') content.appendChild(renderRaidPortfolio());
@@ -1991,6 +2109,7 @@ function renderSidebar(){
     return tabs;
   })();
   const portfolioTabs = isTech ? [
+    ['dashboard',     'Dashboard',             '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>'],
     ['hoje',          'Minhas Tarefas',        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L13.09 8.26L19 7L15.45 12L19 17L13.09 15.74L12 22L10.91 15.74L5 17L8.55 12L5 7L10.91 8.26L12 2Z"/></svg>'],
     ['empresas',      'Projetos',              '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="8" height="14" rx="1"/><rect x="13" y="3" width="8" height="17" rx="1"/><line x1="6" y1="10" x2="8" y2="10"/><line x1="6" y1="14" x2="8" y2="14"/><line x1="16" y1="7" x2="18" y2="7"/><line x1="16" y1="11" x2="18" y2="11"/><line x1="16" y1="15" x2="18" y2="15"/></svg>'],
     ['tech_tarefas',  'Tarefas por projeto',   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><polyline points="3 6 4 7 6 5"/><polyline points="3 12 4 13 6 11"/><polyline points="3 18 4 19 6 17"/></svg>'],
@@ -3196,8 +3315,8 @@ function renderExecutiva(){
     <div class="space-y-4">
       <div class="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 class="text-xl font-bold">Visão Executiva — Tarefa × Deal</h1>
-          <p class="text-sm text-gray-500">Status por área · ${data.length} deal${data.length!==1?'s':''} · ${taskCounter} tarefas</p>
+          <h1 class="text-xl font-bold">Visão Executiva — Tarefa × ${isTech ? 'Projeto' : 'Deal'}</h1>
+          <p class="text-sm text-gray-500">Status por área · ${data.length} ${isTech ? 'projeto' : 'deal'}${data.length!==1?'s':''} · ${taskCounter} tarefas</p>
         </div>
         <div class="flex items-center gap-2 flex-wrap">
           <label class="text-xs text-gray-600">Área:</label>
@@ -3207,11 +3326,11 @@ function renderExecutiva(){
           </select>
           <div class="relative">
             <svg style="position:absolute;left:.55rem;top:50%;transform:translateY(-50%);width:13px;height:13px;color:var(--bhub-muted);pointer-events:none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input id="dealSearchExec" type="text" placeholder="Filtrar deals…" value="${escapeHtml(view.executivaDealSearch||'')}" style="padding:.45rem .7rem .45rem 1.9rem;width:160px;font-size:.82rem"/>
+            <input id="dealSearchExec" type="text" placeholder="${isTech ? 'Filtrar projetos…' : 'Filtrar deals…'}" value="${escapeHtml(view.executivaDealSearch||'')}" style="padding:.45rem .7rem .45rem 1.9rem;width:160px;font-size:.82rem"/>
           </div>
           <button id="execPdfSelect" class="btn btn-secondary" style="gap:.35rem;display:flex;align-items:center;font-size:.8rem" title="Escolher deals para o PDF">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 12l2 2 4-4"/></svg>
-            Deals${view.execPdfDeals?` (${view.execPdfDeals.length})`:''}
+            ${isTech ? 'Projetos' : 'Deals'}${view.execPdfDeals?` (${view.execPdfDeals.length})`:''}
           </button>
           <button id="execPdf" class="btn btn-primary" style="gap:.4rem;display:flex;align-items:center">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
@@ -4333,7 +4452,7 @@ function renderDealTasks(company, deal, tasks){
           ${ownerSelHtml}
         </div>
         <div style="display:flex;gap:.5rem">
-          ${canEdit() && total===0 ? `<button id="seed" class="btn btn-primary">Criar a partir do Template</button>`:''}
+          ${canEdit() && total===0 && isPMI ? `<button id="seed" class="btn btn-primary">Criar a partir do Template</button>`:''}
           ${canEdit() ? `<button id="addTask" class="btn btn-primary">+ Tarefa</button>`:''}
         </div>
       </div>
@@ -4375,7 +4494,7 @@ function renderDealTasks(company, deal, tasks){
             </table>
           </div>
         </section>
-      `).join('') || `<div class="bhub-card p-8 text-center text-gray-500 text-sm">Nenhuma tarefa. Use "Criar a partir do Template" ou adicione tarefas manualmente.</div>`}
+      `).join('') || `<div class="bhub-card p-8 text-center text-gray-500 text-sm">${isPMI ? 'Nenhuma tarefa. Use "Criar a partir do Template" ou adicione tarefas manualmente.' : 'Nenhuma tarefa. Clique em "+ Tarefa" para adicionar.'}</div>`}
     </div>
   `);
   const seed = node.querySelector('#seed');
@@ -4897,14 +5016,14 @@ function openTaskModal(company, taskId){
             </select>
           </div>
           <div id="bloqueioDetails" style="margin-top:.75rem;display:flex;flex-direction:column;gap:.75rem;${bloqueioSim?'':'display:none'}">
-            <div id="raidWarning" style="border-radius:.875rem;padding:.75rem 1rem;font-size:.8rem;display:flex;align-items:flex-start;gap:.5rem;background:#fffbeb;border:1px solid #fde68a;color:#92400e;${hasRaid?'display:none':''}">
+            ${isPMI ? `<div id="raidWarning" style="border-radius:.875rem;padding:.75rem 1rem;font-size:.8rem;display:flex;align-items:flex-start;gap:.5rem;background:#fffbeb;border:1px solid #fde68a;color:#92400e;${hasRaid?'display:none':''}">
               <svg style="flex-shrink:0;margin-top:.1rem" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
               <div><strong>Atenção:</strong> Tarefas bloqueadas devem ter uma Ação de Mitigação vinculada. Selecione abaixo ou crie uma na aba <strong>Ações de Mitigação</strong>.</div>
             </div>
             <div>
               <div style="font-size:.72rem;font-weight:600;color:var(--bhub-navy);margin-bottom:.3rem">Ação de Mitigação vinculada</div>
               <select name="raidId" id="tmRaid">${raidOpts}</select>
-            </div>
+            </div>` : ''}
             <div>
               <div style="font-size:.72rem;font-weight:600;color:var(--bhub-navy);margin-bottom:.3rem">Descrição do bloqueio</div>
               <input type="text" name="bloqueioDescricao" value="${escapeHtml(existing?.bloqueioDescricao||'')}">
@@ -5072,8 +5191,8 @@ function openTaskModal(company, taskId){
     const showErr = msg=>{ const e2=m.querySelector('#tmErr'); e2.textContent=msg; e2.style.display='block'; e2.scrollIntoView({behavior:'smooth',block:'nearest'}); };
     const taskVal = m.querySelector('[name="task"]').value?.trim();
     if(!taskVal) return showErr('A descrição da tarefa é obrigatória.');
-    // Validação: bloqueio sem RAID vinculado
-    if(bloqSel.value==='Sim' && !(raidSel?.value)){
+    // Validação: bloqueio sem RAID vinculado (apenas PMI)
+    if(isPMI && bloqSel.value==='Sim' && !(raidSel?.value)){
       // highlight the RAID select
       if(raidSel){ raidSel.style.borderColor='#f25461'; raidSel.style.boxShadow='0 0 0 3px rgba(242,84,97,.15)'; setTimeout(()=>{ raidSel.style.borderColor=''; raidSel.style.boxShadow=''; },3000); }
       return showErr('Tarefas bloqueadas precisam de uma Ação de Mitigação vinculada. Selecione uma no campo acima ou crie uma na aba Ações de Mitigação.');
@@ -5974,21 +6093,21 @@ function renderDealBriefing(company, deal, tasks){
             <div class="text-xs uppercase tracking-wider" style="color:var(--bhub-muted)">Executive Briefing</div>
             <h2 class="text-2xl font-bold" style="color:var(--bhub-navy);font-family:'Roboto'">${escapeHtml(company.name)}</h2>
             <div class="text-sm text-gray-500">
-              Assinatura: ${company.signDate?fmtDate(parseDate(company.signDate)):'—'}${daysSinceSign!==null?` (D+${daysSinceSign})`:''} • Gerado em ${fmtDate(new Date())}
+              ${isTech ? 'Início' : 'Assinatura'}: ${company.signDate?fmtDate(parseDate(company.signDate)):'—'}${daysSinceSign!==null?` (D+${daysSinceSign})`:''} • Gerado em ${fmtDate(new Date())}
             </div>
           </div>
           <span class="rag rag-${overall}" style="font-size:.8rem;padding:.3rem .7rem"><span class="rag-dot"></span>${overallLabel}</span>
         </div>
 
         <!-- KPIs -->
-        <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+        <div class="grid grid-cols-2 md:grid-cols-4 ${isPMI ? 'lg:grid-cols-7' : 'lg:grid-cols-5'} gap-3">
           <div class="kpi"><div class="kpi-label">% Concluído</div><div class="kpi-value">${pct}%</div></div>
           <div class="kpi"><div class="kpi-label">Done / Total</div><div class="kpi-value">${done} / ${total}</div></div>
           <div class="kpi"><div class="kpi-label">On Track</div><div class="kpi-value" style="color:var(--bhub-blue)">${ontrack}</div></div>
           <div class="kpi"><div class="kpi-label">Atrasadas</div><div class="kpi-value" style="color:var(--bhub-red)">${late}</div></div>
           <div class="kpi"><div class="kpi-label">Bloqueios</div><div class="kpi-value" style="color:#92400e">${blocked}</div></div>
-          <div class="kpi"><div class="kpi-label">Ações de Mitigação abertas</div><div class="kpi-value">${openRaid.length}</div></div>
-          <div class="kpi"><div class="kpi-label">Sinergia</div><div class="kpi-value">${synPct}%</div></div>
+          ${isPMI ? `<div class="kpi"><div class="kpi-label">Ações de Mitigação abertas</div><div class="kpi-value">${openRaid.length}</div></div>` : ''}
+          ${isPMI ? `<div class="kpi"><div class="kpi-label">Sinergia</div><div class="kpi-value">${synPct}%</div></div>` : ''}
         </div>
 
         <div class="grid lg:grid-cols-2 gap-5">
@@ -6004,11 +6123,11 @@ function renderDealBriefing(company, deal, tasks){
             ${upcoming.length ? `<table class="w-full text-xs"><thead><tr><th class="text-left">TAREFA</th><th class="text-left">ÁREA</th><th>OWNER</th><th>EM</th></tr></thead><tbody>${upcoming.slice(0,8).map(t=>`<tr><td>${escapeHtml(t.task||'')}</td><td>${escapeHtml(t.area||'')}</td><td>${escapeHtml(t.owner||'—')}</td><td class="text-center">${t.diff}d</td></tr>`).join('')}</tbody></table>` : `<div class="text-xs text-gray-500">Nada vencendo em 14 d.u.</div>`}
           </section>
 
-          <!-- Top riscos -->
+          ${isPMI ? `<!-- Top riscos -->
           <section class="bhub-card p-4">
             <div class="text-sm font-semibold mb-2" style="color:var(--bhub-navy)">🛡️ Top riscos abertos</div>
             ${topRisks.length ? `<ul class="space-y-1.5 text-xs">${topRisks.map(r=>`<li class="flex items-start gap-2"><span class="pill" style="background:${r.severity==='high'?'#fee2e2':r.severity==='med'?'#fef3c7':'#dbeafe'};color:${r.severity==='high'?'#991b1b':r.severity==='med'?'#92400e':'#1e3a8a'}">${(r.severity||'').toUpperCase()}</span><span><strong>${escapeHtml(r.title||'')}</strong> <span class="text-gray-500">— ${escapeHtml(r.area||'')}</span></span></li>`).join('')}</ul>` : `<div class="text-xs text-gray-500">Sem riscos abertos.</div>`}
-          </section>
+          </section>` : ''}
 
           <!-- Bloqueios -->
           <section class="bhub-card p-4">
@@ -6017,7 +6136,7 @@ function renderDealBriefing(company, deal, tasks){
           </section>
         </div>
 
-        <!-- Sinergias -->
+        ${isPMI ? `<!-- Sinergias -->
         <section class="bhub-card p-4">
           <div class="flex items-center justify-between mb-2">
             <div class="text-sm font-semibold" style="color:var(--bhub-navy)">💰 Sinergias</div>
@@ -6028,7 +6147,7 @@ function renderDealBriefing(company, deal, tasks){
             <div><div class="text-gray-500">Realizado</div><div class="text-base font-semibold">${fmtBRL(synReal)}</div></div>
             <div><div class="text-gray-500">Captura</div><div class="text-base font-semibold">${synPct}%</div></div>
           </div>
-        </section>
+        </section>` : ''}
 
         ${noowner>0 ? `<div class="text-xs px-3 py-2 rounded-md" style="background:#fef3c7;color:#92400e">⚠️ ${noowner} tarefa(s) sem responsável definido.</div>` : ''}
 
@@ -7002,7 +7121,7 @@ function renderHoje(){
     if(!deal) continue;
     for(const t of (deal.tasks||[])) allTasks.push({...t, _f:computeTaskFields(t,c), _deal:c});
   }
-  const allRaid = state.raid.map(r => {
+  const allRaid = isTech ? [] : state.raid.map(r => {
     const firstDealId = r.dealIds[0];
     const _deal = firstDealId ? state.companies.find(c=>c.id===firstDealId)||null : null;
     return {...r, _deal};
@@ -7014,7 +7133,7 @@ function renderHoje(){
     .sort((a,b) => (b._f.diasAtraso||0) - (a._f.diasAtraso||0));
 
   const decisions = allRaid
-    .filter(r => r.decisaoDesc && r.status==='open')
+    .filter(r => r.decisaoDesc && r.status==='open' && r._deal)
     .map(r => {
       // Relação do usuário logado com esta decisão
       const iAmOwner      = isMe(r.owner);
@@ -7041,7 +7160,7 @@ function renderHoje(){
   // Deals únicos que aparecem em qualquer seção (para o filtro)
   const dealsInView = new Map();
   [...myLate, ...myUpcoming].forEach(t => dealsInView.set(t._deal.id, t._deal.name));
-  decisions.forEach(r => dealsInView.set(r._deal.id, r._deal.name));
+  decisions.forEach(r => r._deal && dealsInView.set(r._deal.id, r._deal.name));
   const dealList = [...dealsInView.entries()].sort((a,b)=>a[1].localeCompare(b[1]));
 
   // Estado local: filtro de deal + filtro de pessoa + limites de paginação por seção
