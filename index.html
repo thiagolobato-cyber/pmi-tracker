@@ -1826,9 +1826,9 @@ function renderTechDashboard(){
           <p class="subtitle">Visão consolidada do portfólio • Atualização automática</p>
         </div>
         <div class="flex gap-2 flex-wrap items-center">
-          <button id="techExpBtn" class="btn-filled" style="background:${P};border-color:${P}">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            Exportar xlsx
+          <button id="techCmpBtn" class="btn-filled" style="background:${P};border-color:${P}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+            Comparar
           </button>
         </div>
       </div>
@@ -2006,9 +2006,9 @@ function renderTechDashboard(){
   node.querySelectorAll('[data-open]').forEach(el=>el.addEventListener('click',()=>{ view.tab='empresas'; view.dealId=el.dataset.open; render(); }));
   // More buttons
   node.querySelectorAll('[id^="more-"]').forEach(btn=>btn.addEventListener('click',()=>{ const id=btn.id.replace('more-',''); const extra=node.querySelector('#extra-'+id); if(extra){extra.style.display=''; btn.remove();} }));
-  // Export xlsx
-  const techExpBtn = node.querySelector('#techExpBtn');
-  if(techExpBtn) techExpBtn.onclick = ()=>{ const expBtn = document.querySelector('#expx'); if(expBtn) expBtn.click(); else alert('Exportação disponível no dashboard PMI.'); };
+  // Comparar projetos
+  const techCmpBtn = node.querySelector('#techCmpBtn');
+  if(techCmpBtn) techCmpBtn.onclick = ()=>openCompareDealsPicker();
   return node;
 }
 
@@ -4119,15 +4119,16 @@ function openOwnerSummary(ownerName){
 /* ---------- Compare deals ---------- */
 function openCompareDealsPicker(){
   const companies = state.companies.slice().sort((a,b)=>a.name.localeCompare(b.name));
-  if(companies.length < 2){ alert('São necessárias pelo menos 2 empresas para comparar.'); return; }
+  const _cmpLabel = isTech ? 'projetos' : 'deals';
+  if(companies.length < 2){ alert(`São necessários pelo menos 2 ${_cmpLabel} para comparar.`); return; }
   const m = el(`
   <div class="fixed inset-0 bg-black/40 z-30 flex items-center justify-center p-4">
     <div class="bg-white rounded-2xl max-w-lg w-full p-5">
       <div class="flex items-center justify-between mb-3">
-        <h2 class="text-lg font-bold">🆚 Comparar deals</h2>
+        <h2 class="text-lg font-bold">🆚 Comparar ${_cmpLabel}</h2>
         <button id="cmpClose" class="btn btn-secondary" style="padding:.3rem .6rem">✕</button>
       </div>
-      <p class="text-xs text-gray-500 mb-3">Selecione de 2 a 4 deals para comparar lado a lado.</p>
+      <p class="text-xs text-gray-500 mb-3">Selecione de 2 a 4 ${_cmpLabel} para comparar lado a lado.</p>
       <div class="max-h-72 overflow-y-auto border rounded-lg p-2" style="border-color:var(--bhub-border)">
         ${companies.map(c=>`<label class="flex items-center gap-2 py-1.5 px-2 hover:bg-gray-50 cursor-pointer rounded">
           <input type="checkbox" class="cmp-pick" value="${c.id}">
@@ -4233,7 +4234,7 @@ function openCompareDealsView(ids){
     <div class="bg-white rounded-2xl max-w-6xl w-full max-h-[90vh] overflow-y-auto p-5">
       <div class="flex items-center justify-between mb-4">
         <div>
-          <h2 class="text-lg font-bold">🆚 Comparação de ${deals.length} deals</h2>
+          <h2 class="text-lg font-bold">🆚 Comparação de ${deals.length} ${isTech?'projetos':'deals'}</h2>
           <p class="text-xs text-gray-500">Verde = melhor • Vermelho = pior • Cinza = empate ou neutro</p>
         </div>
         <button id="cmpVClose" class="btn btn-secondary" style="padding:.3rem .6rem">✕ Fechar</button>
@@ -4244,7 +4245,7 @@ function openCompareDealsView(ids){
         <table class="w-full text-xs">
           <thead><tr><th class="text-left">Métrica</th>${deals.map(d=>`<th class="text-center"><span class="deal-link" data-summary="${d.company.id}">${escapeHtml(d.company.name)}</span></th>`).join('')}</tr></thead>
           <tbody>
-            <tr><td class="font-medium">Data assinatura</td>${deals.map(d=>`<td class="text-center">${d.company.signDate?fmtDate(d.company.signDate):'—'}</td>`).join('')}</tr>
+            <tr><td class="font-medium">${isTech?'Data início':'Data assinatura'}</td>${deals.map(d=>`<td class="text-center">${d.company.signDate?fmtDate(d.company.signDate):'—'}</td>`).join('')}</tr>
             <tr><td class="font-medium">Total de tarefas</td>${deals.map((d,i)=>metricCell(deals.map(x=>x.total),i,false)).join('')}</tr>
             <tr><td class="font-medium">% concluído</td>${deals.map((d,i)=>metricCell(deals.map(x=>x.pct),i,true,'%')).join('')}</tr>
             <tr><td class="font-medium">Done</td>${deals.map((d,i)=>metricCell(deals.map(x=>x.done),i,true)).join('')}</tr>
@@ -4253,10 +4254,12 @@ function openCompareDealsView(ids){
             <tr><td class="font-medium">Bloqueios</td>${deals.map((d,i)=>metricCell(deals.map(x=>x.blocked),i,false)).join('')}</tr>
             <tr><td class="font-medium">Sem owner</td>${deals.map((d,i)=>metricCell(deals.map(x=>x.noowner),i,false)).join('')}</tr>
             <tr><td class="font-medium">Próximas (≤10 d.u.)</td>${metrics.map((m_,i)=>metricCell(metrics.map(x=>x.upcoming10),i,false)).join('')}</tr>
+            ${!isTech?`
             <tr><td class="font-medium">Ações de Mitigação abertas</td>${metrics.map((m_,i)=>metricCell(metrics.map(x=>x.openRaid),i,false)).join('')}</tr>
             <tr><td class="font-medium">Sinergia plano</td>${metrics.map((m_,i)=>`<td class="text-center">${fmtBRL(metrics[i].synPlan)}</td>`).join('')}</tr>
             <tr><td class="font-medium">Sinergia realizada</td>${metrics.map((m_,i)=>`<td class="text-center">${fmtBRL(metrics[i].synReal)}</td>`).join('')}</tr>
             <tr><td class="font-medium">% sinergia</td>${metrics.map((m_,i)=>metricCell(metrics.map(x=>x.synPct),i,true,'%')).join('')}</tr>
+            `:''}
           </tbody>
         </table>
       </div>
