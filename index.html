@@ -3774,7 +3774,7 @@ function openCompanyModal(existing){
         if(error) throw error;
         existing.name = name; existing.signDate = signDate;
       }else{
-        const { data, error } = await supa.from('companies').insert({ name, sign_date: emptyDate(signDate) }).select().single();
+        const { data, error } = await supa.from('companies').insert({ name, sign_date: emptyDate(signDate), workspace: WS }).select().single();
         if(error) throw error;
         const c = companyFromDb(data);
         state.companies.push(c);
@@ -7944,7 +7944,7 @@ async function importFromLocalStorage(){
     }
     // Companies (uma a uma para mapear id->cid e inserir filhos)
     for(const c of (old.companies||[])){
-      const { data, error } = await supa.from('companies').insert({ name: c.name, sign_date: emptyDate(c.signDate) }).select().single();
+      const { data, error } = await supa.from('companies').insert({ name: c.name, sign_date: emptyDate(c.signDate), workspace: WS }).select().single();
       if(error) throw error;
       const cid = data.id;
       okCo++;
