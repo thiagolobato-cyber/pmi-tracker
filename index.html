@@ -751,7 +751,8 @@ async function applySession(sess){
     id: sess.user.id,
     email: sess.user.email,
     username: profile?.username || (sess.user.email||'').split('@')[0],
-    role: profile?.role || 'leitor'
+    role: profile?.role || 'leitor',
+    workspace: profileWs   // 'pmi' | 'tech' | 'ambos'
   };
 }
 // Le a sessao crua do localStorage (sync). Esta e' a fonte de verdade do
@@ -809,8 +810,10 @@ async function loadSession(){
   }
   await applySession(sess);
 }
-const canEdit  = () => session && (session.role==='admin' || session.role==='owner');
-const canAdmin = () => session && session.role==='admin';
+const canEdit      = () => session && (session.role==='admin' || session.role==='owner');
+const canAdmin     = () => session && session.role==='admin';
+// Master admin: role=admin + workspace=ambos — pode gerenciar TODOS os usuários e workspaces
+const isMasterAdmin = () => session && session.role==='admin' && session.workspace==='ambos';
 
 // ─── Líder helpers ────────────────────────────────────────────
 /** Retorna lista de usuários que apontam para o usuário atual como gestor */
@@ -6850,6 +6853,11 @@ function openEditGestorModal(user){
 }
 
 function openEditWorkspaceModal(user){
+  // Apenas master pode editar usuários com workspace='ambos' ou promover para 'ambos'
+  if(!isMasterAdmin() && (user.workspace==='ambos' || user.role==='admin')){
+    alert('Apenas o Admin Master pode alterar o workspace de admins ou de usuários com acesso a ambos os workspaces.');
+    return;
+  }
   const m = el(`
   <div class="fixed inset-0 bg-black/40 z-20 flex items-center justify-center p-4">
     <div class="bg-white rounded-xl w-full max-w-sm p-6 shadow-xl">
@@ -6861,7 +6869,7 @@ function openEditWorkspaceModal(user){
           <select name="workspace">
             <option value="pmi"   ${(user.workspace||'pmi')==='pmi'   ?'selected':''}>PMI Tracker apenas</option>
             <option value="tech"  ${(user.workspace||'pmi')==='tech'  ?'selected':''}>Projetos Tech apenas</option>
-            <option value="ambos" ${(user.workspace||'pmi')==='ambos' ?'selected':''}>PMI + Tech (ambos)</option>
+            ${isMasterAdmin() ? `<option value="ambos" ${(user.workspace||'pmi')==='ambos' ?'selected':''}>PMI + Tech (ambos)</option>` : ''}
           </select>
         </div>
         <div id="wsErr" class="text-xs rounded-lg p-2 hidden" style="color:#991b1b;background:#fee2e2"></div>
@@ -6915,11 +6923,23 @@ function openInviteUserModal(prefillUsername=''){
           <button type="button" id="togglePwd" style="position:absolute;right:.7rem;bottom:.5rem;background:none;border:none;cursor:pointer;color:var(--bhub-muted);font-size:.8rem">mostrar</button>
         </div>
         <div>
+          <label class="text-xs font-semibold uppercase tracking-wider" style="color:var(--bhub-muted)">Workspace</label>
+          ${isMasterAdmin()
+            ? `<select name="workspace">
+                <option value="pmi">PMI Tracker apenas</option>
+                <option value="tech">Projetos Tech apenas</option>
+                <option value="ambos">PMI + Tech (ambos)</option>
+               </select>`
+            : `<div style="font-size:.875rem;padding:.45rem .7rem;border-radius:.625rem;background:var(--bhub-beige-soft);color:var(--bhub-navy);border:1px solid var(--bhub-border)">${WS==='tech'?'Projetos Tech apenas':'PMI Tracker apenas'}</div>
+               <input type="hidden" name="workspace" value="${WS}">`
+          }
+        </div>
+        <div>
           <label class="text-xs font-semibold uppercase tracking-wider" style="color:var(--bhub-muted)">Perfil</label>
           <select name="role">
             <option value="leitor">leitor — somente leitura</option>
             <option value="owner">owner — pode criar e editar</option>
-            <option value="admin">admin — acesso total</option>
+            ${isMasterAdmin() ? `<option value="admin">admin — acesso total</option>` : ''}
           </select>
         </div>
         <div id="inviteErr" class="text-xs rounded-lg p-2 hidden" style="color:#991b1b;background:#fee2e2"></div>
@@ -6945,14 +6965,20 @@ function openInviteUserModal(prefillUsername=''){
     const password = fd.get('password');
     const role     = fd.get('role');
     const username = fd.get('username').trim();
+    const ws       = fd.get('workspace') || WS;
     const btn   = m.querySelector('#sendInvBtn');
     const errEl = m.querySelector('#inviteErr');
     btn.disabled = true; btn.textContent = 'Criando…';
     errEl.classList.add('hidden');
     try{
       await createUserViaFunction(email, password, role, username);
+      // Atualiza workspace do perfil recém-criado (busca por username)
+      try{
+        const { data: np } = await supa.from('profiles').select('id').eq('username', username || email.split('@')[0]).maybeSingle();
+        if(np?.id) await supa.from('profiles').update({ workspace: ws }).eq('id', np.id);
+      }catch(e){ console.warn('workspace update after invite failed', e); }
       m.remove();
-      alert(`✅ Usuário criado!\n\nE-mail: ${email}\nPerfil: ${role}\n\nCompartilhe as credenciais com o usuário para que ele possa entrar.`);
+      alert(`✅ Usuário criado!\n\nE-mail: ${email}\nPerfil: ${role}\nWorkspace: ${ws}\n\nCompartilhe as credenciais com o usuário para que ele possa entrar.`);
       await reloadState(); render();
     }catch(err){
       errEl.textContent = err.message || 'Erro ao criar usuário';
@@ -6963,6 +6989,11 @@ function openInviteUserModal(prefillUsername=''){
 }
 
 function openChangeRoleModal(user){
+  // Apenas master pode alterar role de admins ou promover para admin
+  if(!isMasterAdmin() && (user.role==='admin')){
+    alert('Apenas o Admin Master pode alterar o perfil de outros admins.');
+    return;
+  }
   const m = el(`
   <div class="fixed inset-0 bg-black/40 z-20 flex items-center justify-center p-4">
     <div class="bg-white rounded-xl w-full max-w-sm p-6 shadow-xl">
@@ -6972,7 +7003,7 @@ function openChangeRoleModal(user){
         <select name="role">
           <option value="leitor" ${user.role==='leitor'?'selected':''}>leitor — somente leitura</option>
           <option value="owner"  ${user.role==='owner' ?'selected':''}>owner — pode editar</option>
-          <option value="admin"  ${user.role==='admin' ?'selected':''}>admin — acesso total</option>
+          ${isMasterAdmin() ? `<option value="admin" ${user.role==='admin'?'selected':''}>admin — acesso total</option>` : ''}
         </select>
         <div id="roleErr" class="text-xs hidden" style="color:var(--bhub-red)"></div>
         <div class="flex justify-end gap-2 pt-2">
@@ -7769,13 +7800,20 @@ function renderHoje(){
 
 function renderUsuarios(){
   const isAdmin = canAdmin();
+  // Filtra usuários visíveis: master vê todos; admin PMI vê só workspace=pmi; admin Tech vê só workspace=tech
+  const visibleUsers = !isAdmin
+    ? state.users
+    : isMasterAdmin()
+      ? state.users
+      : state.users.filter(u => u.workspace === WS);
   const ROLE_INFO = { admin:'Acesso total', owner:'Pode criar e editar', leitor:'Somente leitura' };
+  const scopeLabel = isMasterAdmin() ? 'todos os workspaces' : (WS==='tech' ? 'Projetos Tech' : 'PMI Tracker');
   const node = el(`
     <div class="space-y-4">
       <div class="flex items-center justify-between flex-wrap gap-2">
         <div>
           <h1 class="text-xl font-bold">Usuários</h1>
-          <p class="text-sm text-gray-500">Gerencie quem acessa o PMI Tracker e com qual nível de permissão.</p>
+          <p class="text-sm text-gray-500">Gerencie quem acessa ${scopeLabel} e com qual nível de permissão.</p>
         </div>
         ${isAdmin ? `<button id="inviteBtn" class="btn btn-primary">+ Convidar usuário</button>` : ''}
       </div>
@@ -7794,7 +7832,7 @@ function renderUsuarios(){
         <table class="w-full">
           <thead><tr><th>Usuário</th><th>Perfil</th><th>Gestor Direto</th><th>Workspace</th>${isAdmin?'<th style="width:14rem">Ações</th>':''}</tr></thead>
           <tbody>
-            ${state.users.length ? state.users.map(u=>{
+            ${visibleUsers.length ? visibleUsers.map(u=>{
               const wsLabel = u.workspace==='tech'?'Tech':u.workspace==='ambos'?'PMI + Tech':'PMI';
               const wsBg    = u.workspace==='tech'?'#ede9fe':u.workspace==='ambos'?'#dbeafe':'#dde9fa';
               const wsColor = u.workspace==='tech'?'#5b21b6':u.workspace==='ambos'?'#1e40af':'#005bb8';
