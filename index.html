@@ -941,7 +941,7 @@ async function reloadState(){
     state.deals[c.id] = { tasks: [], raid: [], synergies: [], health: [] };
   }
   for(const r of (tasks.data||[])){
-    if(!state.deals[r.company_id]) state.deals[r.company_id] = { tasks:[], raid:[], synergies:[], health:[] };
+    if(!state.deals[r.company_id]) continue; // skip tasks from other workspaces
     state.deals[r.company_id].tasks.push(taskFromDb(r));
   }
   // Populate per-deal raid arrays from global state.raid (filtered by dealIds)
