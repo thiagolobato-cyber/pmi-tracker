@@ -1762,208 +1762,253 @@ function renderTechTarefas(){
 }
 
 function renderTechDashboard(){
-  const data    = aggregate();
+  const rawData = aggregate();
+  const data    = applyDashFilters(rawData);
   const total   = data.reduce((s,d)=>s+d.total,0);
   const done    = data.reduce((s,d)=>s+d.done,0);
   const ontrack = data.reduce((s,d)=>s+d.ontrack,0);
   const late    = data.reduce((s,d)=>s+d.late,0);
   const blocked = data.reduce((s,d)=>s+d.blocked,0);
   const noowner = data.reduce((s,d)=>s+d.noowner,0);
-  const pct     = total > 0 ? Math.round(done/total*100) : 0;
-  const P = '#9f8ff0'; // purple accent
+  const avgPct  = total > 0 ? Math.round(done/total*100) : 0;
+  const P = '#9f8ff0';
 
-  // ── KPI cards ──────────────────────────────────────────────
-  const kpis = [
-    { label:'Projetos',         value:data.length, sub:'cadastrados',     icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="6" width="8" height="14" rx="1"/><rect x="13" y="3" width="8" height="17" rx="1"/></svg>', bg:'#ede9ff', color:P, nav:'empresas' },
-    { label:'Total de Tarefas', value:total,       sub:'no portfolio',     icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>', bg:'#ede9ff', color:P },
-    { label:'Concluídas',       value:done,        sub:pct+'% do total',   icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>', bg:'#dcfce7', color:'#16a34a' },
-    { label:'On Track',         value:ontrack,     sub:'dentro do prazo',  icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>', bg:'#dbeafe', color:'#1d4ed8' },
-    { label:'Atrasadas',        value:late,        sub:'atenção necessária',icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>', bg:late>0?'#fee2e2':'#f3f4f6', color:late>0?'#dc2626':'#9ca3af', warn:late>0 },
-    { label:'Bloqueadas',       value:blocked,     sub:'requerem ação',    icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>', bg:blocked>0?'#fef3c7':'#f3f4f6', color:blocked>0?'#d97706':'#9ca3af', warn:blocked>0 },
-  ];
-  const kpiHtml = kpis.map(k=>`
-    <div ${k.nav?`data-kpi-nav="${k.nav}"`:''} style="background:#fff;border:1px solid #e5e7eb;border-radius:.875rem;padding:1.25rem 1.5rem;display:flex;align-items:center;gap:1rem;box-shadow:0 1px 3px rgba(0,0,0,.06);${k.nav?'cursor:pointer;':''} transition:box-shadow .15s" onmouseover="${k.nav?`this.style.boxShadow='0 4px 12px rgba(0,0,0,.1)'`:''}" onmouseout="${k.nav?`this.style.boxShadow='0 1px 3px rgba(0,0,0,.06)'`:''}">
-      <div style="width:2.75rem;height:2.75rem;border-radius:.625rem;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:${k.bg};color:${k.color}">
-        ${k.icon}
-      </div>
-      <div>
-        <div style="font-size:1.75rem;font-weight:800;color:${k.warn?k.color:'#111827'};line-height:1.1">${k.value}</div>
-        <div style="font-size:.78rem;font-weight:600;color:#374151;margin-top:.05rem">${k.label}</div>
-        <div style="font-size:.7rem;color:#9ca3af">${k.sub}</div>
-      </div>
-    </div>`).join('');
+  // Filter options
+  const allProjects = state.companies.map(c=>({id:c.id,name:c.name})).sort((a,b)=>a.name.localeCompare(b.name));
+  const allAreasD   = Array.from(new Set(Object.values(state.deals).flatMap(d=>d.tasks.map(t=>t.area)).filter(Boolean))).sort();
+  const allOwnersD  = Array.from(new Set(Object.values(state.deals).flatMap(d=>d.tasks.map(t=>t.owner)).filter(Boolean))).sort();
+  const f = view.dashFilters || {deals:[],areas:[],owners:[]};
 
-  // ── Portfolio progress ─────────────────────────────────────
-  const doneW  = total>0?Math.round(done/total*100):0;
-  const trackW = total>0?Math.round(ontrack/total*100):0;
-  const lateW  = total>0?Math.round(late/total*100):0;
-  const progressHtml = `
-    <div style="background:#fff;border:1px solid #e5e7eb;border-radius:.875rem;padding:1.5rem;box-shadow:0 1px 3px rgba(0,0,0,.06)">
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:1rem">
+  // Vencimentos ≤10 d.u.
+  const today = new Date(); today.setHours(0,0,0,0);
+  const due10 = [];
+  data.forEach(d=>d.tasks.forEach(t=>{
+    if(t._f.status==='ontrack' && t._f.dataPrevista){
+      const diff = businessDaysBetween(today, t._f.dataPrevista);
+      if(diff!==null && diff>=0 && diff<=10)
+        due10.push({dealId:d.company.id, deal:d.company.name, owner:t.owner||'', task:t.task||'', area:t.area||'', due:t._f.dataPrevista, diff});
+    }
+  }));
+  due10.sort((a,b)=>a.diff-b.diff);
+
+  // Bloqueios ativos
+  const blocks = [];
+  data.forEach(d=>d.tasks.forEach(t=>{
+    if(t.bloqueio==='Sim') blocks.push({dealId:d.company.id, deal:d.company.name, area:t.area||'', task:t.task||'', owner:t.owner||'', desc:t.bloqueioDescricao||''});
+  }));
+
+  // Maiores atrasos
+  const topLate = [];
+  data.forEach(d=>d.tasks.forEach(t=>{
+    if(t._f.status==='late' && t._f.diasAtraso)
+      topLate.push({dealId:d.company.id, deal:d.company.name, area:t.area||'', owner:t.owner||'', task:t.task||'', dias:t._f.diasAtraso});
+  }));
+  topLate.sort((a,b)=>b.dias-a.dias);
+
+  // Heatmap: area × project (status label, same as PMI)
+  const hmAreas = Array.from(new Set(data.flatMap(d=>d.tasks.map(t=>t.area)).filter(Boolean))).sort();
+  function techCellStatus(deal, area){
+    const ts = deal.tasks.filter(t=>t.area===area);
+    if(!ts.length) return 'empty';
+    if(ts.every(t=>t._f.status==='done')) return 'done';
+    if(ts.some(t=>t._f.status==='late')) return 'late';
+    if(ts.some(t=>t._f.status==='ontrack')) return 'ontrack';
+    return 'empty';
+  }
+
+  const node = el(`
+    <div class="space-y-6">
+
+      <!-- Header -->
+      <div class="page-header">
         <div>
-          <h2 style="font-size:.95rem;font-weight:700;color:#111827;margin:0">Progresso do Portfolio</h2>
-          <p style="font-size:.78rem;color:#6b7280;margin:.2rem 0 0">${total} tarefas · ${data.length} projeto${data.length!==1?'s':''}</p>
+          <h1>Dashboard de Projetos Tech</h1>
+          <p class="subtitle">Visão consolidada do portfólio • Atualização automática</p>
         </div>
-        <span style="font-size:2rem;font-weight:800;color:${P}">${pct}%</span>
-      </div>
-      <div style="height:.75rem;background:#f3f4f6;border-radius:9999px;overflow:hidden;display:flex">
-        <div style="height:100%;width:${doneW}%;background:#16a34a;transition:width .5s" title="Concluídas"></div>
-        <div style="height:100%;width:${trackW}%;background:#60a5fa;transition:width .5s" title="On Track"></div>
-        <div style="height:100%;width:${lateW}%;background:#f87171;transition:width .5s" title="Atrasadas"></div>
-      </div>
-      <div style="display:flex;gap:1.5rem;margin-top:.75rem;flex-wrap:wrap">
-        <span style="display:flex;align-items:center;gap:.35rem;font-size:.75rem;color:#374151"><span style="width:.65rem;height:.65rem;border-radius:50%;background:#16a34a;flex-shrink:0"></span> ${done} concluídas</span>
-        <span style="display:flex;align-items:center;gap:.35rem;font-size:.75rem;color:#374151"><span style="width:.65rem;height:.65rem;border-radius:50%;background:#60a5fa;flex-shrink:0"></span> ${ontrack} on track</span>
-        ${late?`<span style="display:flex;align-items:center;gap:.35rem;font-size:.75rem;color:#dc2626;font-weight:600"><span style="width:.65rem;height:.65rem;border-radius:50%;background:#f87171;flex-shrink:0"></span> ${late} atrasadas</span>`:''}
-        ${blocked?`<span style="display:flex;align-items:center;gap:.35rem;font-size:.75rem;color:#d97706;font-weight:600"><span style="width:.65rem;height:.65rem;border-radius:50%;background:#fbbf24;flex-shrink:0"></span> ${blocked} bloqueadas</span>`:''}
-        ${noowner?`<span style="display:flex;align-items:center;gap:.35rem;font-size:.75rem;color:#9ca3af"><span style="width:.65rem;height:.65rem;border-radius:50%;background:#d1d5db;flex-shrink:0"></span> ${noowner} sem dono</span>`:''}
-      </div>
-    </div>`;
-
-  // ── Project cards ──────────────────────────────────────────
-  const cardHtml = data.length === 0
-    ? `<div style="grid-column:1/-1;text-align:center;padding:3rem;color:#9ca3af;background:#fff;border:1px solid #e5e7eb;border-radius:.875rem">
-        <svg style="width:2.5rem;height:2.5rem;margin:0 auto .75rem;opacity:.4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="6" width="8" height="14" rx="1"/><rect x="13" y="3" width="8" height="17" rx="1"/></svg>
-        <p style="font-weight:600">Nenhum projeto cadastrado</p>
-        <p style="font-size:.82rem;margin-top:.25rem">Clique em "Projetos" na barra lateral para adicionar</p>
-      </div>`
-    : data.map(d=>{
-        const sc = d.pct===100?'#16a34a':d.late>0?'#dc2626':P;
-        const sl = d.pct===100?'Concluído':d.late>0?'Atrasado':d.total===0?'Sem tarefas':'Em andamento';
-        const segments = d.total>0 ? [
-          {w:Math.round(d.done/d.total*100),   c:'#16a34a'},
-          {w:Math.round(d.ontrack/d.total*100), c:'#60a5fa'},
-          {w:Math.round(d.late/d.total*100),    c:'#f87171'},
-        ] : [];
-        return `<div data-open="${d.company.id}" style="background:#fff;border:1px solid #e5e7eb;border-radius:.875rem;padding:1.25rem;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.06);transition:box-shadow .15s;display:flex;flex-direction:column;gap:.75rem"
-          onmouseover="this.style.boxShadow='0 4px 12px rgba(0,0,0,.1)'" onmouseout="this.style.boxShadow='0 1px 3px rgba(0,0,0,.06)'">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem">
-            <h3 style="font-size:.9rem;font-weight:700;color:#111827;margin:0;line-height:1.3">${escapeHtml(d.company.name)}</h3>
-            <span style="flex-shrink:0;padding:.15rem .55rem;border-radius:9999px;font-size:.68rem;font-weight:700;background:${sc}18;color:${sc}">${sl}</span>
-          </div>
-          <div>
-            <div style="display:flex;justify-content:space-between;margin-bottom:.4rem">
-              <span style="font-size:.75rem;color:#6b7280">${d.done}/${d.total} tarefas</span>
-              <span style="font-size:.85rem;font-weight:700;color:${sc}">${d.pct}%</span>
-            </div>
-            <div style="height:.5rem;background:#f3f4f6;border-radius:9999px;overflow:hidden;display:flex">
-              ${segments.map(s=>`<div style="height:100%;width:${s.w}%;background:${s.c}"></div>`).join('')}
-            </div>
-          </div>
-          <div style="display:flex;gap:.5rem;flex-wrap:wrap">
-            ${d.late?`<span style="font-size:.7rem;padding:.15rem .5rem;border-radius:9999px;background:#fee2e2;color:#dc2626;font-weight:600">${d.late} atrasada${d.late!==1?'s':''}</span>`:''}
-            ${d.blocked?`<span style="font-size:.7rem;padding:.15rem .5rem;border-radius:9999px;background:#fef3c7;color:#d97706;font-weight:600">${d.blocked} bloqueada${d.blocked!==1?'s':''}</span>`:''}
-            ${d.noowner?`<span style="font-size:.7rem;padding:.15rem .5rem;border-radius:9999px;background:#f3f4f6;color:#6b7280">${d.noowner} sem dono</span>`:''}
-            ${!d.late&&!d.blocked&&!d.noowner&&d.total>0?`<span style="font-size:.7rem;padding:.15rem .5rem;border-radius:9999px;background:#dcfce7;color:#15803d;font-weight:600">✓ Tudo ok</span>`:''}
-            ${d.total===0?`<span style="font-size:.7rem;color:#9ca3af">Nenhuma tarefa ainda</span>`:''}
-          </div>
-        </div>`;
-      }).join('');
-
-  // ── Heatmap: tarefa × projeto ──────────────────────────────
-  const hmAreas = Array.from(new Set(
-    data.flatMap(d=>d.tasks.map(t=>t.area||'Sem área'))
-  )).sort();
-
-  const hmHtml = hmAreas.length && data.length ? (() => {
-    const thCols = data.map(d=>`<th style="padding:.5rem .75rem;font-size:.7rem;font-weight:600;color:#374151;white-space:nowrap;max-width:8rem;overflow:hidden;text-overflow:ellipsis" title="${escapeHtml(d.company.name)}">${escapeHtml(d.company.name.length>14?d.company.name.slice(0,13)+'…':d.company.name)}</th>`).join('');
-    const rows = hmAreas.map(area=>{
-      const cells = data.map(d=>{
-        const tasks = d.tasks.filter(t=>(t.area||'Sem área')===area);
-        if(!tasks.length) return `<td style="padding:.4rem .5rem;text-align:center;color:#d1d5db;font-size:.75rem">—</td>`;
-        const doneC=tasks.filter(t=>t._f.status==='done').length;
-        const lateC=tasks.filter(t=>t._f.status==='late').length;
-        const p=Math.round(doneC/tasks.length*100);
-        const bg=lateC>0?'#fee2e2':p===100?'#dcfce7':'#eff6ff';
-        const cl=lateC>0?'#991b1b':p===100?'#15803d':'#1e40af';
-        return `<td style="padding:.4rem .5rem;text-align:center;background:${bg};font-size:.72rem;font-weight:700;color:${cl}">${p}%</td>`;
-      }).join('');
-      return `<tr style="border-bottom:1px solid #f3f4f6">
-        <td style="padding:.45rem .75rem;font-size:.78rem;color:#374151;white-space:nowrap">${escapeHtml(area)}</td>
-        ${cells}
-      </tr>`;
-    }).join('');
-    return `
-      <div style="background:#fff;border:1px solid #e5e7eb;border-radius:.875rem;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06)">
-        <div style="padding:1rem 1.5rem;border-bottom:1px solid #f3f4f6;display:flex;align-items:center;justify-content:space-between">
-          <h2 style="font-size:.95rem;font-weight:700;color:#111827;margin:0">Heatmap — % concluído por área × projeto</h2>
-          <span style="font-size:.75rem;color:#9ca3af">${hmAreas.length} área${hmAreas.length!==1?'s':''}</span>
+        <div class="flex gap-2 flex-wrap items-center">
+          <button id="techExpBtn" class="btn-filled" style="background:${P};border-color:${P}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Exportar xlsx
+          </button>
         </div>
-        <div style="overflow-x:auto">
-          <table style="width:100%;border-collapse:collapse">
-            <thead>
-              <tr style="background:#fafafa">
-                <th style="padding:.5rem .75rem;text-align:left;font-size:.7rem;color:#6b7280;font-weight:600;white-space:nowrap;border-right:1px solid #f3f4f6">ÁREA</th>
-                ${thCols}
-              </tr>
-            </thead>
-            <tbody>${rows}</tbody>
+      </div>
+
+      <!-- Filtros -->
+      <section class="bhub-card p-3">
+        <div class="flex items-center gap-3 flex-wrap">
+          <div class="text-xs font-semibold text-gray-700">Filtros:</div>
+          <select id="fltDeals" multiple size="1" class="text-xs" style="min-width:180px;max-width:240px;height:32px">
+            ${allProjects.map(d=>`<option value="${d.id}" ${f.deals?.includes(d.id)?'selected':''}>${escapeHtml(d.name)}</option>`).join('')}
+          </select>
+          <select id="fltAreas" multiple size="1" class="text-xs" style="min-width:160px;max-width:220px;height:32px">
+            ${allAreasD.map(a=>`<option value="${escapeHtml(a)}" ${f.areas?.includes(a)?'selected':''}>${escapeHtml(a)}</option>`).join('')}
+          </select>
+          <select id="fltOwners" multiple size="1" class="text-xs" style="min-width:160px;max-width:220px;height:32px">
+            ${allOwnersD.map(o=>`<option value="${escapeHtml(o)}" ${f.owners?.includes(o)?'selected':''}>${escapeHtml(o)}</option>`).join('')}
+          </select>
+          ${dashFiltersActive()?`<button id="fltClear" class="btn btn-secondary" style="padding:.3rem .7rem;font-size:.75rem">✕ Limpar (${dashFiltersActive()})</button>`:''}
+          <div class="text-[11px] text-gray-500 ml-auto">Segure Ctrl/Cmd para selecionar múltiplos</div>
+        </div>
+        ${dashFiltersActive()?`<div class="filter-chips">
+          ${(f.deals||[]).map(id=>{const d=allProjects.find(x=>x.id===id);return d?`<span class="filter-chip" data-chip-deal="${id}">Projeto: ${escapeHtml(d.name)} <span class="chip-x">✕</span></span>`:''}).join('')}
+          ${(f.areas||[]).map(a=>`<span class="filter-chip" data-chip-area="${escapeHtml(a)}">Área: ${escapeHtml(a)} <span class="chip-x">✕</span></span>`).join('')}
+          ${(f.owners||[]).map(o=>`<span class="filter-chip" data-chip-owner="${escapeHtml(o)}">Owner: ${escapeHtml(o)} <span class="chip-x">✕</span></span>`).join('')}
+        </div>`:''}
+      </section>
+
+      <!-- Hero KPI section -->
+      <section class="kpi-hero-section">
+        <div class="kpi-hero" style="background:linear-gradient(135deg,#2d1f5e 0%,#4c3494 100%)" title="Tarefas concluídas ÷ total (ponderado por projeto)">
+          <div class="kpi-label">% Progresso<br>do Portfólio</div>
+          <div class="hero-center">
+            <div class="kpi-value">${avgPct}%</div>
+            <div class="hero-bar"><div class="hero-bar-fill" style="width:${avgPct}%;background:${P}"></div></div>
+            <div class="kpi-sub">${done} de ${total} concluídas</div>
+          </div>
+          <div class="hero-mini-stats">
+            <div class="hero-mini-stat"><div class="hero-mini-stat-value">${done}</div><div class="hero-mini-stat-label">feitas</div></div>
+            <div class="hero-mini-stat"><div class="hero-mini-stat-value">${total}</div><div class="hero-mini-stat-label">total</div></div>
+          </div>
+        </div>
+        <div class="kpi-secondary-grid">
+          <div class="kpi" data-kpi-nav="empresas" style="cursor:pointer">
+            <div class="kpi-head"><div class="kpi-label">Projetos Ativos</div><div class="kpi-icon" style="background:#ede9ff;color:${P}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="6" width="8" height="14" rx="1"/><rect x="13" y="3" width="8" height="17" rx="1"/></svg></div></div>
+            <div class="kpi-value">${data.length}</div>
+            <div class="kpi-sub">em acompanhamento</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-head"><div class="kpi-label">Tasks Done</div><div class="kpi-icon kpi-icon-green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div></div>
+            <div class="kpi-value">${done} <span style="font-size:1rem;font-weight:500;color:var(--bhub-muted)">/ ${total}</span></div>
+            <div class="kpi-sub">tarefas concluídas</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-head"><div class="kpi-label">On Track</div><div class="kpi-icon kpi-icon-blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></div></div>
+            <div class="kpi-value tone-blue">${ontrack}</div>
+            <div class="kpi-sub">dentro do prazo</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-head"><div class="kpi-label">⚠ Atrasadas</div><div class="kpi-icon kpi-icon-red"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div></div>
+            <div class="kpi-value tone-red">${late}</div>
+            <div class="kpi-sub">${total>0?Math.round(late/total*100):0}% do portfólio</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-head"><div class="kpi-label">Bloqueios</div><div class="kpi-icon kpi-icon-amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div></div>
+            <div class="kpi-value tone-amber">${blocked}</div>
+            <div class="kpi-sub">tarefas bloqueadas</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-head"><div class="kpi-label">Sem Responsável</div><div class="kpi-icon" style="background:#f3f4f6;color:#9ca3af"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div></div>
+            <div class="kpi-value">${noowner}</div>
+            <div class="kpi-sub">tarefas sem dono</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- % por Projeto -->
+      <section class="bhub-card p-4">
+        <div class="text-sm font-semibold mb-3">% por Projeto</div>
+        ${data.length===0?`<div class="text-xs text-gray-500">Nenhum projeto ainda.</div>`:`
+        <div class="space-y-2">
+          ${data.map(d=>`
+            <div class="flex items-center gap-3 text-xs">
+              <button class="w-44 text-left truncate font-medium hover:underline" style="color:${P}" data-open="${d.company.id}" title="Ver projeto">${escapeHtml(d.company.name)}</button>
+              <div class="flex-1 rounded h-3 overflow-hidden" style="background:#f3f4f6">
+                <div class="h-full rounded" style="width:${d.pct}%;background:${P}"></div>
+              </div>
+              <div class="w-12 text-right font-semibold">${d.pct}%</div>
+              <div class="w-36 text-right text-gray-500">${d.done}/${d.total} done · ${d.late} atras.</div>
+            </div>`).join('')}
+        </div>`}
+      </section>
+
+      <!-- Vencimentos + Bloqueios -->
+      <section class="grid lg:grid-cols-2 gap-6">
+        <div class="widget-card">
+          <div class="widget-header">
+            <h3 class="widget-title">
+              <span class="icon-wrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
+              Vencimento em ≤ 10 d.u. (${due10.length})
+            </h3>
+          </div>
+          ${due10.length?dashExpandTable('tdue10',due10,['Projeto','Área','Tarefa','Owner','Vence em','d.u.'],r=>`<tr><td><span class="deal-link" data-open="${r.dealId}">${escapeHtml(r.deal)}</span></td><td>${escapeHtml(r.area)}</td><td>${escapeHtml(r.task)}</td><td>${escapeHtml(r.owner)}</td><td>${fmtDate(r.due)}</td><td class="text-center">${r.diff}</td></tr>`):`
+          <div class="empty-state">
+            <div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>
+            <p class="empty-title">Nada vencendo nos próximos 10 dias úteis</p>
+          </div>`}
+        </div>
+        <div class="widget-card">
+          <div class="widget-header">
+            <h3 class="widget-title">
+              <span class="icon-wrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+              Bloqueios ativos (${blocks.length})
+            </h3>
+          </div>
+          ${blocks.length?dashExpandTable('tblocks',blocks,['Projeto','Área','Tarefa','Owner','Descrição'],r=>`<tr><td><span class="deal-link" data-open="${r.dealId}">${escapeHtml(r.deal)}</span></td><td>${escapeHtml(r.area)}</td><td>${escapeHtml(r.task)}</td><td>${escapeHtml(r.owner)}</td><td>${escapeHtml(r.desc)}</td></tr>`):`
+          <div class="empty-state">
+            <div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><circle cx="12" cy="16" r="1"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg></div>
+            <p class="empty-sub">Fluxo está livre. Continue assim.</p>
+          </div>`}
+        </div>
+      </section>
+
+      <!-- Maiores atrasos -->
+      <section class="bhub-card p-4">
+        <div class="text-sm font-semibold mb-3">📢 Maiores atrasos (${topLate.length})</div>
+        ${topLate.length?dashExpandTable('tlate',topLate,['Projeto','Área','Owner','Tarefa','Dias atraso'],r=>`<tr><td><span class="deal-link" data-open="${r.dealId}">${escapeHtml(r.deal)}</span></td><td>${escapeHtml(r.area)}</td><td>${escapeHtml(r.owner)}</td><td>${escapeHtml(r.task)}</td><td class="text-right text-red-700 font-semibold">${r.dias}</td></tr>`):'<div class="text-xs text-gray-500">Sem atrasos. 🎉</div>'}
+      </section>
+
+      <!-- Heatmap Área × Projeto -->
+      ${hmAreas.length && data.length ? `
+      <section class="widget-card">
+        <div class="widget-header">
+          <h3 class="widget-title">
+            <span class="icon-wrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span>
+            Heatmap — Área × Projeto
+          </h3>
+        </div>
+        <div class="scroll-x">
+          <table class="text-xs">
+            <thead><tr>
+              <th class="sticky-col">ÁREA</th>
+              ${data.map(d=>`<th class="whitespace-nowrap"><span class="deal-link" data-open="${d.company.id}">${escapeHtml(d.company.name)}</span></th>`).join('')}
+            </tr></thead>
+            <tbody>
+              ${hmAreas.map(a=>`<tr>
+                <td class="whitespace-nowrap font-medium sticky-col">${escapeHtml(a)}</td>
+                ${data.map(d=>{
+                  const st = techCellStatus(d, a);
+                  return `<td class="hm-${st==='ontrack'?'ontrack':st} text-center cursor-pointer" data-open="${d.company.id}">${statusLabel(st)}</td>`;
+                }).join('')}
+              </tr>`).join('')}
+            </tbody>
           </table>
         </div>
-        <div style="padding:.5rem 1rem;border-top:1px solid #f3f4f6;display:flex;gap:1.5rem;flex-wrap:wrap">
-          <span style="font-size:.7rem;color:#6b7280;display:flex;align-items:center;gap:.3rem"><span style="display:inline-block;width:.6rem;height:.6rem;background:#dcfce7;border:1px solid #bbf7d0"></span> 100% concluído</span>
-          <span style="font-size:.7rem;color:#6b7280;display:flex;align-items:center;gap:.3rem"><span style="display:inline-block;width:.6rem;height:.6rem;background:#eff6ff;border:1px solid #bfdbfe"></span> Em andamento</span>
-          <span style="font-size:.7rem;color:#6b7280;display:flex;align-items:center;gap:.3rem"><span style="display:inline-block;width:.6rem;height:.6rem;background:#fee2e2;border:1px solid #fecaca"></span> Com atraso</span>
-        </div>
-      </div>`;
-  })() : '';
+      </section>` : ''}
 
-  // ── Top atrasadas ──────────────────────────────────────────
-  const today = new Date(); today.setHours(0,0,0,0);
-  const allLate = [];
-  data.forEach(d => d.tasks.forEach(t => {
-    if(t._f.status==='late') allLate.push({project:d.company.name, projId:d.company.id, task:t.task||'', owner:t.owner||'—', dias:t._f.diasAtraso||0});
-  }));
-  allLate.sort((a,b)=>b.dias-a.dias);
-  const lateHtml = allLate.length ? `
-    <div style="background:#fff;border:1px solid #e5e7eb;border-radius:.875rem;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06)">
-      <div style="padding:1rem 1.5rem;border-bottom:1px solid #f3f4f6;display:flex;align-items:center;gap:.5rem">
-        <div style="width:1.5rem;height:1.5rem;border-radius:.375rem;background:#fee2e2;display:flex;align-items:center;justify-content:center">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-        </div>
-        <h2 style="font-size:.95rem;font-weight:700;color:#111827;margin:0">Tarefas Atrasadas (${allLate.length})</h2>
-      </div>
-      <div style="overflow-x:auto">
-        <table style="width:100%;border-collapse:collapse">
-          <thead><tr style="background:#fafafa;font-size:.7rem;color:#6b7280;text-transform:uppercase;letter-spacing:.04em">
-            <th style="padding:.5rem 1rem;text-align:left">Tarefa</th>
-            <th style="padding:.5rem 1rem;text-align:left">Projeto</th>
-            <th style="padding:.5rem 1rem;text-align:left">Responsável</th>
-            <th style="padding:.5rem 1rem;text-align:right">Dias de Atraso</th>
-          </tr></thead>
-          <tbody>
-            ${allLate.slice(0,10).map(t=>`
-              <tr data-open="${t.projId}" style="border-bottom:1px solid #f9fafb;cursor:pointer" onmouseover="this.style.background='#fef2f2'" onmouseout="this.style.background=''">
-                <td style="padding:.6rem 1rem;font-size:.82rem;color:#111827">${escapeHtml(t.task)}</td>
-                <td style="padding:.6rem 1rem;font-size:.82rem;color:#6b7280">${escapeHtml(t.project)}</td>
-                <td style="padding:.6rem 1rem;font-size:.82rem;color:#6b7280">${escapeHtml(t.owner)}</td>
-                <td style="padding:.6rem 1rem;text-align:right;font-size:.85rem;font-weight:700;color:#dc2626">${t.dias}d</td>
-              </tr>`).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>` : '';
-
-  // ── Assemble ───────────────────────────────────────────────
-  const node = document.createElement('div');
-  node.style.cssText = 'padding:1.5rem 2rem;display:flex;flex-direction:column;gap:1.5rem';
-  node.innerHTML = `
-    <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:.5rem">
-      <h1 style="font-size:1.5rem;font-weight:800;color:#111827;margin:0">Dashboard</h1>
-      <span style="font-size:.8rem;color:#9ca3af">${data.length} projeto${data.length!==1?'s':''} · ${total} tarefa${total!==1?'s':''}</span>
     </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:1rem">${kpiHtml}</div>
-    ${progressHtml}
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1rem">${cardHtml}</div>
-    ${hmHtml}
-    ${lateHtml}`;
+  `);
 
-  node.querySelectorAll('[data-kpi-nav]').forEach(el=>
-    el.addEventListener('click', ()=>{ view.tab=el.dataset.kpiNav; render(); })
-  );
-  node.querySelectorAll('[data-open]').forEach(el=>
-    el.addEventListener('click', ()=>{ view.tab='empresas'; view.dealId=el.dataset.open; render(); })
-  );
+  // Filter selects
+  const fltD = node.querySelector('#fltDeals');
+  const fltA = node.querySelector('#fltAreas');
+  const fltO = node.querySelector('#fltOwners');
+  if(fltD) fltD.addEventListener('change', ()=>{ view.dashFilters={...f, deals:Array.from(fltD.selectedOptions).map(o=>o.value)}; render(); });
+  if(fltA) fltA.addEventListener('change', ()=>{ view.dashFilters={...f, areas:Array.from(fltA.selectedOptions).map(o=>o.value)}; render(); });
+  if(fltO) fltO.addEventListener('change', ()=>{ view.dashFilters={...f, owners:Array.from(fltO.selectedOptions).map(o=>o.value)}; render(); });
+  const fltClear = node.querySelector('#fltClear');
+  if(fltClear) fltClear.addEventListener('click', ()=>{ view.dashFilters={deals:[],areas:[],owners:[]}; render(); });
+  // Filter chips
+  node.querySelectorAll('[data-chip-deal]').forEach(c=>c.addEventListener('click',()=>{ view.dashFilters={...f,deals:(f.deals||[]).filter(x=>x!==c.dataset.chipDeal)}; render(); }));
+  node.querySelectorAll('[data-chip-area]').forEach(c=>c.addEventListener('click',()=>{ view.dashFilters={...f,areas:(f.areas||[]).filter(x=>x!==c.dataset.chipArea)}; render(); }));
+  node.querySelectorAll('[data-chip-owner]').forEach(c=>c.addEventListener('click',()=>{ view.dashFilters={...f,owners:(f.owners||[]).filter(x=>x!==c.dataset.chipOwner)}; render(); }));
+  // Navigation
+  node.querySelectorAll('[data-kpi-nav]').forEach(el=>el.addEventListener('click',()=>{ view.tab=el.dataset.kpiNav; render(); }));
+  node.querySelectorAll('[data-open]').forEach(el=>el.addEventListener('click',()=>{ view.tab='empresas'; view.dealId=el.dataset.open; render(); }));
+  // More buttons
+  node.querySelectorAll('[id^="more-"]').forEach(btn=>btn.addEventListener('click',()=>{ const id=btn.id.replace('more-',''); const extra=node.querySelector('#extra-'+id); if(extra){extra.style.display=''; btn.remove();} }));
+  // Export xlsx
+  const techExpBtn = node.querySelector('#techExpBtn');
+  if(techExpBtn) techExpBtn.onclick = ()=>{ const expBtn = document.querySelector('#expx'); if(expBtn) expBtn.click(); else alert('Exportação disponível no dashboard PMI.'); };
   return node;
 }
 
