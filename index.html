@@ -5065,10 +5065,13 @@ function openTaskModal(company, taskId){
           <div style="display:grid;grid-template-columns:100px 1fr;gap:.75rem">
             <div>
               <div style="font-size:.72rem;font-weight:600;color:var(--bhub-navy);margin-bottom:.3rem">REF</div>
-              ${canAdmin()
-                ? `<input type="text" name="ref" value="${escapeHtml(existing?.ref||'')}" placeholder="1.1" style="font-family:monospace">`
-                : `<div style="font-family:monospace;font-size:.875rem;padding:.45rem .7rem;border-radius:.625rem;background:var(--bhub-beige-soft);color:var(--bhub-navy);border:1px solid var(--bhub-border)">${escapeHtml(existing?.ref||'—')}</div>
-                   <input type="hidden" name="ref" value="${escapeHtml(existing?.ref||'')}">`}
+              ${isTech
+                ? `<div style="font-family:monospace;font-size:.875rem;padding:.45rem .7rem;border-radius:.625rem;background:var(--bhub-beige-soft);color:var(--bhub-navy);border:1px solid var(--bhub-border)">${escapeHtml(existing?.ref||'Auto')}</div>
+                   <input type="hidden" name="ref" value="${escapeHtml(existing?.ref||'')}">`
+                : canAdmin()
+                  ? `<input type="text" name="ref" value="${escapeHtml(existing?.ref||'')}" placeholder="1.1" style="font-family:monospace">`
+                  : `<div style="font-family:monospace;font-size:.875rem;padding:.45rem .7rem;border-radius:.625rem;background:var(--bhub-beige-soft);color:var(--bhub-navy);border:1px solid var(--bhub-border)">${escapeHtml(existing?.ref||'—')}</div>
+                     <input type="hidden" name="ref" value="${escapeHtml(existing?.ref||'')}">`}
             </div>
             <div>
               <div style="font-size:.72rem;font-weight:600;color:var(--bhub-navy);margin-bottom:.3rem">Área</div>
@@ -5334,8 +5337,14 @@ function openTaskModal(company, taskId){
       if(raidSel){ raidSel.style.borderColor='#f25461'; raidSel.style.boxShadow='0 0 0 3px rgba(242,84,97,.15)'; setTimeout(()=>{ raidSel.style.borderColor=''; raidSel.style.boxShadow=''; },3000); }
       return showErr('Tarefas bloqueadas precisam de uma Ação de Mitigação vinculada. Selecione uma no campo acima ou crie uma na aba Ações de Mitigação.');
     }
+    // Auto-ref for Tech workspace: assign next sequential number if new task
+    let autoRef = m.querySelector('[name="ref"]').value||existing?.ref||'';
+    if(isTech && isNew && !autoRef){
+      const usedNums = (deal?.tasks||[]).map(t=>parseInt(t.ref)).filter(n=>!isNaN(n));
+      autoRef = String(usedNums.length ? Math.max(...usedNums)+1 : 1);
+    }
     const payload = {
-      ref:              m.querySelector('[name="ref"]').value||existing?.ref||'',
+      ref:              autoRef,
       area:             m.querySelector('[name="area"]').value||existing?.area||'',
       task:             taskVal,
       owner:            m.querySelector('[name="owner"]')?.value||existing?.owner||'',
