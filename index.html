@@ -2048,7 +2048,11 @@ function renderCobranca(){
   const uniqueDeals = state.companies
     .map(c => ({id: c.id, name: c.name}))
     .sort((a,b) => a.name.localeCompare(b.name));
-  const uniqueOwners = Array.from(new Set(allLateTasks.map(t=>t.owner))).sort();
+  // Mostrar todos os usuários do workspace no filtro (não só quem tem atraso agora)
+  const uniqueOwners = Array.from(new Set([
+    ...state.users.filter(u => u.workspace === WS || u.workspace === 'ambos').map(u => u.username).filter(Boolean),
+    ...allLateTasks.map(t => t.owner).filter(Boolean)
+  ])).sort();
 
   // Apply filters
   const fTrigger = view.cobrancaFilters.trigger;
