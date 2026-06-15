@@ -7952,14 +7952,26 @@ function renderUsuarios(){
       };
     });
 
-    // Build "Owners sem conta" section
-    const ownerNames = new Set();
-    Object.values(state.deals||{}).forEach(deal=>{
-      (deal.tasks||[]).forEach(t=>{ if(t.owner&&t.owner.trim()) ownerNames.add(t.owner.trim()); });
-      (deal.raid||[]).forEach(r=>{ if(r.owner&&r.owner.trim()) ownerNames.add(r.owner.trim()); });
+    // Build "Owners sem conta" section — with source locations
+    const ownerOccurrences = {}; // name → [{dealId, dealName, taskName, type}]
+    state.companies.forEach(c=>{
+      const deal = state.deals[c.id];
+      if(!deal) return;
+      (deal.tasks||[]).forEach(t=>{
+        if(!t.owner||!t.owner.trim()) return;
+        const key = t.owner.trim();
+        if(!ownerOccurrences[key]) ownerOccurrences[key]=[];
+        ownerOccurrences[key].push({ dealId: c.id, dealName: c.name||'—', taskName: t.task||'—', type:'tarefa' });
+      });
+      (deal.raid||[]).forEach(r=>{
+        if(!r.owner||!r.owner.trim()) return;
+        const key = r.owner.trim();
+        if(!ownerOccurrences[key]) ownerOccurrences[key]=[];
+        ownerOccurrences[key].push({ dealId: c.id, dealName: c.name||'—', taskName: r.title||r.risk||'—', type:'raid' });
+      });
     });
     const profileNames = new Set((state.users||[]).map(u=>(u.username||'').trim().toLowerCase()));
-    const unlinked = [...ownerNames].filter(n=>!profileNames.has(n.toLowerCase())).sort();
+    const unlinked = Object.keys(ownerOccurrences).filter(n=>!profileNames.has(n.toLowerCase())).sort();
 
     const ownerSection = node.querySelector('#ownersWithoutAccount');
     if(ownerSection){
@@ -7970,18 +7982,32 @@ function renderUsuarios(){
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#92400e" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/><line x1="19" y1="5" x2="19" y2="11"/><line x1="16" y1="8" x2="22" y2="8"/></svg>
               <span class="text-sm font-semibold" style="color:#92400e">Owners sem conta (${unlinked.length})</span>
             </div>
-            <p class="text-xs text-gray-500">Pessoas que aparecem como responsáveis em tarefas ou RAID mas ainda não possuem perfil no sistema. Clique em "Criar conta" para convidá-las.</p>
+            <p class="text-xs text-gray-500">Pessoas que aparecem como responsáveis em tarefas ou RAID mas ainda não possuem perfil no sistema. Clique no deal para abrir e corrigir, ou em "+ Criar conta" para convidá-las.</p>
           </div>
           <div class="divide-y">
-            ${unlinked.map(name=>`
-              <div class="flex items-center justify-between px-4 py-2">
-                <span class="text-sm font-medium">${escapeHtml(name)}</span>
-                <button class="btn btn-secondary" data-invite-owner="${escapeHtml(name)}" style="padding:.25rem .7rem;font-size:.72rem">+ Criar conta</button>
-              </div>
-            `).join('')}
+            ${unlinked.map(name=>{
+              const occs = ownerOccurrences[name]||[];
+              const occHtml = occs.map(o=>`
+                <span class="ghost-occ-link" data-deal-id="${o.dealId}" style="display:inline-flex;align-items:center;gap:.25rem;cursor:pointer;background:#fef3c7;border:0.5px solid #fcd34d;border-radius:.35rem;padding:.1rem .45rem;font-size:.68rem;color:#92400e;margin:.15rem .2rem .15rem 0">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a4 4 0 0 0-8 0v2"/></svg>
+                  ${escapeHtml(o.dealName)}
+                  <span style="color:#b45309;opacity:.7">(${o.type})</span>
+                </span>`).join('');
+              return `
+                <div style="padding:.65rem 1rem;display:flex;align-items:flex-start;gap:.75rem;justify-content:space-between">
+                  <div style="flex:1;min-width:0">
+                    <div style="font-size:.85rem;font-weight:600;color:var(--bhub-navy);margin-bottom:.3rem">${escapeHtml(name)}</div>
+                    <div style="display:flex;flex-wrap:wrap">${occHtml}</div>
+                  </div>
+                  <button class="btn btn-secondary" data-invite-owner="${escapeHtml(name)}" style="padding:.25rem .7rem;font-size:.72rem;flex-shrink:0;margin-top:.1rem">+ Criar conta</button>
+                </div>`;
+            }).join('')}
           </div>`;
         ownerSection.querySelectorAll('[data-invite-owner]').forEach(btn=>{
           btn.onclick = ()=>openInviteUserModal(btn.dataset.inviteOwner);
+        });
+        ownerSection.querySelectorAll('.ghost-occ-link').forEach(el=>{
+          el.onclick = ()=>{ navigate({ tab:'deal', dealId: el.dataset.dealId, subtab:'tarefas' }); };
         });
       } else {
         ownerSection.innerHTML = `
