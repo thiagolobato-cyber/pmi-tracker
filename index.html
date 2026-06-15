@@ -821,6 +821,24 @@ const getLiderados = () => {
   if(!session) return [];
   return (state.users||[]).filter(u => u.managerUsername && u.managerUsername === session.username);
 };
+/** Retorna todos os descendentes hierárquicos (liderados diretos + liderados dos liderados, recursivo) */
+const getLideradosAll = () => {
+  if(!session) return [];
+  const all = state.users || [];
+  const result = [];
+  const visited = new Set();
+  function collect(managerName){
+    const directs = all.filter(u => u.managerUsername === managerName);
+    for(const u of directs){
+      if(visited.has(u.username)) continue; // evita loop infinito em caso de ciclo
+      visited.add(u.username);
+      result.push(u);
+      if(u.username) collect(u.username);
+    }
+  }
+  collect(session.username);
+  return result;
+};
 /** True se o usuário logado é gestor de pelo menos uma pessoa */
 const isLider = () => getLiderados().length > 0;
 /** Admin ou líder pode ver aba Acompanhamento */
@@ -925,6 +943,7 @@ async function reloadState(){
     if(!linksByRaid[l.raid_id]) linksByRaid[l.raid_id] = [];
     linksByRaid[l.raid_id].push(l.company_id);
   }
+  const wsCompanyIds = new Set(); // filled after state.companies is built below
   state.raid = (raid.data||[]).map(r => {
     const item = raidFromDb(r);
     item.dealIds = linksByRaid[r.id] || (r.company_id ? [r.company_id] : []);
@@ -942,7 +961,10 @@ async function reloadState(){
   state.template = (template.data||[]).map(tplFromDb);
   for(const c of state.companies){
     state.deals[c.id] = { tasks: [], raid: [], synergies: [], health: [] };
+    wsCompanyIds.add(c.id);
   }
+  // Filter RAID to only items linked to this workspace's companies (or unlinked global items)
+  state.raid = state.raid.filter(r => r.dealIds.length === 0 || r.dealIds.some(did => wsCompanyIds.has(did)));
   for(const r of (tasks.data||[])){
     if(!state.deals[r.company_id]) continue; // skip tasks from other workspaces
     state.deals[r.company_id].tasks.push(taskFromDb(r));
@@ -1485,51 +1507,30 @@ function renderLogin(){
 
 // ======== COBRANÇA ========
 function renderLiderPanel(){
-  const liderados = getLiderados();
+  const allLiderados = getLideradosAll();
   const today = new Date(); today.setHours(0,0,0,0);
 
-  // Build cards: one per liderado
-  const cards = liderados.map(u => {
-    // All tasks owned by this user across all deals
-    const userTasks = [];
-    Object.values(state.deals||{}).forEach(deal => {
-      (deal.tasks||[]).forEach(t => {
-        if((t.owner||'').trim().toLowerCase() === (u.username||'').trim().toLowerCase()){
-          const company = state.companies.find(c => c.id === Object.keys(state.deals).find(k => state.deals[k] === deal));
-          userTasks.push({ ...t, _company: company });
-        }
-      });
-    });
-
-    // Also collect by iterating companies properly
+  // ── Monta card de uma pessoa ──────────────────────────────────
+  function buildCard(u){
     const ownerTasksAll = [];
     state.companies.forEach(c => {
       const deal = state.deals[c.id];
       if(!deal) return;
       (deal.tasks||[]).forEach(t => {
         if((t.owner||'').trim().toLowerCase() === (u.username||'').trim().toLowerCase()){
-          const f = computeTaskFields(t, c);
-          ownerTasksAll.push({ ...t, _f: f, _company: c });
+          ownerTasksAll.push({ ...t, _f: computeTaskFields(t, c), _company: c });
         }
       });
     });
-
-    const open   = ownerTasksAll.filter(t => t._f.status !== 'done').length;
-    const late   = ownerTasksAll.filter(t => t._f.status === 'late').length;
+    const open    = ownerTasksAll.filter(t => t._f.status !== 'done').length;
+    const late    = ownerTasksAll.filter(t => t._f.status === 'late').length;
     const blocked = ownerTasksAll.filter(t => t.bloqueio === 'Sim' && t._f.status !== 'done').length;
-
-    // Próximo prazo = tarefa ontrack com menor dataPrevista
     const upcoming = ownerTasksAll
       .filter(t => t._f.status === 'ontrack' && t._f.dataPrevista)
       .sort((a,b) => a._f.dataPrevista - b._f.dataPrevista)[0];
-
-    const initials = (u.username||'?').slice(0,2).toUpperCase();
-
-    // Late tasks list (up to 5)
+    const initials  = (u.username||'?').slice(0,2).toUpperCase();
     const lateTasks = ownerTasksAll.filter(t => t._f.status === 'late')
-      .sort((a,b) => (b._f.diasAtraso||0) - (a._f.diasAtraso||0))
-      .slice(0,5);
-
+      .sort((a,b) => (b._f.diasAtraso||0) - (a._f.diasAtraso||0)).slice(0,5);
     return `
       <div class="bhub-card" style="padding:0;overflow:hidden">
         <div style="padding:.9rem 1rem;border-bottom:1px solid var(--bhub-border);display:flex;align-items:center;gap:.75rem;background:#f8fafc">
@@ -1537,23 +1538,15 @@ function renderLiderPanel(){
           <div style="font-weight:600;color:var(--bhub-navy);font-size:.95rem">${escapeHtml(u.username)}</div>
           <span class="role-pill role-${u.role}" style="margin-left:auto">${u.role}</span>
         </div>
+        <div style="padding:.3rem 1rem;background:#f1f5f9;border-bottom:1px solid var(--bhub-border);display:flex;align-items:center;gap:.35rem">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2.5" style="flex-shrink:0"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+          <span style="font-size:.67rem;color:#64748b;font-weight:600">tarefas individuais desta pessoa</span>
+        </div>
         <div style="padding:.85rem 1rem;display:flex;gap:1rem;flex-wrap:wrap;border-bottom:1px solid var(--bhub-border)">
-          <div style="text-align:center;min-width:60px">
-            <div style="font-size:1.4rem;font-weight:700;color:var(--bhub-navy)">${open}</div>
-            <div style="font-size:.7rem;color:var(--bhub-muted)">Em aberto</div>
-          </div>
-          <div style="text-align:center;min-width:60px">
-            <div style="font-size:1.4rem;font-weight:700;color:${late>0?'#dc2626':'#16a34a'}">${late}</div>
-            <div style="font-size:.7rem;color:var(--bhub-muted)">Atrasadas</div>
-          </div>
-          <div style="text-align:center;min-width:60px">
-            <div style="font-size:1.4rem;font-weight:700;color:${blocked>0?'#d97706':'#6b7280'}">${blocked}</div>
-            <div style="font-size:.7rem;color:var(--bhub-muted)">Bloqueadas</div>
-          </div>
-          <div style="text-align:center;min-width:80px">
-            <div style="font-size:1rem;font-weight:700;color:var(--bhub-navy)">${upcoming ? fmtDate(upcoming._f.dataPrevista) : '—'}</div>
-            <div style="font-size:.7rem;color:var(--bhub-muted)">Próximo prazo</div>
-          </div>
+          <div style="text-align:center;min-width:60px"><div style="font-size:1.4rem;font-weight:700;color:var(--bhub-navy)">${open}</div><div style="font-size:.7rem;color:var(--bhub-muted)">Em aberto</div></div>
+          <div style="text-align:center;min-width:60px"><div style="font-size:1.4rem;font-weight:700;color:${late>0?'#dc2626':'#16a34a'}">${late}</div><div style="font-size:.7rem;color:var(--bhub-muted)">Atrasadas</div></div>
+          <div style="text-align:center;min-width:60px"><div style="font-size:1.4rem;font-weight:700;color:${blocked>0?'#d97706':'#6b7280'}">${blocked}</div><div style="font-size:.7rem;color:var(--bhub-muted)">Bloqueadas</div></div>
+          <div style="text-align:center;min-width:80px"><div style="font-size:1rem;font-weight:700;color:var(--bhub-navy)">${upcoming ? fmtDate(upcoming._f.dataPrevista) : '—'}</div><div style="font-size:.7rem;color:var(--bhub-muted)">Próximo prazo</div></div>
         </div>
         ${lateTasks.length ? `
         <div style="padding:.6rem 1rem">
@@ -1563,20 +1556,49 @@ function renderLiderPanel(){
               <span style="color:#dc2626;font-weight:600;min-width:28px;text-align:right">${t._f.diasAtraso||0}d</span>
               <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(t.task||'')}">${escapeHtml(t.task||'')}</span>
               <span style="color:var(--bhub-muted);font-size:.7rem;flex-shrink:0">${escapeHtml(t._company?.name||'')}</span>
-            </div>
-          `).join('')}
+            </div>`).join('')}
         </div>` : `<div style="padding:.75rem 1rem;font-size:.78rem;color:#16a34a;display:flex;align-items:center;gap:.4rem"><span>✓</span> Sem tarefas atrasadas</div>`}
       </div>`;
-  }).join('');
+  }
 
-  // Deals section: deals where any liderado is an owner of at least one task
-  const lideradoNames = new Set(liderados.map(u=>(u.username||'').trim().toLowerCase()));
+  // ── Agrupa pessoas por gestor imediato, em ordem BFS da hierarquia ──
+  const byManager = {};
+  for(const u of allLiderados){
+    const mgr = u.managerUsername || '__none__';
+    if(!byManager[mgr]) byManager[mgr] = [];
+    byManager[mgr].push(u);
+  }
+  const sections = [];
+  const queue = [session.username];
+  while(queue.length){
+    const mgr = queue.shift();
+    const members = byManager[mgr];
+    if(!members || !members.length) continue;
+    const isDirect = mgr === session.username;
+    sections.push({ label: isDirect ? 'Liderados diretos' : `Equipe do ${mgr}`, isDirect, members });
+    for(const m of members){ if(m.username && byManager[m.username]) queue.push(m.username); }
+  }
+
+  const sectionsHtml = sections.length
+    ? sections.map(s => `
+        <div style="${s.isDirect ? 'background:rgba(59,130,246,.04);border:1.5px solid rgba(59,130,246,.22);border-radius:.75rem;padding:1rem 1.1rem 1.1rem;' : 'padding:.1rem 0'}">
+          <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.85rem;${s.isDirect ? 'border-bottom:1.5px solid rgba(59,130,246,.18);padding-bottom:.7rem;' : ''}">
+            ${s.isDirect ? `<svg width="16" height="16" viewBox="0 0 24 24" fill="#2563eb" stroke="none"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/></svg>` : `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>`}
+            <span style="font-size:${s.isDirect?'.82rem':'.72rem'};font-weight:${s.isDirect?'800':'600'};text-transform:uppercase;letter-spacing:.07em;color:${s.isDirect?'#1d4ed8':'var(--bhub-muted)'}">${escapeHtml(s.label)}</span>
+            <span style="font-size:.7rem;color:${s.isDirect?'#3b82f6':'var(--bhub-muted)'};">(${s.members.length} pessoa${s.members.length!==1?'s':''})</span>
+            ${s.isDirect ? `<span style="font-size:.67rem;background:#dbeafe;color:#1e40af;padding:.18rem .55rem;border-radius:9999px;font-weight:700;letter-spacing:.04em;margin-left:.25rem">RESPONSABILIDADE DIRETA</span>` : `<span style="font-size:.68rem;color:#9ca3af;margin-left:.25rem">— cobrar do gestor acima</span>`}
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:1rem">${s.members.map(buildCard).join('')}</div>
+        </div>`).join('<div style="margin-top:1.5rem"></div>')
+    : '<div class="bhub-card p-6 text-center text-gray-400">Nenhum liderado configurado. Configure em Usuários → Gestor Direto.</div>';
+
+  // ── Deals com envolvimento da equipe ──────────────────────────
+  const lideradoNames = new Set(allLiderados.map(u=>(u.username||'').trim().toLowerCase()));
   const teamDeals = state.companies.filter(c => {
     const deal = state.deals[c.id];
     if(!deal) return false;
     return (deal.tasks||[]).some(t => lideradoNames.has((t.owner||'').trim().toLowerCase()));
   });
-
   const dealsHtml = teamDeals.length ? `
     <div class="bhub-card overflow-hidden" style="margin-top:.5rem">
       <div class="bhub-card-header">Deals com envolvimento da equipe <span class="text-xs font-normal text-gray-500 ml-2">(${teamDeals.length})</span></div>
@@ -1606,9 +1628,9 @@ function renderLiderPanel(){
     <div class="space-y-4">
       <div>
         <h1 class="text-xl font-bold">Painel do Líder</h1>
-        <p class="text-sm text-gray-500">Visão consolidada da sua equipe direta (${liderados.length} liderado${liderados.length!==1?'s':''}).</p>
+        <p class="text-sm text-gray-500">Visão consolidada de toda a sua equipe (${allLiderados.length} pessoa${allLiderados.length!==1?'s':''} na hierarquia).</p>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:1rem">${cards||'<div class="bhub-card p-6 text-center text-gray-400">Nenhum liderado configurado. Configure em Usuários → Gestor Direto.</div>'}</div>
+      <div class="space-y-6">${sectionsHtml}</div>
       ${dealsHtml}
     </div>
   `);
@@ -2023,7 +2045,7 @@ function renderCobranca(){
   // Se não for admin, filtra apenas liderados do usuário logado
   const lideradoNames = canAdmin()
     ? null  // null = sem filtro (vê tudo)
-    : new Set(getLiderados().map(u => (u.username||'').trim().toLowerCase()));
+    : new Set(getLideradosAll().map(u => (u.username||'').trim().toLowerCase()));
 
   const allLateTasks = [];
   state.companies.forEach(c => {
@@ -2216,7 +2238,7 @@ function renderShell(){
 
   const content = el(`<main class="content-area"></main>`);
   // Guard: se estiver em modo Tech e tentar acessar aba exclusiva do PMI, redireciona
-  if(isTech && ['raid','homebroker','template'].includes(view.tab)){
+  if(isTech && ['homebroker','template'].includes(view.tab)){
     view.tab = 'empresas';
   }
   if(view.tab==='hoje') content.appendChild(renderHoje());
@@ -2258,6 +2280,7 @@ function renderSidebar(){
     ['executiva',     'Visão Executiva',        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l3-3 4 4 5-7"/></svg>'],
     ['empresas',      'Projetos',              '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="8" height="14" rx="1"/><rect x="13" y="3" width="8" height="17" rx="1"/><line x1="6" y1="10" x2="8" y2="10"/><line x1="6" y1="14" x2="8" y2="14"/><line x1="16" y1="7" x2="18" y2="7"/><line x1="16" y1="11" x2="18" y2="11"/><line x1="16" y1="15" x2="18" y2="15"/></svg>'],
     ['tech_tarefas',  'Tarefas por projeto',   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><polyline points="3 6 4 7 6 5"/><polyline points="3 12 4 13 6 11"/><polyline points="3 18 4 19 6 17"/></svg>'],
+    ['raid',          'Ação de Mitigação',     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>'],
   ] : [
     ['dashboard','Dashboard',      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>'],
     ['hoje',     'Visão Usuário',  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L13.09 8.26L19 7L15.45 12L19 17L13.09 15.74L12 22L10.91 15.74L5 17L8.55 12L5 7L10.91 8.26L12 2Z"/></svg>'],
@@ -2585,7 +2608,7 @@ function renderRaidPortfolio(){
       <div class="page-header">
         <div>
           <h1>${raidTooltipLabel('Ação de Mitigação')}</h1>
-          <p class="subtitle">Ação de Mitigação para resolver os bloqueios — visão consolidada de todos os deals</p>
+          <p class="subtitle">Ação de Mitigação para resolver os bloqueios — visão consolidada de todos os ${isTech?'projetos':'deals'}</p>
         </div>
         ${canEdit()?`<button id="addRaidGlobal" class="btn btn-primary">+ Nova Ação de Mitigação</button>`:''}
       </div>
@@ -2608,7 +2631,7 @@ function renderRaidPortfolio(){
 
       ${dealsWithRaid.length > 0 ? `
       <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;padding:.55rem .75rem;background:var(--bhub-beige-soft);border-radius:.6rem;border:1px solid var(--bhub-border)">
-        <span style="font-size:.78rem;font-weight:600;color:var(--bhub-navy);white-space:nowrap">🔍 Filtrar por deal:</span>
+        <span style="font-size:.78rem;font-weight:600;color:var(--bhub-navy);white-space:nowrap">🔍 Filtrar por ${isTech?'projeto':'deal'}:</span>
         <div style="display:flex;flex-wrap:wrap;gap:.35rem;flex:1">
           ${dealsWithRaid.map(c=>{
             const sel = dealFilter.includes(c.id);
@@ -4465,6 +4488,7 @@ function renderDeal(){
   };
   const subtabs = isTech ? [
     ['tarefas',   ICN.tarefas   + 'Tarefas',   total],
+    ['raid',      ICN.raid      + raidTooltipLabel('Ações de Mitigação'), openRaid],
     ['historico', ICN.historico + 'Histórico', null],
     ['briefing',  ICN.briefing  + 'Briefing',  null],
   ] : [
@@ -4502,12 +4526,12 @@ function renderDeal(){
         </div>
       </div>
 
-      <div class="grid grid-cols-2 ${isTech ? 'md:grid-cols-4' : 'md:grid-cols-6'} gap-2">
+      <div class="grid grid-cols-2 ${isPMI ? 'md:grid-cols-6' : 'md:grid-cols-5'} gap-2">
         <div class="mini-stat"><div class="lbl">Progresso</div><div class="val">${pct}%</div></div>
         <div class="mini-stat"><div class="lbl">Tasks Done</div><div class="val">${done}/${total}</div></div>
         <div class="mini-stat"><div class="lbl">Atrasadas</div><div class="val" style="color:var(--bhub-red)">${late}</div></div>
         <div class="mini-stat"><div class="lbl">Bloqueios</div><div class="val" style="color:#92400e">${blocked}</div></div>
-        ${isPMI ? `<div class="mini-stat"><div class="lbl">Ações de Mitigação abertas</div><div class="val">${openRaid}</div></div>` : ''}
+        <div class="mini-stat"><div class="lbl">Ações de Mitigação abertas</div><div class="val">${openRaid}</div></div>
         ${isPMI ? `<div class="mini-stat"><div class="lbl">Sinergia captura</div><div class="val">${synPct}%</div></div>` : ''}
       </div>
 
@@ -4841,8 +4865,8 @@ function openRaidModal(company, raidId){
           <label class="block col-span-2">🛡️ Mitigação / Plano de ação
             <textarea name="mitigation" rows="2" placeholder="Qual o plano para resolver ou mitigar?">${escapeHtml(existing?.mitigation||'')}</textarea>
           </label>
-          <label class="block col-span-2">Deals afetados *
-            <div class="text-xs text-gray-400 mb-1">Selecione todos os deals impactados por este item</div>
+          <label class="block col-span-2">${isTech?'Projetos afetados':'Deals afetados'} *
+            <div class="text-xs text-gray-400 mb-1">Selecione todos os ${isTech?'projetos':'deals'} impactados por este item</div>
             <div id="dealCheckboxes" class="grid grid-cols-2 gap-1 p-2 border rounded-lg bg-gray-50 max-h-36 overflow-y-auto">
               ${state.companies.map(c=>`
                 <label class="flex items-center gap-1.5 text-xs cursor-pointer">
@@ -4885,7 +4909,7 @@ function openRaidModal(company, raidId){
 
   const delBtn = m.querySelector('#del');
   if(delBtn) delBtn.onclick = async ()=>{
-    if(!confirm('Excluir esta Ação de Mitigação? Isso removerá o vínculo com todos os deals.')) return;
+    if(!confirm(`Excluir esta Ação de Mitigação? Isso removerá o vínculo com todos os ${isTech?'projetos':'deals'}.`)) return;
     try{
       const { error } = await supa.from('raid_items').delete().eq('id', raidId);
       if(error) throw error;
@@ -5166,14 +5190,14 @@ function openTaskModal(company, taskId){
             </select>
           </div>
           <div id="bloqueioDetails" style="margin-top:.75rem;display:flex;flex-direction:column;gap:.75rem;${bloqueioSim?'':'display:none'}">
-            ${isPMI ? `<div id="raidWarning" style="border-radius:.875rem;padding:.75rem 1rem;font-size:.8rem;display:flex;align-items:flex-start;gap:.5rem;background:#fffbeb;border:1px solid #fde68a;color:#92400e;${hasRaid?'display:none':''}">
+            <div id="raidWarning" style="border-radius:.875rem;padding:.75rem 1rem;font-size:.8rem;display:flex;align-items:flex-start;gap:.5rem;background:#fffbeb;border:1px solid #fde68a;color:#92400e;${hasRaid?'display:none':''}">
               <svg style="flex-shrink:0;margin-top:.1rem" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
               <div><strong>Atenção:</strong> Tarefas bloqueadas devem ter uma Ação de Mitigação vinculada. Selecione abaixo ou crie uma na aba <strong>Ações de Mitigação</strong>.</div>
             </div>
             <div>
               <div style="font-size:.72rem;font-weight:600;color:var(--bhub-navy);margin-bottom:.3rem">Ação de Mitigação vinculada</div>
               <select name="raidId" id="tmRaid">${raidOpts}</select>
-            </div>` : ''}
+            </div>
             <div>
               <div style="font-size:.72rem;font-weight:600;color:var(--bhub-navy);margin-bottom:.3rem">Descrição do bloqueio</div>
               <input type="text" name="bloqueioDescricao" value="${escapeHtml(existing?.bloqueioDescricao||'')}">
@@ -5342,7 +5366,7 @@ function openTaskModal(company, taskId){
     const taskVal = m.querySelector('[name="task"]').value?.trim();
     if(!taskVal) return showErr('A descrição da tarefa é obrigatória.');
     // Validação: bloqueio sem RAID vinculado (apenas PMI)
-    if(isPMI && bloqSel.value==='Sim' && !(raidSel?.value)){
+    if(bloqSel.value==='Sim' && !(raidSel?.value)){
       // highlight the RAID select
       if(raidSel){ raidSel.style.borderColor='#f25461'; raidSel.style.boxShadow='0 0 0 3px rgba(242,84,97,.15)'; setTimeout(()=>{ raidSel.style.borderColor=''; raidSel.style.boxShadow=''; },3000); }
       return showErr('Tarefas bloqueadas precisam de uma Ação de Mitigação vinculada. Selecione uma no campo acima ou crie uma na aba Ações de Mitigação.');
@@ -6256,13 +6280,13 @@ function renderDealBriefing(company, deal, tasks){
         </div>
 
         <!-- KPIs -->
-        <div class="grid grid-cols-2 md:grid-cols-4 ${isPMI ? 'lg:grid-cols-7' : 'lg:grid-cols-5'} gap-3">
+        <div class="grid grid-cols-2 md:grid-cols-4 ${isPMI ? 'lg:grid-cols-7' : 'lg:grid-cols-6'} gap-3">
           <div class="kpi"><div class="kpi-label">% Concluído</div><div class="kpi-value">${pct}%</div></div>
           <div class="kpi"><div class="kpi-label">Done / Total</div><div class="kpi-value">${done} / ${total}</div></div>
           <div class="kpi"><div class="kpi-label">On Track</div><div class="kpi-value" style="color:var(--bhub-blue)">${ontrack}</div></div>
           <div class="kpi"><div class="kpi-label">Atrasadas</div><div class="kpi-value" style="color:var(--bhub-red)">${late}</div></div>
           <div class="kpi"><div class="kpi-label">Bloqueios</div><div class="kpi-value" style="color:#92400e">${blocked}</div></div>
-          ${isPMI ? `<div class="kpi"><div class="kpi-label">Ações de Mitigação abertas</div><div class="kpi-value">${openRaid.length}</div></div>` : ''}
+          <div class="kpi"><div class="kpi-label">Ações de Mitigação abertas</div><div class="kpi-value">${openRaid.length}</div></div>
           ${isPMI ? `<div class="kpi"><div class="kpi-label">Sinergia</div><div class="kpi-value">${synPct}%</div></div>` : ''}
         </div>
 
@@ -7305,7 +7329,7 @@ function renderHoje(){
     if(!deal) continue;
     for(const t of (deal.tasks||[])) allTasks.push({...t, _f:computeTaskFields(t,c), _deal:c});
   }
-  const allRaid = isTech ? [] : state.raid.map(r => {
+  const allRaid = state.raid.map(r => {
     const firstDealId = r.dealIds[0];
     const _deal = firstDealId ? state.companies.find(c=>c.id===firstDealId)||null : null;
     return {...r, _deal};
