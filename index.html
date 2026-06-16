@@ -4799,11 +4799,7 @@ function renderDealRaid(company, deal){
 // company = deal context (optional, pre-selects that deal); raidId = editing existing
 function openRaidModal(company, raidId){
   const existing = raidId ? state.raid.find(r=>r.id===raidId) : null;
-  const allAreas = Array.from(new Set([
-    ...DEFAULT_AREAS.map(a=>a.name),
-    ...state.template.map(t=>t.area),
-    ...Object.values(state.deals).flatMap(d=>d.tasks.map(t=>t.area))
-  ].filter(Boolean)));
+  const allAreas = DEFAULT_AREAS.map(a=>a.name);
   const preSelectedDeals = existing ? existing.dealIds : (company ? [company.id] : []);
 
   const m = el(`
