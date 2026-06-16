@@ -4798,7 +4798,8 @@ function renderDealRaid(company, deal){
 // company = deal context (optional, pre-selects that deal); raidId = editing existing
 function openRaidModal(company, raidId){
   const existing = raidId ? state.raid.find(r=>r.id===raidId) : null;
-  const allAreas = DEFAULT_AREAS.map(a=>a.name);
+  const allAreas = ['Financeiro','CExp','P&C','System Integration / TI / Digital Workplace','Marketing & Comunicação','Comercial','Operações','Tech','PMI / M&A','Treinamentos para colaboradores'];
+  console.log('[PMI v2] openRaidModal areas:', allAreas);
   const preSelectedDeals = existing ? existing.dealIds : (company ? [company.id] : []);
 
   const m = el(`
