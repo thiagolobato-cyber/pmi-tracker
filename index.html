@@ -530,6 +530,12 @@ const supa = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const WS     = new URLSearchParams(location.search).get('ws') || 'pmi';
 const isPMI  = WS !== 'tech';
 const isTech = WS === 'tech';
+// Tech workspace foi descontinuado — redireciona para página PMI
+if(isTech){
+  document.addEventListener('DOMContentLoaded', ()=>{
+    document.body.innerHTML = `<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f8fafc;font-family:'Inter',sans-serif"><div style="text-align:center;max-width:400px;padding:2rem"><div style="font-size:3rem;margin-bottom:1rem">🔒</div><div style="font-size:1.25rem;font-weight:700;color:#1e293b;margin-bottom:.5rem">Ambiente descontinuado</div><div style="color:#64748b;margin-bottom:1.5rem">O workspace <strong>Projetos Tech</strong> foi encerrado. Acesse o PMI Tracker abaixo.</div><a href="/pmi-tracker/" style="display:inline-block;padding:.65rem 1.4rem;background:#0171E4;color:#fff;border-radius:.5rem;font-weight:600;text-decoration:none">Ir para o PMI Tracker →</a></div></div>`;
+  });
+}
 
 /* ---------- Indicador global "salvando…" ---------- */
 let _savingOps = 0;
@@ -6887,9 +6893,7 @@ function openEditWorkspaceModal(user){
         <div>
           <label class="text-xs font-semibold uppercase tracking-wider" style="color:var(--bhub-muted)">Workspace permitido</label>
           <select name="workspace">
-            <option value="pmi"   ${(user.workspace||'pmi')==='pmi'   ?'selected':''}>PMI Tracker apenas</option>
-            <option value="tech"  ${(user.workspace||'pmi')==='tech'  ?'selected':''}>Projetos Tech apenas</option>
-            ${isMasterAdmin() ? `<option value="ambos" ${(user.workspace||'pmi')==='ambos' ?'selected':''}>PMI + Tech (ambos)</option>` : ''}
+            <option value="pmi" selected>PMI Tracker</option>
           </select>
         </div>
         <div id="wsErr" class="text-xs rounded-lg p-2 hidden" style="color:#991b1b;background:#fee2e2"></div>
@@ -6944,15 +6948,8 @@ function openInviteUserModal(prefillUsername=''){
         </div>
         <div>
           <label class="text-xs font-semibold uppercase tracking-wider" style="color:var(--bhub-muted)">Workspace</label>
-          ${isMasterAdmin()
-            ? `<select name="workspace">
-                <option value="pmi">PMI Tracker apenas</option>
-                <option value="tech">Projetos Tech apenas</option>
-                <option value="ambos">PMI + Tech (ambos)</option>
-               </select>`
-            : `<div style="font-size:.875rem;padding:.45rem .7rem;border-radius:.625rem;background:var(--bhub-beige-soft);color:var(--bhub-navy);border:1px solid var(--bhub-border)">${WS==='tech'?'Projetos Tech apenas':'PMI Tracker apenas'}</div>
-               <input type="hidden" name="workspace" value="${WS}">`
-          }
+          <div style="font-size:.875rem;padding:.45rem .7rem;border-radius:.625rem;background:var(--bhub-beige-soft);color:var(--bhub-navy);border:1px solid var(--bhub-border)">PMI Tracker</div>
+          <input type="hidden" name="workspace" value="pmi">
         </div>
         <div>
           <label class="text-xs font-semibold uppercase tracking-wider" style="color:var(--bhub-muted)">Perfil</label>
@@ -7868,7 +7865,6 @@ function renderUsuarios(){
                 <div class="flex gap-1 flex-wrap">
                   <button class="btn btn-secondary" data-edit-uid="${u.id}" style="padding:.25rem .55rem;font-size:.72rem" title="Editar nome de owner">Nome</button>
                   <button class="btn btn-secondary" data-gestor-uid="${u.id}" style="padding:.25rem .55rem;font-size:.72rem" title="Definir gestor direto">Gestor</button>
-                  <button class="btn btn-secondary" data-ws-uid="${u.id}" style="padding:.25rem .55rem;font-size:.72rem" title="Definir workspace">WS</button>
                   ${u.id!==session?.id ? `
                     <button class="btn btn-secondary" data-role-uid="${u.id}" style="padding:.25rem .55rem;font-size:.72rem" title="Alterar perfil">Perfil</button>
                     <button class="btn btn-danger" data-remove-uid="${u.id}" style="padding:.25rem .55rem;font-size:.72rem" title="Remover acesso">✕</button>
@@ -7911,13 +7907,6 @@ function renderUsuarios(){
       btn.onclick = ()=>{
         const u = state.users.find(x=>x.id===btn.dataset.gestorUid);
         if(u) openEditGestorModal(u);
-      };
-    });
-
-    node.querySelectorAll('[data-ws-uid]').forEach(btn=>{
-      btn.onclick = ()=>{
-        const u = state.users.find(x=>x.id===btn.dataset.wsUid);
-        if(u) openEditWorkspaceModal(u);
       };
     });
 
