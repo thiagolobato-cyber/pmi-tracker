@@ -1528,7 +1528,7 @@ function renderLiderPanel(){
         }
       });
     });
-    const open    = ownerTasksAll.filter(t => t._f.status !== 'done').length;
+    const open    = ownerTasksAll.filter(t => t._f.status === 'ontrack').length;
     const late    = ownerTasksAll.filter(t => t._f.status === 'late').length;
     const blocked = ownerTasksAll.filter(t => t.bloqueio === 'Sim' && t._f.status !== 'done').length;
     const upcoming = ownerTasksAll
@@ -1549,7 +1549,7 @@ function renderLiderPanel(){
           <span style="font-size:.67rem;color:#64748b;font-weight:600">tarefas individuais desta pessoa</span>
         </div>
         <div style="padding:.85rem 1rem;display:flex;gap:1rem;flex-wrap:wrap;border-bottom:1px solid var(--bhub-border)">
-          <div style="text-align:center;min-width:60px"><div style="font-size:1.4rem;font-weight:700;color:var(--bhub-navy)">${open}</div><div style="font-size:.7rem;color:var(--bhub-muted)">Em aberto</div></div>
+          <div style="text-align:center;min-width:60px"><div style="font-size:1.4rem;font-weight:700;color:var(--bhub-navy)">${open}</div><div style="font-size:.7rem;color:var(--bhub-muted)">On track</div></div>
           <div style="text-align:center;min-width:60px"><div style="font-size:1.4rem;font-weight:700;color:${late>0?'#dc2626':'#16a34a'}">${late}</div><div style="font-size:.7rem;color:var(--bhub-muted)">Atrasadas</div></div>
           <div style="text-align:center;min-width:60px"><div style="font-size:1.4rem;font-weight:700;color:${blocked>0?'#d97706':'#6b7280'}">${blocked}</div><div style="font-size:.7rem;color:var(--bhub-muted)">Bloqueadas</div></div>
           <div style="text-align:center;min-width:80px"><div style="font-size:1rem;font-weight:700;color:var(--bhub-navy)">${upcoming ? fmtDate(upcoming._f.dataPrevista) : '—'}</div><div style="font-size:.7rem;color:var(--bhub-muted)">Próximo prazo</div></div>
@@ -1609,13 +1609,13 @@ function renderLiderPanel(){
     <div class="bhub-card overflow-hidden" style="margin-top:.5rem">
       <div class="bhub-card-header">Deals com envolvimento da equipe <span class="text-xs font-normal text-gray-500 ml-2">(${teamDeals.length})</span></div>
       <table class="w-full">
-        <thead><tr><th>Deal</th><th>Sign Date</th><th>Tarefas abertas</th><th>Atrasadas</th><th>Bloqueadas</th></tr></thead>
+        <thead><tr><th>Deal</th><th>Sign Date</th><th>On track</th><th>Atrasadas</th><th>Bloqueadas</th></tr></thead>
         <tbody>
           ${teamDeals.map(c => {
             const deal = state.deals[c.id];
             const ts = (deal?.tasks||[]).filter(t=>lideradoNames.has((t.owner||'').trim().toLowerCase()))
               .map(t=>({...t,_f:computeTaskFields(t,c)}));
-            const o = ts.filter(t=>t._f.status!=='done').length;
+            const o = ts.filter(t=>t._f.status==='ontrack').length;
             const l = ts.filter(t=>t._f.status==='late').length;
             const b = ts.filter(t=>t.bloqueio==='Sim'&&t._f.status!=='done').length;
             return `<tr>
