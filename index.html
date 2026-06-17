@@ -2625,7 +2625,6 @@ function renderRaidPortfolio(){
 
       <div class="flex items-center gap-2 flex-wrap">
         <button class="btn ${filter==='all'?'btn-primary':'btn-secondary'}" data-rf="all">Todos abertos (${open.length})</button>
-        ${kpiCards.map(k=>`<button class="btn ${filter===k.id?'btn-primary':'btn-secondary'}" data-rf="${k.id}">${k.icon} ${k.label} (${kpiCounts[k.id]})</button>`).join('')}
         <button class="btn ${filter==='closed'?'btn-primary':'btn-secondary'}" data-rf="closed">✓ Fechados (${allItems.filter(x=>x.status==='closed').length})</button>
       </div>
 
@@ -2648,7 +2647,6 @@ function renderRaidPortfolio(){
           <table class="w-full text-sm">
             <thead><tr>
               <th class="min-w-[18rem]">TÍTULO</th>
-              <th>ASPECTOS</th>
               <th>DEALS AFETADOS</th>
               <th>ÁREA</th>
               <th>SEVERIDADE</th>
@@ -2696,7 +2694,6 @@ function renderRaidPortfolio(){
         : '<span class="text-gray-400 text-xs">—</span>';
 
       tr.innerHTML = '<td><div class="font-medium">'+escapeHtml(r.title||'')+'</div></td>'
-        +'<td>'+raidAspectBadges(r)+'</td>'
         +'<td class="text-xs">'+( dealNames||'<span class="text-gray-400">—</span>' )+'</td>'
         +'<td class="text-xs">'+(r.area?'<span class="deal-link" data-area="'+escapeHtml(r.area)+'">'+escapeHtml(r.area)+'</span>':'')+'</td>'
         +'<td>'+(sev?'<span class="pill sev-'+r.severity+'">'+sev.label+'</span>':'')+'</td>'
@@ -4799,7 +4796,6 @@ function renderDealRaid(company, deal){
 function openRaidModal(company, raidId){
   const existing = raidId ? state.raid.find(r=>r.id===raidId) : null;
   const allAreas = ['Financeiro','CExp','P&C','System Integration / TI / Digital Workplace','Marketing & Comunicação','Comercial','Operações','Tech','PMI / M&A','Treinamentos para colaboradores'];
-  console.log('[PMI v2] openRaidModal areas:', allAreas);
   const preSelectedDeals = existing ? existing.dealIds : (company ? [company.id] : []);
 
   const m = el(`
