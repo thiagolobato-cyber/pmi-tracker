@@ -4631,7 +4631,7 @@ function renderDealTasks(company, deal, tasks){
       </div>
       ${areasInOrder.map(a => `
         <section class="bhub-card overflow-hidden">
-          <div class="bhub-card-header"><span class="deal-link" data-area="${escapeHtml(a)}" title="Ver snapshot da área">${escapeHtml(a)}</span>
+          <div class="bhub-card-header"><span class="deal-link" data-area="${escapeHtml(a)}" title="Ver snapshot da área">${escapeHtml(a)}</span>${AREA_TRIGGERS[a]?`<span class="g-tip" data-tip="Gatilho: ${escapeHtml(AREA_TRIGGERS[a])}" style="display:inline-block;margin-left:.4rem;font-size:.6rem;padding:.05rem .35rem;border-radius:9999px;background:#ede9fe;color:#5b21b6;font-weight:700;vertical-align:middle;cursor:default">G</span>`:''}
             <span class="text-xs text-gray-500 font-normal ml-2">(${grouped[a].length} tarefas • ${grouped[a].filter(t=>t._f.status==='done').length} done)</span>
           </div>
           <div class="scroll-x">
