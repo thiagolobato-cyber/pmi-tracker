@@ -817,8 +817,8 @@ async function loadSession(){
 }
 const canEdit      = () => session && (session.role==='admin' || session.role==='owner');
 const canAdmin     = () => session && session.role==='admin';
-// Master admin: role=admin + workspace=ambos — pode gerenciar TODOS os usuários e workspaces
-const isMasterAdmin = () => session && session.role==='admin' && session.workspace==='ambos';
+/// Master admin: role=admin — workspace único (pmi), todos os admins têm poderes completos
+const isMasterAdmin = () => session && session.role==='admin';
 
 // ─── Líder helpers ────────────────────────────────────────────
 /** Retorna lista de usuários que apontam para o usuário atual como gestor */
