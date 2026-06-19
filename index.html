@@ -7824,6 +7824,12 @@ function renderUsuarios(){
       : state.users.filter(u => u.workspace === WS);
   const ROLE_INFO = { admin:'Acesso total', owner:'Pode criar e editar', leitor:'Somente leitura' };
   const scopeLabel = isMasterAdmin() ? 'todos os workspaces' : (WS==='tech' ? 'Projetos Tech' : 'PMI Tracker');
+  // Líderes: usernames que aparecem como gestor de pelo menos 1 pessoa
+  const liderNames = new Set(visibleUsers.map(u=>(u.managerUsername||'').trim().toLowerCase()).filter(Boolean));
+  const isLiderUser = u => liderNames.has((u.username||'').trim().toLowerCase());
+  const filterLider = view.usuariosFilterLider || false;
+  const displayUsers = filterLider ? visibleUsers.filter(isLiderUser) : visibleUsers;
+  const liderCount = visibleUsers.filter(isLiderUser).length;
   const node = el(`
     <div class="space-y-4">
       <div class="flex items-center justify-between flex-wrap gap-2">
@@ -7844,17 +7850,29 @@ function renderUsuarios(){
         </div>
       </div>
 
+      <!-- Filtro líderes -->
+      <div style="display:flex;gap:.5rem;align-items:center">
+        <button id="filterAll" class="btn ${!filterLider?'btn-primary':'btn-secondary'}" style="font-size:.78rem;padding:.3rem .75rem">Todos (${visibleUsers.length})</button>
+        <button id="filterLider" class="btn ${filterLider?'btn-primary':'btn-secondary'}" style="font-size:.78rem;padding:.3rem .75rem">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="vertical-align:middle;margin-right:.3rem"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>Líderes (${liderCount})
+        </button>
+      </div>
+
       <div class="bhub-card overflow-hidden">
         <table class="w-full">
           <thead><tr><th>Usuário</th><th>Perfil</th><th>Gestor Direto</th><th>Workspace</th>${isAdmin?'<th style="width:14rem">Ações</th>':''}</tr></thead>
           <tbody>
-            ${visibleUsers.length ? visibleUsers.map(u=>{
+            ${displayUsers.length ? displayUsers.map(u=>{
               const wsLabel = u.workspace==='tech'?'Tech':u.workspace==='ambos'?'PMI + Tech':'PMI';
               const wsBg    = u.workspace==='tech'?'#ede9fe':u.workspace==='ambos'?'#dbeafe':'#dde9fa';
               const wsColor = u.workspace==='tech'?'#5b21b6':u.workspace==='ambos'?'#1e40af':'#005bb8';
-              return `<tr>
+              const lider   = isLiderUser(u);
+              return `<tr${lider?' style="background:rgba(59,130,246,.03)"':''}>
               <td>
-                <div class="font-medium">${escapeHtml(u.username)}</div>
+                <div style="display:flex;align-items:center;gap:.45rem">
+                  <span class="font-medium">${escapeHtml(u.username)}</span>
+                  ${lider?`<span style="font-size:.6rem;font-weight:700;padding:.1rem .4rem;border-radius:9999px;background:#dbeafe;color:#1e40af;white-space:nowrap">★ Líder</span>`:''}
+                </div>
                 ${session && u.id===session.id?'<div class="text-xs text-gray-400">(você)</div>':''}
               </td>
               <td><span class="role-pill role-${u.role}">${u.role}</span></td>
@@ -7888,6 +7906,9 @@ function renderUsuarios(){
       ${isAdmin ? `<div id="ownersWithoutAccount" class="bhub-card p-0 overflow-hidden"></div>` : ''}
     </div>
   `);
+
+  node.querySelector('#filterAll').onclick    = ()=>{ view.usuariosFilterLider=false; render(); };
+  node.querySelector('#filterLider').onclick  = ()=>{ view.usuariosFilterLider=true;  render(); };
 
   if(isAdmin){
     const invBtn = node.querySelector('#inviteBtn');
