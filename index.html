@@ -7828,8 +7828,16 @@ function renderUsuarios(){
   const liderNames = new Set(visibleUsers.map(u=>(u.managerUsername||'').trim().toLowerCase()).filter(Boolean));
   const isLiderUser = u => liderNames.has((u.username||'').trim().toLowerCase());
   const filterLider = view.usuariosFilterLider || false;
-  const displayUsers = filterLider ? visibleUsers.filter(isLiderUser) : visibleUsers;
+  const filterLiderName = view.usuariosFilterLiderName || ''; // username do líder selecionado
   const liderCount = visibleUsers.filter(isLiderUser).length;
+  // Lista de líderes para o select (ordenada)
+  const liderList = visibleUsers.filter(isLiderUser).map(u=>u.username).sort();
+  let displayUsers = visibleUsers;
+  if(filterLiderName) {
+    displayUsers = visibleUsers.filter(u=>(u.managerUsername||'').trim().toLowerCase() === filterLiderName.trim().toLowerCase());
+  } else if(filterLider) {
+    displayUsers = visibleUsers.filter(isLiderUser);
+  }
   const node = el(`
     <div class="space-y-4">
       <div class="flex items-center justify-between flex-wrap gap-2">
@@ -7851,11 +7859,15 @@ function renderUsuarios(){
       </div>
 
       <!-- Filtro líderes -->
-      <div style="display:flex;gap:.5rem;align-items:center">
-        <button id="filterAll" class="btn ${!filterLider?'btn-primary':'btn-secondary'}" style="font-size:.78rem;padding:.3rem .75rem">Todos (${visibleUsers.length})</button>
-        <button id="filterLider" class="btn ${filterLider?'btn-primary':'btn-secondary'}" style="font-size:.78rem;padding:.3rem .75rem">
+      <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+        <button id="filterAll" class="btn ${!filterLider&&!filterLiderName?'btn-primary':'btn-secondary'}" style="font-size:.78rem;padding:.3rem .75rem">Todos (${visibleUsers.length})</button>
+        <button id="filterLider" class="btn ${filterLider&&!filterLiderName?'btn-primary':'btn-secondary'}" style="font-size:.78rem;padding:.3rem .75rem">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="vertical-align:middle;margin-right:.3rem"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>Líderes (${liderCount})
         </button>
+        <select id="filterByLider" style="font-size:.78rem;padding:.3rem .75rem;border-radius:.5rem;border:1px solid #d1d5db;background:${filterLiderName?'#eff6ff':'white'};color:${filterLiderName?'#1d4ed8':'#374151'};cursor:pointer">
+          <option value="">★ Ver por líder...</option>
+          ${liderList.map(n=>`<option value="${escapeHtml(n)}" ${filterLiderName===n?'selected':''}>${escapeHtml(n)}</option>`).join('')}
+        </select>
       </div>
 
       <div class="bhub-card overflow-hidden">
@@ -7907,8 +7919,9 @@ function renderUsuarios(){
     </div>
   `);
 
-  node.querySelector('#filterAll').onclick    = ()=>{ view.usuariosFilterLider=false; render(); };
-  node.querySelector('#filterLider').onclick  = ()=>{ view.usuariosFilterLider=true;  render(); };
+  node.querySelector('#filterAll').onclick    = ()=>{ view.usuariosFilterLider=false; view.usuariosFilterLiderName=''; render(); };
+  node.querySelector('#filterLider').onclick  = ()=>{ view.usuariosFilterLider=true;  view.usuariosFilterLiderName=''; render(); };
+  node.querySelector('#filterByLider').onchange = e=>{ view.usuariosFilterLiderName=e.target.value; view.usuariosFilterLider=false; render(); };
 
   if(isAdmin){
     const invBtn = node.querySelector('#inviteBtn');
