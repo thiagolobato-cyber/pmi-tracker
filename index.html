@@ -7864,8 +7864,8 @@ function renderUsuarios(){
         <button id="filterLider" class="btn ${filterLider&&!filterLiderName?'btn-primary':'btn-secondary'}" style="font-size:.78rem;padding:.3rem .75rem">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="vertical-align:middle;margin-right:.3rem"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>Líderes (${liderCount})
         </button>
-        <select id="filterByLider" style="font-size:.78rem;padding:.3rem .75rem;border-radius:.5rem;border:1px solid #d1d5db;background:${filterLiderName?'#eff6ff':'white'};color:${filterLiderName?'#1d4ed8':'#374151'};cursor:pointer">
-          <option value="">★ Ver por líder...</option>
+        <select id="filterByLider" style="font-size:.72rem;padding:.2rem .5rem;border-radius:.4rem;border:1px solid ${filterLiderName?'#93c5fd':'#e5e7eb'};background:${filterLiderName?'#eff6ff':'transparent'};color:${filterLiderName?'#1d4ed8':'#6b7280'};cursor:pointer;max-width:160px">
+          <option value="">por líder...</option>
           ${liderList.map(n=>`<option value="${escapeHtml(n)}" ${filterLiderName===n?'selected':''}>${escapeHtml(n)}</option>`).join('')}
         </select>
       </div>
