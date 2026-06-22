@@ -159,6 +159,19 @@
   .raid-assumption{background:#e0f2fe;color:#075985;border:1px solid #bae6fd}
   /* Phase badge */
   .phase{display:inline-block;padding:.15rem .5rem;border-radius:9999px;font-size:.65rem;font-weight:700;font-family:'Roboto',sans-serif;letter-spacing:.04em;background:var(--bhub-beige-soft);color:var(--bhub-navy);border:1px solid var(--bhub-border)}
+  /* Gantt de Integração por Blocos */
+  .gantt-cell{padding:.35rem .3rem;text-align:center;border:1px solid #e5e7eb;white-space:nowrap}
+  .gantt-cell .gantt-dot{display:inline-block;width:7px;height:7px;border-radius:50%;vertical-align:middle;flex-shrink:0}
+  .gantt-cell .gantt-lbl{font-size:.62rem;margin-left:3px;vertical-align:middle}
+  .gantt-done {background:#dcfce7}
+  .gantt-track{background:#fef9c3}
+  .gantt-late {background:#fee2e2}
+  .gantt-plan {background:#f1f5f9;color:#94a3b8}
+  .gantt-empty{background:#fafafa;color:#d1d5db;font-size:.65rem}
+  .today-gantt{background:#e0e7ff !important}
+  .gantt-done.today-gantt {background:#c7f7d4 !important}
+  .gantt-track.today-gantt{background:#fdf3a7 !important}
+  .gantt-late.today-gantt {background:#fcc8c8 !important}
   /* Briefing print */
   @media print{
     .no-print{display:none !important}
@@ -2043,6 +2056,25 @@ function renderTechDashboard(){
 }
 
 function renderCobranca(){
+  // Sub-tab: 'tarefas' (default) ou 'gantt' (admin only)
+  if(!view.acompSubTab) view.acompSubTab = 'tarefas';
+  if(view.acompSubTab === 'gantt' && canAdmin()) {
+    const wrap = el('<div class="space-y-4"></div>');
+    // Tab bar
+    const tabBar = el(`<div style="display:flex;gap:.25rem;border-bottom:1px solid var(--bhub-border);margin-bottom:.5rem;padding-bottom:0">
+      <button class="acomp-subtab" data-tab="tarefas" style="padding:.5rem 1rem;font-size:.8rem;border-bottom:2px solid transparent;color:var(--bhub-muted);cursor:pointer;background:none;border-left:none;border-right:none;border-top:none">Tarefas Atrasadas</button>
+      <button class="acomp-subtab" data-tab="gantt" style="padding:.5rem 1rem;font-size:.8rem;border-bottom:2px solid #4f46e5;color:#4f46e5;font-weight:600;cursor:pointer;background:none;border-left:none;border-right:none;border-top:none">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:-1px;margin-right:.3rem"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+        Gantt de Integração
+        <span style="background:#e0e7ff;color:#3730a3;font-size:.62rem;padding:.1rem .4rem;border-radius:999px;margin-left:.3rem;font-weight:700">Admin</span>
+      </button>
+    </div>`);
+    wrap.appendChild(tabBar);
+    wrap.appendChild(renderGanttIntegracao());
+    tabBar.querySelectorAll('.acomp-subtab').forEach(btn => btn.addEventListener('click', () => { view.acompSubTab = btn.dataset.tab; render(); }));
+    return wrap;
+  }
+
   // Collect all late tasks across all deals
   const today = new Date(); today.setHours(0,0,0,0);
   if(!view.cobrancaFilters) view.cobrancaFilters = { trigger:'', dealId:'', owner:'' };
@@ -2139,6 +2171,15 @@ function renderCobranca(){
         </button>` : ''}
       </div>
 
+      ${isPMI && canAdmin() ? `<div style="display:flex;gap:.25rem;border-bottom:1px solid var(--bhub-border)">
+        <button class="acomp-subtab-tf" data-tab="tarefas" style="padding:.45rem 1rem;font-size:.78rem;border-bottom:2px solid #4f46e5;color:#4f46e5;font-weight:600;cursor:pointer;background:none;border-left:none;border-right:none;border-top:none">Tarefas Atrasadas</button>
+        <button class="acomp-subtab-tf" data-tab="gantt" style="padding:.45rem 1rem;font-size:.78rem;border-bottom:2px solid transparent;color:var(--bhub-muted);cursor:pointer;background:none;border-left:none;border-right:none;border-top:none">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:-1px;margin-right:.3rem"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+          Gantt de Integração
+          <span style="background:#e0e7ff;color:#3730a3;font-size:.6rem;padding:.1rem .4rem;border-radius:999px;margin-left:.3rem;font-weight:700">Admin</span>
+        </button>
+      </div>` : ''}
+
       <!-- Filtros compactos -->
       <div style="display:flex;flex-wrap:wrap;align-items:center;gap:.5rem">
         ${isPMI ? `<select id="cobrFiltroGatilho" style="font-size:.75rem;padding:.25rem .5rem;border:1px solid ${fTrigger?'#0171E4':'var(--bhub-border)'};border-radius:999px;background:${fTrigger?'#eff6ff':'#fff'};color:${fTrigger?'#0171E4':'var(--bhub-navy)'};font-weight:${fTrigger?'700':'400'};cursor:pointer;max-width:180px">
@@ -2231,7 +2272,175 @@ function renderCobranca(){
   node.querySelectorAll('[data-summary]').forEach(b=>b.addEventListener('click',()=>{ view.tab='deal'; view.dealId=b.dataset.summary; render(); }));
   // Owner links
   node.querySelectorAll('.cobr-owner-link').forEach(b=>b.addEventListener('click',()=>openOwnerSummary(b.dataset.owner)));
+  // Sub-tab switcher (Gantt de Integração)
+  node.querySelectorAll('.acomp-subtab-tf').forEach(btn=>btn.addEventListener('click',()=>{ view.acompSubTab=btn.dataset.tab; render(); }));
   return node;
+}
+
+/* ===== Integração por Blocos — helpers de Gantt ===== */
+function _monthKey(d){ return d.getFullYear()*12 + d.getMonth(); }
+function _ganttMonths(startMk, count){
+  const N=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  return Array.from({length:count},(_,i)=>{ const mk=startMk+i; return {mk, label:N[mk%12]+'/'+String(Math.floor(mk/12)).slice(-2)}; });
+}
+function _blocoMonthStatus(tasks, mk, today){
+  const inM = tasks.filter(t=>t._f&&t._f.dataPrevista&&_monthKey(t._f.dataPrevista)===mk);
+  if(!inM.length) return '';
+  const todMk = _monthKey(today);
+  if(inM.every(t=>t._f.status==='done')) return 'done';
+  if(inM.some(t=>t._f.status==='late')) return 'late';
+  if(mk < todMk) return 'late';
+  if(inM.some(t=>t._f.status==='done'||t._f.status==='ontrack')) return 'track';
+  return 'plan';
+}
+function _ganttCell(st, isTod){
+  const t2 = isTod ? 'today-gantt' : '';
+  if(!st) return `<td class="gantt-cell gantt-empty ${t2}">—</td>`;
+  const cfg={done:{c:'gantt-done',bg:'#16a34a',lbl:'Concluído'},track:{c:'gantt-track',bg:'#ca8a04',lbl:'Em andamento'},late:{c:'gantt-late',bg:'#dc2626',lbl:'Atrasado'},plan:{c:'gantt-plan',bg:'#94a3b8',lbl:'Planejado'}}[st];
+  return `<td class="gantt-cell ${cfg.c} ${t2}" title="${cfg.lbl}"><span class="gantt-dot" style="background:${cfg.bg}"></span><span class="gantt-lbl">${cfg.lbl}</span></td>`;
+}
+
+/* ===== Gantt por deal (aba Integração por Blocos) ===== */
+function renderDealIntegracao(company, deal, tasks){
+  if(!canAdmin()) return el('<div class="bhub-card p-6 text-sm text-gray-500">Acesso restrito a administradores.</div>');
+  const today=new Date(); today.setHours(0,0,0);
+  const sd=parseDate(company.signDate);
+  if(!sd) return el('<div class="bhub-card p-6 text-sm text-gray-500">Defina a data de assinatura para visualizar o Gantt.</div>');
+  const tw=tasks.filter(t=>t.bloco);
+  if(!tw.length) return el('<div class="bhub-card p-6 text-sm text-gray-500">Nenhuma tarefa com sub-área. Execute o SQL <code>populate_blocos.sql</code> no Supabase.</div>');
+  const sdMk=_monthKey(sd);
+  const maxMk=Math.max(...tw.map(t=>t._f&&t._f.dataPrevista?_monthKey(t._f.dataPrevista):sdMk));
+  const months=_ganttMonths(sdMk, Math.max(maxMk-sdMk+1,6));
+  const todMk=_monthKey(today);
+  const AREA_ORDER=['Financeiro','CExp','Comercial','Operações','P&C','PMI / M&A','Marketing & Comunicação','Treinamentos para colaboradores','System Integration / TI / Digital Workplace','Tech'];
+  const byArea={};
+  tw.forEach(t=>{
+    const a=t.area||'Sem área', b=t.bloco;
+    if(!byArea[a]) byArea[a]={};
+    if(!byArea[a][b]) byArea[a][b]=[];
+    byArea[a][b].push(t);
+  });
+  const areas=AREA_ORDER.filter(a=>byArea[a]).concat(Object.keys(byArea).filter(a=>!AREA_ORDER.includes(a)));
+  const wrap=el('<div class="space-y-3"></div>');
+  wrap.appendChild(el(`<div class="bhub-card p-3 flex items-center gap-4 text-xs text-gray-500 flex-wrap">
+    <span style="font-weight:600;color:var(--bhub-navy)">Integração por Blocos — ${escapeHtml(company.name)}</span>
+    <span class="inline-flex items-center gap-1"><span style="width:8px;height:8px;border-radius:50%;background:#16a34a;display:inline-block"></span>Concluído</span>
+    <span class="inline-flex items-center gap-1"><span style="width:8px;height:8px;border-radius:50%;background:#ca8a04;display:inline-block"></span>Em andamento</span>
+    <span class="inline-flex items-center gap-1"><span style="width:8px;height:8px;border-radius:50%;background:#dc2626;display:inline-block"></span>Atrasado</span>
+    <span class="inline-flex items-center gap-1"><span style="width:8px;height:8px;border-radius:50%;background:#94a3b8;display:inline-block"></span>Planejado</span>
+    <span style="background:#e0e7ff;color:#3730a3;padding:.1rem .5rem;border-radius:999px;font-weight:600;margin-left:auto">Admin only</span>
+  </div>`));
+  const tb=el('<div class="bhub-card overflow-x-auto"></div>');
+  let h=`<table style="border-collapse:collapse;min-width:100%;font-size:.72rem"><thead><tr>
+    <th style="text-align:left;padding:.5rem .75rem;font-size:.68rem;color:var(--bhub-muted);background:#f8fafc;position:sticky;left:0;z-index:2;min-width:185px;border-bottom:2px solid var(--bhub-border)">Área / Sub-área</th>
+    ${months.map(m=>{const iT=m.mk===todMk;return `<th style="text-align:center;padding:.4rem .2rem;font-size:.68rem;min-width:90px;background:${iT?'#eef2ff':'#f8fafc'};color:${iT?'#3730a3':'var(--bhub-muted)'};border-bottom:2px solid var(--bhub-border)">M+${m.mk-sdMk+1}<br><span style="font-weight:400">${m.label}</span>${iT?'<br><span style="font-size:.58rem;color:#6366f1">hoje</span>':''}</th>`;}).join('')}
+  </tr></thead><tbody>`;
+  areas.forEach(area=>{
+    h+=`<tr style="background:#f1f5f9"><td colspan="${months.length+1}" style="padding:.35rem .75rem;font-weight:700;font-size:.72rem;color:var(--bhub-navy);position:sticky;left:0;background:#f1f5f9;border-top:1px solid var(--bhub-border)">${escapeHtml(area)}</td></tr>`;
+    Object.keys(byArea[area]).sort().forEach(bloco=>{
+      const bt=byArea[area][bloco];
+      h+=`<tr><td style="padding:.3rem .75rem .3rem 1.3rem;position:sticky;left:0;background:white;border-right:1px solid var(--bhub-border);font-size:.72rem">${escapeHtml(bloco)}</td>${months.map(m=>_ganttCell(_blocoMonthStatus(bt,m.mk,today),m.mk===todMk)).join('')}</tr>`;
+    });
+  });
+  h+='</tbody></table>';
+  tb.innerHTML=h;
+  wrap.appendChild(tb);
+  return wrap;
+}
+
+/* ===== Gantt portfolio (aba Acompanhamento → Gantt de Integração) ===== */
+function renderGanttIntegracao(){
+  if(!canAdmin()) return el('<div class="bhub-card p-6 text-sm text-gray-500">Acesso restrito a administradores.</div>');
+  const today=new Date(); today.setHours(0,0,0);
+  const todMk=_monthKey(today);
+  const months=_ganttMonths(todMk-2,8);
+  const ORDER={late:0,track:1,plan:2,done:3,'':4};
+  const AREA_ORDER=['Financeiro','CExp','Comercial','Operações','P&C','PMI / M&A','Marketing & Comunicação','Treinamentos para colaboradores','System Integration / TI / Digital Workplace','Tech'];
+
+  const dealsData=state.companies.map(c=>{
+    const deal=state.deals[c.id];
+    if(!deal) return null;
+    const tw=(deal.tasks||[]).filter(t=>t.bloco).map(t=>({...t,_f:computeTaskFields(t,c)}));
+    if(!tw.length) return null;
+    const byArea={};
+    tw.forEach(t=>{
+      const a=t.area||'Sem área',b=t.bloco;
+      if(!byArea[a]) byArea[a]={};
+      if(!byArea[a][b]) byArea[a][b]=[];
+      byArea[a][b].push(t);
+    });
+    return {c,byArea};
+  }).filter(Boolean);
+
+  if(!dealsData.length) return el('<div class="bhub-card p-10 text-center text-gray-400 text-sm">Nenhum deal com sub-áreas. Execute o SQL <code>populate_blocos.sql</code> no Supabase primeiro.</div>');
+  if(!view.ganttExpanded) view.ganttExpanded={};
+  dealsData.forEach(d=>{ if(view.ganttExpanded[d.c.id]===undefined) view.ganttExpanded[d.c.id]=true; });
+
+  const wrap=el('<div class="space-y-3"></div>');
+  // Legenda
+  const leg=el(`<div class="bhub-card p-3 flex items-center gap-4 flex-wrap text-xs text-gray-500">
+    <span style="font-weight:600;color:var(--bhub-navy)">Gantt de Integração — todos os deals</span>
+    <span class="inline-flex items-center gap-1"><span style="width:8px;height:8px;border-radius:50%;background:#16a34a;display:inline-block"></span>Concluído</span>
+    <span class="inline-flex items-center gap-1"><span style="width:8px;height:8px;border-radius:50%;background:#ca8a04;display:inline-block"></span>Em andamento</span>
+    <span class="inline-flex items-center gap-1"><span style="width:8px;height:8px;border-radius:50%;background:#dc2626;display:inline-block"></span>Atrasado</span>
+    <span class="inline-flex items-center gap-1"><span style="width:8px;height:8px;border-radius:50%;background:#94a3b8;display:inline-block"></span>Planejado</span>
+    <span class="inline-flex items-center gap-1"><span style="width:10px;height:10px;background:#e0e7ff;border:1px solid #818cf8;display:inline-block;border-radius:2px"></span>Mês atual</span>
+    <div class="ml-auto flex gap-2">
+      <button id="gnExpandAll" class="btn btn-secondary" style="font-size:.7rem;padding:.2rem .55rem">Expandir tudo</button>
+      <button id="gnCollapseAll" class="btn btn-secondary" style="font-size:.7rem;padding:.2rem .55rem">Recolher tudo</button>
+    </div>
+  </div>`);
+  wrap.appendChild(leg);
+
+  const tb=el('<div class="bhub-card overflow-x-auto"></div>');
+  let h=`<table style="border-collapse:collapse;min-width:100%;font-size:.72rem" id="gnPortTable"><thead><tr>
+    <th style="text-align:left;padding:.5rem .75rem;font-size:.68rem;color:var(--bhub-muted);background:#f8fafc;position:sticky;left:0;z-index:3;min-width:210px;border-bottom:2px solid var(--bhub-border)">Deal / Área / Sub-área</th>
+    ${months.map(m=>{const iT=m.mk===todMk;return `<th style="text-align:center;padding:.4rem .2rem;font-size:.68rem;min-width:95px;background:${iT?'#eef2ff':'#f8fafc'};color:${iT?'#3730a3':'var(--bhub-muted)'};border-bottom:2px solid var(--bhub-border)">${m.label}${iT?'<br><span style="font-size:.6rem;color:#6366f1;font-weight:400">hoje</span>':''}</th>`;}).join('')}
+  </tr></thead><tbody>`;
+
+  dealsData.forEach(({c,byArea})=>{
+    const exp=view.ganttExpanded[c.id];
+    const sd=parseDate(c.signDate);
+    const sdLbl=sd?'Ass: '+fmtDate(sd):'';
+    const allT=Object.values(byArea).flatMap(a=>Object.values(a).flat());
+    h+=`<tr style="background:#eef2ff;cursor:pointer" class="gn-deal-row" data-gndeal="${escapeHtml(c.id)}">
+      <td style="padding:.4rem .75rem;font-weight:700;font-size:.75rem;color:#3730a3;position:sticky;left:0;background:#eef2ff;border-top:2px solid #c7d2fe">
+        ${exp?'▾':'▸'} ${escapeHtml(c.name)} <span style="font-weight:400;font-size:.65rem;color:#6366f1;margin-left:.3rem">${sdLbl}</span>
+      </td>
+      ${months.map(m=>{
+        const sts=AREA_ORDER.filter(a=>byArea[a]).flatMap(area=>Object.values(byArea[area]).map(bt=>_blocoMonthStatus(bt,m.mk,today))).filter(Boolean);
+        const worst=sts.sort((a,b)=>(ORDER[a]||4)-(ORDER[b]||4))[0]||'';
+        return _ganttCell(worst,m.mk===todMk);
+      }).join('')}
+    </tr>`;
+    if(exp){
+      const areas=AREA_ORDER.filter(a=>byArea[a]).concat(Object.keys(byArea).filter(a=>!AREA_ORDER.includes(a)));
+      areas.forEach(area=>{
+        h+=`<tr style="background:#f8fafc"><td style="padding:.3rem .75rem .3rem 1.5rem;font-weight:600;font-size:.68rem;color:var(--bhub-muted);text-transform:uppercase;letter-spacing:.04em;position:sticky;left:0;background:#f8fafc;border-top:1px solid var(--bhub-border)">${escapeHtml(area)}</td>
+          ${months.map(m=>{
+            const sts=Object.values(byArea[area]).map(bt=>_blocoMonthStatus(bt,m.mk,today)).filter(Boolean);
+            const worst=sts.sort((a,b)=>(ORDER[a]||4)-(ORDER[b]||4))[0]||'';
+            return worst?`<td class="gantt-cell ${worst==='done'?'gantt-done':worst==='late'?'gantt-late':worst==='track'?'gantt-track':'gantt-plan'} ${m.mk===todMk?'today-gantt':''}" style="text-align:center"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${worst==='done'?'#16a34a':worst==='late'?'#dc2626':worst==='track'?'#ca8a04':'#94a3b8'}"></span></td>`:`<td class="gantt-cell gantt-empty ${m.mk===todMk?'today-gantt':''}"></td>`;
+          }).join('')}
+        </tr>`;
+        Object.keys(byArea[area]).sort().forEach(bloco=>{
+          h+=`<tr><td style="padding:.3rem .75rem .3rem 2.5rem;position:sticky;left:0;background:white;font-size:.71rem">${escapeHtml(bloco)}</td>${months.map(m=>_ganttCell(_blocoMonthStatus(byArea[area][bloco],m.mk,today),m.mk===todMk)).join('')}</tr>`;
+        });
+      });
+    }
+  });
+  h+='</tbody></table>';
+  tb.innerHTML=h;
+  wrap.appendChild(tb);
+
+  setTimeout(()=>{
+    wrap.querySelectorAll('.gn-deal-row').forEach(row=>row.addEventListener('click',()=>{ view.ganttExpanded[row.dataset.gndeal]=!view.ganttExpanded[row.dataset.gndeal]; render(); }));
+    const expB=wrap.querySelector('#gnExpandAll');
+    const colB=wrap.querySelector('#gnCollapseAll');
+    if(expB) expB.addEventListener('click',()=>{ dealsData.forEach(d=>view.ganttExpanded[d.c.id]=true); render(); });
+    if(colB) colB.addEventListener('click',()=>{ dealsData.forEach(d=>view.ganttExpanded[d.c.id]=false); render(); });
+  },0);
+  return wrap;
 }
 
 function renderShell(){
@@ -4498,6 +4707,7 @@ function renderDeal(){
     ['sinergias', ICN.sinergias + 'Sinergias',  (deal.synergies||[]).length],
     ['historico', ICN.historico + 'Histórico',  null],
     ['briefing',  ICN.briefing  + 'Briefing',   null],
+    ...(isPMI && canAdmin() ? [['integracao', ICN.gantt + 'Integração por Blocos', null]] : []),
   ];
 
   const subView = (function(){
@@ -4505,8 +4715,9 @@ function renderDeal(){
       case 'raid':      return renderDealRaid(company, deal);
       case 'sinergias': return renderDealSynergies(company, deal);
       case 'historico': return renderDealHistorico(company);
-      case 'briefing':  return renderDealBriefing(company, deal, tasks);
-      default:          return renderDealTasks(company, deal, tasks);
+      case 'briefing':     return renderDealBriefing(company, deal, tasks);
+      case 'integracao':   return renderDealIntegracao(company, deal, tasks);
+      default:             return renderDealTasks(company, deal, tasks);
     }
   })();
 
