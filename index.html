@@ -2511,21 +2511,27 @@ function renderGanttIntegracao(){
     if(exp){
       const areas=AREA_ORDER.filter(a=>byArea[a]).concat(Object.keys(byArea).filter(a=>!AREA_ORDER.includes(a)));
       areas.forEach(area=>{
-        h+=`<tr style="background:#f8fafc"><td style="padding:.3rem .75rem .3rem 1.5rem;font-weight:600;font-size:.68rem;color:var(--bhub-muted);text-transform:uppercase;letter-spacing:.04em;position:sticky;left:0;background:#f8fafc;border-top:1px solid var(--bhub-border)">${escapeHtml(area)}</td><td style="background:#f8fafc;border-top:1px solid var(--bhub-border)"></td>
-          ${months.map(m=>{
-            const sts=Object.values(byArea[area]).map(bt=>_blocoMonthStatus(bt,m.mk,today)).filter(Boolean);
-            const worst=sts.sort((a,b)=>(ORDER[a]||4)-(ORDER[b]||4))[0]||'';
-            return worst?`<td class="gantt-cell ${worst==='done'?'gantt-done':worst==='late'?'gantt-late':worst==='track'?'gantt-track':'gantt-plan'} ${m.mk===todMk?'today-gantt':''}" style="text-align:center"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${worst==='done'?'#16a34a':worst==='late'?'#dc2626':worst==='track'?'#ca8a04':'#94a3b8'}"></span></td>`:`<td class="gantt-cell gantt-empty ${m.mk===todMk?'today-gantt':''}"></td>`;
-          }).join('')}
-        </tr>`;
+        h+=`<tr style="background:#f1f5f9"><td colspan="${months.length+2}" style="padding:.35rem .75rem .35rem 1.5rem;font-weight:700;font-size:.72rem;color:var(--bhub-navy);position:sticky;left:0;background:#f1f5f9;border-top:1px solid var(--bhub-border)">${escapeHtml(area)}</td></tr>`;
         Object.keys(byArea[area]).sort().forEach(bloco=>{
-          h+=`<tr><td style="padding:.3rem .75rem .3rem 2.5rem;position:sticky;left:0;background:white;font-size:.71rem">${escapeHtml(bloco)}</td><td style="background:white"></td>${months.map(m=>_ganttCell(_blocoMonthStatus(byArea[area][bloco],m.mk,today),m.mk===todMk)).join('')}</tr>`;
+          const bt=byArea[area][bloco];
+          h+=`<tr><td style="padding:.3rem .75rem .3rem 1.8rem;position:sticky;left:0;background:white;border-right:1px solid var(--bhub-border);font-size:.72rem">${escapeHtml(bloco)}</td><td style="background:white"></td>${months.map(m=>{
+            const st=_blocoMonthStatus(bt,m.mk,today);
+            const inM=bt.filter(t=>t._f&&t._f.dataPrevista&&_monthKey(t._f.dataPrevista)===m.mk);
+            if(!window._gnPop) window._gnPop={};
+            const key=`${c.id}_${bloco}_${m.mk}`;
+            window._gnPop[key]={bloco,month:m.label,tasks:inM};
+            const t2=m.mk===todMk?'today-gantt':'';
+            if(!st) return `<td class="gantt-cell gantt-empty ${t2}" data-gn="${key}">—</td>`;
+            const cfg={done:{c:'gantt-done',bg:'#16a34a',lbl:'Concluído'},track:{c:'gantt-track',bg:'#ca8a04',lbl:'Em andamento'},late:{c:'gantt-late',bg:'#dc2626',lbl:'Atrasado'},plan:{c:'gantt-plan',bg:'#94a3b8',lbl:'Planejado'}}[st];
+            return `<td class="gantt-cell ${cfg.c} ${t2}" data-gn="${key}" title="${cfg.lbl}"><span class="gantt-dot" style="background:${cfg.bg}"></span><span class="gantt-lbl">${cfg.lbl}</span></td>`;
+          }).join('')}</tr>`;
         });
       });
     }
   });
   h+='</tbody></table>';
   tb.innerHTML=h;
+  tb.querySelectorAll('[data-gn]').forEach(td=>td.addEventListener('click',e=>_showGanttPopover(e,td.dataset.gn)));
   wrap.appendChild(tb);
 
   setTimeout(()=>{
