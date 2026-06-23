@@ -2305,6 +2305,67 @@ function _ganttCell(st, isTod){
   return `<td class="gantt-cell ${cfg.c} ${t2}" title="${cfg.lbl}"><span class="gantt-dot" style="background:${cfg.bg}"></span><span class="gantt-lbl">${cfg.lbl}</span></td>`;
 }
 
+/* ===== Bloco detail panel (all tasks, all months) ===== */
+function _showBlocoDetail(e, companyId, bloco){
+  document.querySelectorAll('.gantt-popover').forEach(p=>p.remove());
+  // gather tasks from _gnPop for this company+bloco across all months
+  const allTasks=[];
+  const seen=new Set();
+  if(window._gnPop){
+    Object.keys(window._gnPop).forEach(k=>{
+      if(!k.startsWith(companyId+'_'+bloco+'_')) return;
+      window._gnPop[k].tasks.forEach(t=>{
+        const uid=t.id||t.task;
+        if(!seen.has(uid)){seen.add(uid);allTasks.push(t);}
+      });
+    });
+  }
+  if(!allTasks.length) return;
+  const ST={done:{bg:'#16a34a',lbl:'Concluído'},track:{bg:'#ca8a04',lbl:'Em andamento'},late:{bg:'#dc2626',lbl:'Atrasado'},plan:{bg:'#94a3b8',lbl:'Planejado'}};
+  const groups={done:[],track:[],late:[],plan:[]};
+  allTasks.forEach(t=>{const s=(t._f&&t._f.status)||'plan';(groups[s]||groups.plan).push(t);});
+  const ORDER=['late','track','plan','done'];
+  let rows='';
+  ORDER.forEach(s=>{
+    if(!groups[s].length) return;
+    const cfg=ST[s];
+    rows+=`<div style="margin-bottom:.6rem"><div style="font-size:.67rem;font-weight:700;color:${cfg.bg};text-transform:uppercase;letter-spacing:.05em;margin-bottom:.25rem">${cfg.lbl} (${groups[s].length})</div>`;
+    groups[s].forEach(t=>{
+      const owner=t.owner||t.default_owner||'';
+      const dp=t._f&&t._f.dataPrevista?fmtDate(t._f.dataPrevista):'';
+      rows+=`<div style="display:flex;gap:.4rem;align-items:flex-start;padding:.2rem 0;border-bottom:1px solid #f8fafc">
+        <span style="width:6px;height:6px;border-radius:50%;background:${cfg.bg};flex-shrink:0;margin-top:.3rem"></span>
+        <div style="flex:1;min-width:0">
+          <div style="color:#1e293b;word-break:break-word">${escapeHtml(t.task||'')}</div>
+          <div style="font-size:.63rem;color:var(--bhub-muted);display:flex;gap:.5rem;margin-top:.1rem">
+            ${owner?`<span>${escapeHtml(owner)}</span>`:''}
+            ${dp?`<span>📅 ${dp}</span>`:''}
+          </div>
+        </div>
+      </div>`;
+    });
+    rows+='</div>';
+  });
+  const pop=document.createElement('div'); pop.className='gantt-popover';
+  pop.style.maxHeight='420px'; pop.style.overflowY='auto';
+  pop.innerHTML=`<div class="gantt-popover-title" style="position:sticky;top:0;background:white;z-index:1">${escapeHtml(bloco)} <span style="font-weight:400;font-size:.65rem;color:var(--bhub-muted)">${allTasks.length} tarefa${allTasks.length>1?'s':''}</span></div>${rows}`;
+  document.body.appendChild(pop);
+  const r=e.target.closest('td')?e.target.closest('td').getBoundingClientRect():{left:e.clientX,bottom:e.clientY,width:0};
+  let left=r.right+8, top=r.top;
+  pop.style.left='0'; pop.style.top='0';
+  pop.style.visibility='hidden';
+  requestAnimationFrame(()=>{
+    const pw=pop.offsetWidth,ph=pop.offsetHeight;
+    if(left+pw>window.innerWidth-8) left=r.left-pw-8;
+    if(left<8) left=8;
+    if(top+ph>window.innerHeight-8) top=window.innerHeight-ph-8;
+    if(top<8) top=8;
+    pop.style.left=left+'px'; pop.style.top=top+'px'; pop.style.visibility='visible';
+  });
+  e.stopPropagation();
+  setTimeout(()=>{document.addEventListener('click',function h(ev){if(!pop.contains(ev.target)){pop.remove();document.removeEventListener('click',h);}});},50);
+}
+
 /* ===== Gantt popover helper ===== */
 function _showGanttPopover(e, key){
   document.querySelectorAll('.gantt-popover').forEach(p=>p.remove());
@@ -2372,7 +2433,7 @@ function renderDealIntegracao(company, deal, tasks){
     h+=`<tr style="background:#f1f5f9"><td colspan="${months.length+1}" style="padding:.35rem .75rem;font-weight:700;font-size:.72rem;color:var(--bhub-navy);position:sticky;left:0;background:#f1f5f9;border-top:1px solid var(--bhub-border)">${escapeHtml(area)}</td></tr>`;
     Object.keys(byArea[area]).sort().forEach(bloco=>{
       const bt=byArea[area][bloco];
-      h+=`<tr><td style="padding:.3rem .75rem .3rem 1.3rem;position:sticky;left:0;background:white;border-right:1px solid var(--bhub-border);font-size:.72rem">${escapeHtml(bloco)}</td>${months.map(m=>{
+      h+=`<tr><td style="padding:.3rem .75rem .3rem 1.3rem;position:sticky;left:0;background:white;border-right:1px solid var(--bhub-border);font-size:.72rem;cursor:pointer" class="gn-bloco-lbl" data-gnid="${escapeHtml(company.id)}" data-gnbloco="${escapeHtml(bloco)}" title="Ver todas as tarefas deste bloco"><span>${escapeHtml(bloco)}</span> <span style="font-size:.6rem;color:#a5b4fc">▾</span></td>${months.map(m=>{
         const st=_blocoMonthStatus(bt,m.mk,today);
         const inM=bt.filter(t=>t._f&&t._f.dataPrevista&&_monthKey(t._f.dataPrevista)===m.mk);
         if(!window._gnPop) window._gnPop={};
@@ -2388,6 +2449,7 @@ function renderDealIntegracao(company, deal, tasks){
   h+='</tbody></table>';
   tb.innerHTML=h;
   tb.querySelectorAll('[data-gn]').forEach(td=>td.addEventListener('click',e=>_showGanttPopover(e,td.dataset.gn)));
+  tb.querySelectorAll('.gn-bloco-lbl').forEach(td=>td.addEventListener('click',e=>{e.stopPropagation();_showBlocoDetail(e,td.dataset.gnid,td.dataset.gnbloco);}));
   wrap.appendChild(tb);
   return wrap;
 }
@@ -2397,7 +2459,6 @@ function renderGanttIntegracao(){
   if(!canAdmin()) return el('<div class="bhub-card p-6 text-sm text-gray-500">Acesso restrito a administradores.</div>');
   const today=new Date(); today.setHours(0,0,0);
   const todMk=_monthKey(today);
-  const months=_ganttMonths(todMk-2,8);
   const ORDER={late:0,track:1,plan:2,done:3,'':4};
   const AREA_ORDER=['Financeiro','CExp','Comercial','Operações','P&C','PMI / M&A','Marketing & Comunicação','Treinamentos para colaboradores','System Integration / TI / Digital Workplace','Tech'];
 
@@ -2419,6 +2480,8 @@ function renderGanttIntegracao(){
   if(!allDealsData.length) return el('<div class="bhub-card p-10 text-center text-gray-400 text-sm">Nenhum deal com sub-áreas. Execute o SQL <code>populate_blocos.sql</code> no Supabase primeiro.</div>');
   if(!view.ganttExpanded) view.ganttExpanded={};
   if(view.ganttDealFilter===undefined) view.ganttDealFilter='';
+  if(view.ganttMonthOffset===undefined) view.ganttMonthOffset=0;
+  if(view.ganttAreaFilter===undefined) view.ganttAreaFilter='';
   allDealsData.forEach(d=>{if(view.ganttExpanded[d.c.id]===undefined) view.ganttExpanded[d.c.id]=true;});
 
   // KPIs sobre todos os deals
@@ -2436,6 +2499,26 @@ function renderGanttIntegracao(){
   const onTrackN=total-lateN-doneN;
 
   const dealsData=view.ganttDealFilter?allDealsData.filter(d=>d.c.id===view.ganttDealFilter):allDealsData;
+
+  // Smart month window: when a specific deal is selected, start from its sign date
+  let months;
+  if(view.ganttDealFilter && dealsData.length){
+    const sd=parseDate(dealsData[0].c.signDate);
+    const sdMk=sd?_monthKey(sd):todMk-2;
+    const allT=Object.values(dealsData[0].byArea).flatMap(a=>Object.values(a).flat());
+    const maxMk=allT.length?Math.max(...allT.map(t=>t._f&&t._f.dataPrevista?_monthKey(t._f.dataPrevista):sdMk)):sdMk+7;
+    months=_ganttMonths(sdMk, Math.max(maxMk-sdMk+2, 8));
+  } else {
+    months=_ganttMonths(todMk-2+(view.ganttMonthOffset||0), 8);
+  }
+
+  // All unique areas across visible deals (for filter dropdown)
+  const allAreas=[...new Set(dealsData.flatMap(d=>Object.keys(d.byArea)))].sort((a,b)=>{
+    const ai=AREA_ORDER.indexOf(a),bi=AREA_ORDER.indexOf(b);
+    if(ai>=0&&bi>=0) return ai-bi; if(ai>=0) return -1; if(bi>=0) return 1;
+    return a.localeCompare(b,'pt');
+  });
+
   const wrap=el('<div class="space-y-3"></div>');
 
   // KPI cards
@@ -2461,16 +2544,26 @@ function renderGanttIntegracao(){
   // Barra de controles + filtro
   const leg=el(`<div class="bhub-card p-3 flex items-center gap-3 flex-wrap text-xs text-gray-500">
     <span style="font-weight:700;color:var(--bhub-navy);font-size:.8rem">Gantt de Integração</span>
-    <select id="gnDealFilter" style="font-size:.72rem;padding:.2rem .6rem;border-radius:6px;border:1px solid var(--bhub-border);background:white;color:var(--bhub-navy);cursor:pointer">
+    <select id="gnDealFilter" style="font-size:.72rem;padding:.2rem .6rem;border-radius:6px;border:1px solid ${view.ganttDealFilter?'#6366f1':'var(--bhub-border)'};background:${view.ganttDealFilter?'#eef2ff':'white'};color:${view.ganttDealFilter?'#3730a3':'var(--bhub-navy)'};font-weight:${view.ganttDealFilter?'700':'400'};cursor:pointer">
       <option value="">Todos os deals (${total})</option>
       ${allDealsData.map(d=>`<option value="${escapeHtml(d.c.id)}" ${view.ganttDealFilter===d.c.id?'selected':''}>${escapeHtml(d.c.name)}</option>`).join('')}
+    </select>
+    <select id="gnAreaFilter" style="font-size:.72rem;padding:.2rem .6rem;border-radius:6px;border:1px solid ${view.ganttAreaFilter?'#0891b2':'var(--bhub-border)'};background:${view.ganttAreaFilter?'#ecfeff':'white'};color:${view.ganttAreaFilter?'#0e7490':'var(--bhub-navy)'};font-weight:${view.ganttAreaFilter?'700':'400'};cursor:pointer">
+      <option value="">Todas as áreas</option>
+      ${allAreas.map(a=>`<option value="${escapeHtml(a)}" ${view.ganttAreaFilter===a?'selected':''}>${escapeHtml(a)}</option>`).join('')}
     </select>
     <span class="inline-flex items-center gap-1"><span style="width:8px;height:8px;border-radius:50%;background:#16a34a;display:inline-block"></span>Concluído</span>
     <span class="inline-flex items-center gap-1"><span style="width:8px;height:8px;border-radius:50%;background:#ca8a04;display:inline-block"></span>Em andamento</span>
     <span class="inline-flex items-center gap-1"><span style="width:8px;height:8px;border-radius:50%;background:#dc2626;display:inline-block"></span>Atrasado</span>
     <span class="inline-flex items-center gap-1"><span style="width:8px;height:8px;border-radius:50%;background:#94a3b8;display:inline-block"></span>Planejado</span>
     <span class="inline-flex items-center gap-1"><span style="width:10px;height:10px;background:#e0e7ff;border:1px solid #818cf8;display:inline-block;border-radius:2px"></span>Mês atual</span>
-    <div class="ml-auto flex gap-2">
+    <div class="ml-auto flex gap-2 items-center">
+      ${!view.ganttDealFilter?`
+      <button id="gnPrevMonths" class="btn btn-secondary" style="font-size:.8rem;padding:.15rem .5rem" title="Meses anteriores">‹</button>
+      <button id="gnResetMonths" class="btn btn-secondary" style="font-size:.68rem;padding:.2rem .45rem${view.ganttMonthOffset?';border-color:#6366f1;color:#3730a3':''}" title="Voltar ao mês atual">Hoje</button>
+      <button id="gnNextMonths" class="btn btn-secondary" style="font-size:.8rem;padding:.15rem .5rem" title="Próximos meses">›</button>
+      <span style="width:1px;height:16px;background:var(--bhub-border);display:inline-block;margin:0 .25rem"></span>
+      `:'<span style="font-size:.65rem;color:#6366f1;font-style:italic">Timeline automática</span><span style="width:1px;height:16px;background:var(--bhub-border);display:inline-block;margin:0 .25rem"></span>'}
       <button id="gnExpandAll" class="btn btn-secondary" style="font-size:.7rem;padding:.2rem .55rem">Expandir tudo</button>
       <button id="gnCollapseAll" class="btn btn-secondary" style="font-size:.7rem;padding:.2rem .55rem">Recolher tudo</button>
     </div>
@@ -2510,11 +2603,12 @@ function renderGanttIntegracao(){
     </tr>`;
     if(exp){
       const areas=AREA_ORDER.filter(a=>byArea[a]).concat(Object.keys(byArea).filter(a=>!AREA_ORDER.includes(a)));
-      areas.forEach(area=>{
+      const visAreas=view.ganttAreaFilter?areas.filter(a=>a===view.ganttAreaFilter):areas;
+      visAreas.forEach(area=>{
         h+=`<tr style="background:#f1f5f9"><td colspan="${months.length+2}" style="padding:.35rem .75rem .35rem 1.5rem;font-weight:700;font-size:.72rem;color:var(--bhub-navy);position:sticky;left:0;background:#f1f5f9;border-top:1px solid var(--bhub-border)">${escapeHtml(area)}</td></tr>`;
         Object.keys(byArea[area]).sort().forEach(bloco=>{
           const bt=byArea[area][bloco];
-          h+=`<tr><td style="padding:.3rem .75rem .3rem 1.8rem;position:sticky;left:0;background:white;border-right:1px solid var(--bhub-border);font-size:.72rem">${escapeHtml(bloco)}</td><td style="background:white"></td>${months.map(m=>{
+          h+=`<tr><td style="padding:.3rem .75rem .3rem 1.8rem;position:sticky;left:0;background:white;border-right:1px solid var(--bhub-border);font-size:.72rem;cursor:pointer;text-decoration-color:#c7d2fe" class="gn-bloco-lbl" data-gnid="${escapeHtml(c.id)}" data-gnbloco="${escapeHtml(bloco)}" title="Ver todas as tarefas deste bloco"><span style="color:inherit">${escapeHtml(bloco)}</span> <span style="font-size:.6rem;color:#a5b4fc">▾</span></td><td style="background:white"></td>${months.map(m=>{
             const st=_blocoMonthStatus(bt,m.mk,today);
             const inM=bt.filter(t=>t._f&&t._f.dataPrevista&&_monthKey(t._f.dataPrevista)===m.mk);
             if(!window._gnPop) window._gnPop={};
@@ -2539,9 +2633,18 @@ function renderGanttIntegracao(){
     const expB=wrap.querySelector('#gnExpandAll');
     const colB=wrap.querySelector('#gnCollapseAll');
     const flt=wrap.querySelector('#gnDealFilter');
+    const prevB=wrap.querySelector('#gnPrevMonths');
+    const nextB=wrap.querySelector('#gnNextMonths');
+    const resetB=wrap.querySelector('#gnResetMonths');
     if(expB) expB.addEventListener('click',()=>{dealsData.forEach(d=>view.ganttExpanded[d.c.id]=true);render();});
     if(colB) colB.addEventListener('click',()=>{dealsData.forEach(d=>view.ganttExpanded[d.c.id]=false);render();});
-    if(flt) flt.addEventListener('change',()=>{view.ganttDealFilter=flt.value;render();});
+    if(flt) flt.addEventListener('change',()=>{view.ganttDealFilter=flt.value;view.ganttMonthOffset=0;render();});
+    const aFlt=wrap.querySelector('#gnAreaFilter');
+    if(aFlt) aFlt.addEventListener('change',()=>{view.ganttAreaFilter=aFlt.value;render();});
+    if(prevB) prevB.addEventListener('click',()=>{view.ganttMonthOffset=(view.ganttMonthOffset||0)-3;render();});
+    if(nextB) nextB.addEventListener('click',()=>{view.ganttMonthOffset=(view.ganttMonthOffset||0)+3;render();});
+    if(resetB) resetB.addEventListener('click',()=>{view.ganttMonthOffset=0;render();});
+    wrap.querySelectorAll('.gn-bloco-lbl').forEach(td=>td.addEventListener('click',e=>{e.stopPropagation();_showBlocoDetail(e,td.dataset.gnid,td.dataset.gnbloco);}));
   },0);
   return wrap;
 }
