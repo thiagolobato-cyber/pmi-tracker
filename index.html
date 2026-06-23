@@ -2596,9 +2596,15 @@ function renderGanttIntegracao(){
       </td>
       <td style="text-align:center;font-weight:700;font-size:.75rem;color:${pctColor};border-top:2px solid #c7d2fe;background:#eef2ff">${pct}%</td>
       ${months.map(m=>{
-        const sts=AREA_ORDER.filter(a=>byArea[a]).flatMap(area=>Object.values(byArea[area]).map(bt=>_blocoMonthStatus(bt,m.mk,today))).filter(Boolean);
-        const worst=sts.sort((a,b)=>(ORDER[a]||4)-(ORDER[b]||4))[0]||'';
-        return _ganttCell(worst,m.mk===todMk);
+        // Rolling/cumulative status: consider ALL tasks due up to this month
+        const allT=Object.values(byArea).flatMap(a=>Object.values(a).flat());
+        const upTo=allT.filter(t=>t._f&&t._f.dataPrevista&&_monthKey(t._f.dataPrevista)<=m.mk);
+        if(!upTo.length) return _ganttCell('',m.mk===todMk);
+        const hasLate=upTo.some(t=>t._f.status!=='done'&&_monthKey(t._f.dataPrevista)<=todMk);
+        if(hasLate) return _ganttCell('late',m.mk===todMk);
+        if(upTo.every(t=>t._f.status==='done')) return _ganttCell('done',m.mk===todMk);
+        if(upTo.some(t=>t._f.status==='done'||t._f.status==='ontrack')) return _ganttCell('track',m.mk===todMk);
+        return _ganttCell('plan',m.mk===todMk);
       }).join('')}
     </tr>`;
     if(exp){
