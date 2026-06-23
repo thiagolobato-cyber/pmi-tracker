@@ -2601,15 +2601,25 @@ function renderGanttIntegracao(){
       </td>
       <td style="text-align:center;font-weight:700;font-size:.75rem;color:${pctColor};border-top:2px solid #c7d2fe;background:#eef2ff">${pct}%</td>
       ${months.map(m=>{
-        // Rolling/cumulative status: consider ALL tasks due up to this month
         const allT=Object.values(byArea).flatMap(a=>Object.values(a).flat());
         const upTo=allT.filter(t=>t._f&&t._f.dataPrevista&&_monthKey(t._f.dataPrevista)<=m.mk);
         if(!upTo.length) return _ganttCell('',m.mk===todMk);
-        const hasLate=upTo.some(t=>t._f.status!=='done'&&_monthKey(t._f.dataPrevista)<=todMk);
-        if(hasLate) return _ganttCell('late',m.mk===todMk);
-        if(upTo.every(t=>t._f.status==='done')) return _ganttCell('done',m.mk===todMk);
-        if(upTo.some(t=>t._f.status==='done'||t._f.status==='ontrack')) return _ganttCell('track',m.mk===todMk);
-        return _ganttCell('plan',m.mk===todMk);
+        if(m.mk<=todMk){
+          // Passado/hoje: cumulativo – tarefa vencida e não concluída = atrasado
+          const hasLate=upTo.some(t=>t._f.status!=='done'&&_monthKey(t._f.dataPrevista)<=todMk);
+          if(hasLate) return _ganttCell('late',m.mk===todMk);
+          if(upTo.every(t=>t._f.status==='done')) return _ganttCell('done',m.mk===todMk);
+          if(upTo.some(t=>t._f.status==='done'||t._f.status==='ontrack')) return _ganttCell('track',m.mk===todMk);
+          return _ganttCell('plan',m.mk===todMk);
+        } else {
+          // Futuro: só olha tarefas que vencem APÓS hoje – não carrega atraso do passado
+          const fwd=upTo.filter(t=>_monthKey(t._f.dataPrevista)>todMk);
+          if(!fwd.length) return _ganttCell('',false);
+          if(fwd.every(t=>t._f.status==='done')) return _ganttCell('done',false);
+          if(fwd.some(t=>t._f.status==='late')) return _ganttCell('late',false);
+          if(fwd.some(t=>t._f.status==='done'||t._f.status==='ontrack')) return _ganttCell('track',false);
+          return _ganttCell('plan',false);
+        }
       }).join('')}
     </tr>`;
     if(exp){
