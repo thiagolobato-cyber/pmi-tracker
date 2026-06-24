@@ -4893,7 +4893,7 @@ function renderDealAll(){
             <th>REF</th><th class="min-w-[18rem]">TAREFA</th><th>STATUS</th><th>OWNER</th><th>PRAZO</th><th>PREVISTA</th><th>REAL</th><th>%</th><th>ATRASO</th><th>BLOQ.</th>
           </tr></thead>
           <tbody>
-            ${g.tasks.map(t=>`<tr class="dt-row">
+            ${g.tasks.map(t=>`<tr class="dt-row" style="cursor:pointer" data-cid="${escapeHtml(g.company.id)}" data-tid="${escapeHtml(t.id)}">
               <td class="text-xs">${t.ref||''}</td>
               <td>${escapeHtml(t.task||'')}</td>
               <td><span class="pill ${statusClass(t._f.status)}">${statusLabel(t._f.status)}</span></td>
@@ -4951,6 +4951,10 @@ function renderDealAll(){
   const dtOwner = node.querySelector('#dtOwnerFilter');
   if(dtOwner) dtOwner.addEventListener('change',()=>{ view.dealTaskOwnerFilter=dtOwner.value; render(); });
   node.querySelectorAll('[data-open]').forEach(b=>b.addEventListener('click',()=>{ view.dealId=b.dataset.open; view.dealTaskAreaFilter=''; view.dealTaskOwnerFilter=''; render(); }));
+  node.querySelectorAll('tr.dt-row[data-cid]').forEach(row=>row.addEventListener('click',()=>{
+    const c=state.companies.find(x=>x.id===row.dataset.cid);
+    if(c) openTaskModal(c, row.dataset.tid);
+  }));
   return node;
 }
 
