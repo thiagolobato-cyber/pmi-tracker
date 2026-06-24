@@ -2329,8 +2329,8 @@ function _blocoMonthStatus(tasks, mk, today){
   if(inM.some(t=>t._f.status==='ontrack'||t._f.status==='done')) return 'track';
   // Mês passado sem conclusão
   if(mk<todMk) return 'late';
-  // Mês futuro com tarefas planejadas
-  return 'plan';
+  // Mês futuro com tarefas planejadas → em branco (ainda não iniciado)
+  return '';
 }
 function _ganttCell(st, isTod){
   const t2 = isTod ? 'today-gantt' : '';
