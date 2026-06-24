@@ -2315,8 +2315,8 @@ function _ganttMonths(startMk, count){
 function _blocoMonthStatus(tasks, mk, today){
   const todMk = _monthKey(today);
   const inM = tasks.filter(t=>t._f&&t._f.dataPrevista&&_monthKey(t._f.dataPrevista)===mk);
-  // Tarefas atrasadas de meses anteriores (vencidas e não concluídas)
-  const overdue = tasks.filter(t=>t._f&&t._f.dataPrevista&&_monthKey(t._f.dataPrevista)<mk&&t._f.status!=='done');
+  // Tarefas atrasadas de meses anteriores (vencidas E com status late — não apenas incompletas)
+  const overdue = tasks.filter(t=>t._f&&t._f.dataPrevista&&_monthKey(t._f.dataPrevista)<mk&&t._f.status==='late');
   if(!inM.length && !overdue.length) return '';
   // Este mês tem tarefas próprias atrasadas → 'late' simples (problema local)
   if(inM.some(t=>t._f.status==='late')) return 'late';
@@ -2693,7 +2693,7 @@ function renderGanttIntegracao(){
           h+=`<tr><td style="padding:.3rem .75rem .3rem 1.8rem;position:sticky;left:0;background:white;border-right:1px solid var(--bhub-border);font-size:.72rem;cursor:pointer;text-decoration-color:#c7d2fe" class="gn-bloco-lbl" data-gnid="${escapeHtml(c.id)}" data-gnbloco="${escapeHtml(bloco)}" title="Ver todas as tarefas deste bloco"><span style="color:inherit">${escapeHtml(bloco)}</span> <span style="font-size:.6rem;color:#a5b4fc">▾</span></td><td style="background:white"></td>${months.map(m=>{
             const st=_blocoMonthStatus(bt,m.mk,today);
             const inM=bt.filter(t=>t._f&&t._f.dataPrevista&&_monthKey(t._f.dataPrevista)===m.mk);
-            const overdueT=bt.filter(t=>t._f&&t._f.dataPrevista&&_monthKey(t._f.dataPrevista)<m.mk&&t._f.status!=='done');
+            const overdueT=bt.filter(t=>t._f&&t._f.dataPrevista&&_monthKey(t._f.dataPrevista)<m.mk&&t._f.status==='late');
             // isOverdue: há herança de meses anteriores e este mês NÃO tem tarefas próprias atrasadas
             const isOverdue=overdueT.length>0&&!inM.some(t=>t._f&&t._f.status==='late');
             const popTasks=inM.length?inM:overdueT;
