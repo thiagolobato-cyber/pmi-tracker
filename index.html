@@ -2501,6 +2501,7 @@ function renderGanttIntegracao(){
   if(view.ganttDealFilter===undefined) view.ganttDealFilter='';
   if(view.ganttMonthOffset===undefined) view.ganttMonthOffset=0;
   if(view.ganttAreaFilter===undefined) view.ganttAreaFilter='';
+  if(view.ganttActiveMonth===undefined) view.ganttActiveMonth=null;
   allDealsData.forEach(d=>{if(view.ganttExpanded[d.c.id]===undefined) view.ganttExpanded[d.c.id]=true;});
 
   // KPIs sobre todos os deals
@@ -2530,6 +2531,18 @@ function renderGanttIntegracao(){
   } else {
     months=_ganttMonths(todMk-2+(view.ganttMonthOffset||0), 8);
   }
+
+  // Per-month bloco activity counts for filter chips
+  const chipCounts={};
+  months.forEach(m=>{
+    let n=0;
+    dealsData.forEach(({byArea})=>Object.values(byArea).forEach(bMap=>Object.values(bMap).forEach(bt=>{
+      if(bt.some(t=>t._f&&t._f.dataPrevista&&_monthKey(t._f.dataPrevista)===m.mk)) n++;
+    })));
+    chipCounts[m.mk]=n;
+  });
+  // Ensure active month is still in range; reset if not
+  if(view.ganttActiveMonth!==null && !months.some(m=>m.mk===view.ganttActiveMonth)) view.ganttActiveMonth=null;
 
   // All unique areas across visible deals (for filter dropdown)
   const allAreas=[...new Set(dealsData.flatMap(d=>Object.keys(d.byArea)))].sort((a,b)=>{
@@ -2565,13 +2578,12 @@ function renderGanttIntegracao(){
       <button id="gnExpandAll" title="Expandir tudo" style="padding:.1rem .28rem;border:0.5px solid var(--bhub-border);border-radius:5px;background:#f9fafb;cursor:pointer;display:flex;align-items:center;color:var(--bhub-muted)"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="1" y="1" width="12" height="3" rx=".8"/><rect x="1" y="5.5" width="12" height="3" rx=".8"/><rect x="1" y="10" width="12" height="3" rx=".8"/></svg></button>
       <button id="gnCollapseAll" title="Recolher tudo" style="padding:.1rem .28rem;border:0.5px solid var(--bhub-border);border-radius:5px;background:#f9fafb;cursor:pointer;display:flex;align-items:center;color:var(--bhub-muted)"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="1" y="1" width="12" height="3" rx=".8"/><line x1="1" y1="7" x2="13" y2="7"/><line x1="1" y1="10" x2="13" y2="10"/><line x1="1" y1="13" x2="13" y2="13"/></svg></button>
     </div>
-    <div style="padding:.25rem .65rem;display:flex;gap:.55rem;align-items:center;font-size:.62rem;color:var(--bhub-muted);background:white">
-      <span style="display:inline-flex;align-items:center;gap:3px"><span style="width:6px;height:6px;border-radius:50%;background:#16a34a;display:inline-block"></span>Concluído</span>
-      <span style="display:inline-flex;align-items:center;gap:3px"><span style="width:6px;height:6px;border-radius:50%;background:#ca8a04;display:inline-block"></span>Em andamento</span>
-      <span style="display:inline-flex;align-items:center;gap:3px"><span style="width:6px;height:6px;border-radius:50%;background:#dc2626;display:inline-block"></span>Atrasado</span>
-      <span style="display:inline-flex;align-items:center;gap:3px"><span style="width:6px;height:6px;border-radius:50%;background:#94a3b8;display:inline-block"></span>Planejado</span>
-      <span style="display:inline-flex;align-items:center;gap:3px"><span style="width:8px;height:8px;background:#e0e7ff;border:1px solid #818cf8;border-radius:2px;display:inline-block"></span>Mês atual</span>
+    <div style="padding:.28rem .65rem;display:flex;gap:.28rem;align-items:center;background:white;border-top:1px solid #f1f5f9;flex-wrap:nowrap;overflow-x:auto;-ms-overflow-style:none;scrollbar-width:none">
+      <button id="gnChipAll" style="font-size:.63rem;padding:.12rem .48rem;border-radius:20px;border:0.5px solid ${!view.ganttActiveMonth?'#6366f1':'#e2e8f0'};background:${!view.ganttActiveMonth?'#eef2ff':'#f9fafb'};color:${!view.ganttActiveMonth?'#3730a3':'#94a3b8'};font-weight:${!view.ganttActiveMonth?'700':'400'};cursor:pointer;white-space:nowrap;flex-shrink:0;line-height:1.5">Todos</button>
+      <span style="width:1px;height:13px;background:#e2e8f0;flex-shrink:0;margin:0 .05rem"></span>
+      ${months.map(m=>{const isAct=view.ganttActiveMonth===m.mk;const isTod=m.mk===todMk;const cnt=chipCounts[m.mk]||0;return `<button id="gnChip_${m.mk}" style="font-size:.63rem;padding:.12rem .45rem;border-radius:20px;border:0.5px solid ${isAct?'#6366f1':isTod?'#c7d2fe':'#e2e8f0'};background:${isAct?'#eef2ff':isTod?'#f5f3ff':'#f9fafb'};color:${isAct?'#3730a3':isTod?'#4f46e5':'#94a3b8'};font-weight:${isAct?'700':isTod?'600':'400'};cursor:pointer;white-space:nowrap;flex-shrink:0;display:inline-flex;align-items:center;gap:3px;line-height:1.5">${m.label}${isTod?'<span style="font-size:.55rem;color:#6366f1;line-height:1">◉</span>':''}<span style="font-size:.57rem;background:${isAct?'#c7d2fe':'#e2e8f0'};color:${isAct?'#3730a3':'#64748b'};border-radius:8px;padding:0 .3rem;line-height:1.5;font-weight:500">${cnt}</span></button>`;}).join('')}
     </div>
+    ${(()=>{if(!view.ganttActiveMonth)return '';const am=months.find(m=>m.mk===view.ganttActiveMonth);const totalBlocos=dealsData.reduce((s,{byArea})=>s+Object.values(byArea).reduce((a,bMap)=>a+Object.keys(bMap).length,0),0);const activeCnt=chipCounts[view.ganttActiveMonth]||0;return `<div style="padding:.22rem .65rem;background:#f0f4ff;border-top:1px solid #c7d2fe;font-size:.63rem;color:#4f46e5;font-weight:500">${activeCnt} de ${totalBlocos} sub-áreas com entrega em ${am?am.label:''}</div>`;})()}
   </div>`);
   wrap.appendChild(leg);
 
@@ -2585,7 +2597,7 @@ function renderGanttIntegracao(){
   let h=`<table style="border-collapse:collapse;min-width:100%;font-size:.72rem" id="gnPortTable"><thead><tr>
     <th style="text-align:left;padding:.5rem .75rem;font-size:.68rem;color:var(--bhub-muted);background:#f8fafc;position:sticky;left:0;z-index:3;min-width:220px;border-bottom:2px solid var(--bhub-border)">Deal / Área / Sub-área</th>
     <th style="text-align:center;padding:.4rem .2rem;font-size:.68rem;min-width:52px;background:#f8fafc;color:var(--bhub-muted);border-bottom:2px solid var(--bhub-border)">%</th>
-    ${months.map(m=>{const iT=m.mk===todMk;return `<th style="text-align:center;padding:.4rem .2rem;font-size:.68rem;min-width:95px;background:${iT?'#eef2ff':'#f8fafc'};color:${iT?'#3730a3':'var(--bhub-muted)'};border-bottom:2px solid var(--bhub-border)">${m.label}${iT?'<br><span style="font-size:.6rem;color:#6366f1;font-weight:400">hoje</span>':''}</th>`;}).join('')}
+    ${months.map(m=>{const iT=m.mk===todMk;const isAct=view.ganttActiveMonth===m.mk;const bg=isAct?'#dbeafe':iT?'#eef2ff':'#f8fafc';const clr=isAct?'#1d4ed8':iT?'#3730a3':'var(--bhub-muted)';const bdr=isAct?'2px solid #3b82f6':iT?'2px solid #a5b4fc':'2px solid var(--bhub-border)';return `<th style="text-align:center;padding:.4rem .2rem;font-size:.68rem;min-width:95px;background:${bg};color:${clr};border-bottom:${bdr}">${m.label}${iT?'<br><span style="font-size:.6rem;color:#6366f1;font-weight:400">hoje</span>':''}</th>`;}).join('')}
   </tr></thead><tbody>`;
 
   dealsData.forEach(({c,byArea})=>{
@@ -2626,8 +2638,13 @@ function renderGanttIntegracao(){
       const areas=AREA_ORDER.filter(a=>byArea[a]).concat(Object.keys(byArea).filter(a=>!AREA_ORDER.includes(a)));
       const visAreas=view.ganttAreaFilter?areas.filter(a=>a===view.ganttAreaFilter):areas;
       visAreas.forEach(area=>{
+        const allBlocosInArea=Object.keys(byArea[area]).sort();
+        const visBlocos=view.ganttActiveMonth
+          ?allBlocosInArea.filter(bloco=>byArea[area][bloco].some(t=>t._f&&t._f.dataPrevista&&_monthKey(t._f.dataPrevista)===view.ganttActiveMonth))
+          :allBlocosInArea;
+        if(!visBlocos.length) return;
         h+=`<tr style="background:#f1f5f9"><td colspan="${months.length+2}" style="padding:.35rem .75rem .35rem 1.5rem;font-weight:700;font-size:.72rem;color:var(--bhub-navy);position:sticky;left:0;background:#f1f5f9;border-top:1px solid var(--bhub-border)">${escapeHtml(area)}</td></tr>`;
-        Object.keys(byArea[area]).sort().forEach(bloco=>{
+        visBlocos.forEach(bloco=>{
           const bt=byArea[area][bloco];
           h+=`<tr><td style="padding:.3rem .75rem .3rem 1.8rem;position:sticky;left:0;background:white;border-right:1px solid var(--bhub-border);font-size:.72rem;cursor:pointer;text-decoration-color:#c7d2fe" class="gn-bloco-lbl" data-gnid="${escapeHtml(c.id)}" data-gnbloco="${escapeHtml(bloco)}" title="Ver todas as tarefas deste bloco"><span style="color:inherit">${escapeHtml(bloco)}</span> <span style="font-size:.6rem;color:#a5b4fc">▾</span></td><td style="background:white"></td>${months.map(m=>{
             const st=_blocoMonthStatus(bt,m.mk,today);
@@ -2659,12 +2676,22 @@ function renderGanttIntegracao(){
     const resetB=wrap.querySelector('#gnResetMonths');
     if(expB) expB.addEventListener('click',()=>{dealsData.forEach(d=>view.ganttExpanded[d.c.id]=true);render();});
     if(colB) colB.addEventListener('click',()=>{dealsData.forEach(d=>view.ganttExpanded[d.c.id]=false);render();});
-    if(flt) flt.addEventListener('change',()=>{view.ganttDealFilter=flt.value;view.ganttMonthOffset=0;render();});
+    if(flt) flt.addEventListener('change',()=>{view.ganttDealFilter=flt.value;view.ganttMonthOffset=0;view.ganttActiveMonth=null;render();});
     const aFlt=wrap.querySelector('#gnAreaFilter');
     if(aFlt) aFlt.addEventListener('change',()=>{view.ganttAreaFilter=aFlt.value;render();});
-    if(prevB) prevB.addEventListener('click',()=>{view.ganttMonthOffset=(view.ganttMonthOffset||0)-3;render();});
-    if(nextB) nextB.addEventListener('click',()=>{view.ganttMonthOffset=(view.ganttMonthOffset||0)+3;render();});
-    if(resetB) resetB.addEventListener('click',()=>{view.ganttMonthOffset=0;render();});
+    if(prevB) prevB.addEventListener('click',()=>{view.ganttMonthOffset=(view.ganttMonthOffset||0)-3;view.ganttActiveMonth=null;render();});
+    if(nextB) nextB.addEventListener('click',()=>{view.ganttMonthOffset=(view.ganttMonthOffset||0)+3;view.ganttActiveMonth=null;render();});
+    if(resetB) resetB.addEventListener('click',()=>{view.ganttMonthOffset=0;view.ganttActiveMonth=null;render();});
+    // Month chip filters
+    const chipAll=wrap.querySelector('#gnChipAll');
+    if(chipAll) chipAll.addEventListener('click',()=>{view.ganttActiveMonth=null;render();});
+    wrap.querySelectorAll('[id^="gnChip_"]').forEach(btn=>{
+      btn.addEventListener('click',()=>{
+        const mk=parseInt(btn.id.replace('gnChip_',''));
+        view.ganttActiveMonth=view.ganttActiveMonth===mk?null:mk;
+        render();
+      });
+    });
     wrap.querySelectorAll('.gn-bloco-lbl').forEach(td=>td.addEventListener('click',e=>{e.stopPropagation();_showBlocoDetail(e,td.dataset.gnid,td.dataset.gnbloco);}));
   },0);
   return wrap;
