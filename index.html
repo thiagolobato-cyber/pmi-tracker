@@ -533,14 +533,18 @@ import {
   addBusinessDays, businessDaysBetween, computeTaskFields as _computeTaskFields,
   statusLabel, statusClass, fmtBRL, isoWeek, currentIsoWeek,
   phaseFor, sevRank, escapeHtml
-} from './js/pure.js?v=2';
+} from './js/pure.js?v=3';
 
-// Fix: usa dataPrevista salva no banco; só recalcula como fallback
+// Fix: usa dataPrevista salva no banco; fallback usa DIAS CORRIDOS (igual ao modal)
 function computeTaskFields(task, company) {
   const signDate     = parseDate(company?.signDate);
   const prazo        = parseInt(task?.prazo) || 0;
   const stored       = task?.dataPrevista ? parseDate(task.dataPrevista) : null;
-  const dataPrevista = stored || ((signDate && prazo > 0) ? addBusinessDays(signDate, prazo) : null);
+  // Modal usa dias corridos: new Date(signDate).setDate(+prazo) — seguimos o mesmo
+  const computed     = (signDate && prazo > 0)
+    ? (() => { const d = new Date(signDate); d.setDate(d.getDate() + prazo); return d; })()
+    : null;
+  const dataPrevista = stored || computed;
   const dataReal     = task?.dataRealConclusao ? parseDate(task.dataRealConclusao) : null;
   const today        = new Date(); today.setHours(0,0,0,0);
   let status = 'empty', diasAtraso = null, atraso = null;
@@ -2672,11 +2676,7 @@ function renderGanttIntegracao(){
         const visBlocos=view.ganttActiveMonth
           ?allBlocosInArea.filter(bloco=>byArea[area][bloco].some(t=>{
               if(!t._f||!t._f.dataPrevista) return false;
-              const tMk=_monthKey(t._f.dataPrevista);
-              if(tMk===view.ganttActiveMonth) return true;
-              // também mostra blocos com tarefas atrasadas de meses anteriores
-              if(tMk<view.ganttActiveMonth&&t._f.status!=='done') return true;
-              return false;
+              return _monthKey(t._f.dataPrevista)===view.ganttActiveMonth;
             }))
           :allBlocosInArea;
         if(!visBlocos.length) return;
@@ -5887,6 +5887,7 @@ function openTaskModal(company, taskId){
       owner:            m.querySelector('[name="owner"]')?.value||existing?.owner||'',
       ferramenta:       existing?.ferramenta||'',
       prazo:            parseInt(prazoInput.value)||0,
+      dataPrevista:     m.querySelector('#tmDueDate')?.value||'',
       completado:       parseInt(m.querySelector('[name="completado"]')?.value)||existing?.completado||0,
       bloqueio:         bloqSel.value||'Não',
       bloqueioDescricao:m.querySelector('[name="bloqueioDescricao"]')?.value||'',
