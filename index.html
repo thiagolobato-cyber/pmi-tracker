@@ -2492,7 +2492,8 @@ function renderDealIntegracao(company, deal, tasks){
         window._gnPop[key]={bloco,month:m.label,tasks:inM};
         const t2=m.mk===todMk?'today-gantt':'';
         if(!st) return `<td class="gantt-cell gantt-empty ${t2}" data-gn="${key}">—</td>`;
-        const cfg={done:{c:'gantt-done',bg:'#16a34a',lbl:'Concluído'},track:{c:'gantt-track',bg:'#ca8a04',lbl:'Em andamento'},late:{c:'gantt-late',bg:'#dc2626',lbl:'Atrasado'},plan:{c:'gantt-plan',bg:'#94a3b8',lbl:'Planejado'}}[st];
+        const cfg={done:{c:'gantt-done',bg:'#16a34a',lbl:'Concluído'},track:{c:'gantt-track',bg:'#ca8a04',lbl:'Em andamento'},late:{c:'gantt-late',bg:'#dc2626',lbl:'Atrasado'},'late-prior':{c:'gantt-late',bg:'#dc2626',lbl:'Atrasado ⚠️'},plan:{c:'gantt-plan',bg:'#94a3b8',lbl:'Planejado'}}[st];
+        if(!cfg) return `<td class="gantt-cell gantt-empty ${t2}" data-gn="${key}">—</td>`;
         return `<td class="gantt-cell ${cfg.c} ${t2}" data-gn="${key}" title="${cfg.lbl}"><span class="gantt-dot" style="background:${cfg.bg}"></span><span class="gantt-lbl">${cfg.lbl}</span></td>`;
       }).join('')}</tr>`;
     });
