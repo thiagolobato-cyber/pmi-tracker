@@ -530,10 +530,34 @@ import {
   DEFAULT_PHASES, RAID_TYPES, SEVERITIES, RAID_STATUSES,
   SYNERGY_TYPES, SYNERGY_STATUSES, DEFAULT_AREAS,
   uid, parseDate, fmtDate, toIso, emptyDate, nullIfEmpty,
-  addBusinessDays, businessDaysBetween, computeTaskFields,
+  addBusinessDays, businessDaysBetween, computeTaskFields as _computeTaskFields,
   statusLabel, statusClass, fmtBRL, isoWeek, currentIsoWeek,
   phaseFor, sevRank, escapeHtml
 } from './js/pure.js?v=2';
+
+// Fix: usa dataPrevista salva no banco; só recalcula como fallback
+function computeTaskFields(task, company) {
+  const signDate     = parseDate(company?.signDate);
+  const prazo        = parseInt(task?.prazo) || 0;
+  const stored       = task?.dataPrevista ? parseDate(task.dataPrevista) : null;
+  const dataPrevista = stored || ((signDate && prazo > 0) ? addBusinessDays(signDate, prazo) : null);
+  const dataReal     = task?.dataRealConclusao ? parseDate(task.dataRealConclusao) : null;
+  const today        = new Date(); today.setHours(0,0,0,0);
+  let status = 'empty', diasAtraso = null, atraso = null;
+  if (dataReal || Number(task?.completado) >= 100) {
+    status = 'done';
+  } else if (dataPrevista) {
+    if (today > dataPrevista) {
+      status = 'late';
+      diasAtraso = businessDaysBetween(dataPrevista, today);
+      atraso = diasAtraso;
+    } else {
+      status = 'ontrack';
+      atraso = businessDaysBetween(today, dataPrevista);
+    }
+  }
+  return { status, dataPrevista, dataReal, diasAtraso, atraso };
+}
 
 const STORE_KEY = 'bhub_pmi_state_v1'; // mantido apenas para import do localStorage legado
 
