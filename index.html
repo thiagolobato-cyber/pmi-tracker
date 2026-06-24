@@ -533,18 +533,14 @@ import {
   addBusinessDays, businessDaysBetween, computeTaskFields as _computeTaskFields,
   statusLabel, statusClass, fmtBRL, isoWeek, currentIsoWeek,
   phaseFor, sevRank, escapeHtml
-} from './js/pure.js?v=3';
+} from './js/pure.js?v=4';
 
-// Fix: usa dataPrevista salva no banco; fallback usa DIAS CORRIDOS (igual ao modal)
+// Fix: usa dataPrevista salva no banco; fallback usa dias úteis (addBusinessDays)
 function computeTaskFields(task, company) {
   const signDate     = parseDate(company?.signDate);
   const prazo        = parseInt(task?.prazo) || 0;
   const stored       = task?.dataPrevista ? parseDate(task.dataPrevista) : null;
-  // Modal usa dias corridos: new Date(signDate).setDate(+prazo) — seguimos o mesmo
-  const computed     = (signDate && prazo > 0)
-    ? (() => { const d = new Date(signDate); d.setDate(d.getDate() + prazo); return d; })()
-    : null;
-  const dataPrevista = stored || computed;
+  const dataPrevista = stored || ((signDate && prazo > 0) ? addBusinessDays(signDate, prazo) : null);
   const dataReal     = task?.dataRealConclusao ? parseDate(task.dataRealConclusao) : null;
   const today        = new Date(); today.setHours(0,0,0,0);
   let status = 'empty', diasAtraso = null, atraso = null;
@@ -5511,8 +5507,8 @@ function openTaskModal(company, taskId){
   function prazoDays(prazo){ return parseInt(prazo)||0; }
   function dueFromPrazo(p){
     if(!signDateObj || isNaN(signDateObj.getTime())) return '';
-    const d = new Date(signDateObj); d.setDate(d.getDate() + prazoDays(p));
-    return toIso(d);
+    const d = addBusinessDays(signDateObj, prazoDays(p));
+    return d ? toIso(d) : '';
   }
   function prazoFromDue(iso){
     if(!iso || !signDateObj || isNaN(signDateObj.getTime())) return 0;

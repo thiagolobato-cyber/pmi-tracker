@@ -228,12 +228,9 @@ export function statusClass(status) {
 export function computeTaskFields(task, company) {
   const signDate     = parseDate(company?.signDate);
   const prazo        = parseInt(task?.prazo) || 0;
-  // Prefer stored dataPrevista; fallback uses calendar days (matching modal logic)
+  // Prefer stored dataPrevista; fallback uses business days
   const stored       = task?.dataPrevista ? parseDate(task.dataPrevista) : null;
-  const computed     = (signDate && prazo > 0)
-    ? (() => { const d = new Date(signDate); d.setDate(d.getDate() + prazo); return d; })()
-    : null;
-  const dataPrevista = stored || computed;
+  const dataPrevista = stored || ((signDate && prazo > 0) ? addBusinessDays(signDate, prazo) : null);
   const dataReal     = task?.dataRealConclusao ? parseDate(task.dataRealConclusao) : null;
 
   const today = new Date();
