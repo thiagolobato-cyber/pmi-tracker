@@ -46,13 +46,15 @@ export const SYNERGY_STATUSES = [
 
 export const DEFAULT_AREAS = [
   { name: 'Financeiro' },
-  { name: 'Jurídico' },
-  { name: 'Pessoas & Cultura' },
-  { name: 'Tecnologia' },
+  { name: 'CExp' },
+  { name: 'P&C' },
+  { name: 'System Integration / TI / Digital Workplace' },
+  { name: 'Marketing & Comunicação' },
   { name: 'Comercial' },
   { name: 'Operações' },
-  { name: 'Marketing' },
-  { name: 'PMO' },
+  { name: 'Tech' },
+  { name: 'PMI / M&A' },
+  { name: 'Treinamentos para colaboradores' },
 ];
 
 // ─── Utilitários gerais ──────────────────────────────────────
@@ -226,7 +228,9 @@ export function statusClass(status) {
 export function computeTaskFields(task, company) {
   const signDate     = parseDate(company?.signDate);
   const prazo        = parseInt(task?.prazo) || 0;
-  const dataPrevista = (signDate && prazo > 0) ? addBusinessDays(signDate, prazo) : null;
+  // Prefer stored dataPrevista; only compute from signDate+prazo as fallback
+  const stored       = task?.dataPrevista ? parseDate(task.dataPrevista) : null;
+  const dataPrevista = stored || ((signDate && prazo > 0) ? addBusinessDays(signDate, prazo) : null);
   const dataReal     = task?.dataRealConclusao ? parseDate(task.dataRealConclusao) : null;
 
   const today = new Date();
