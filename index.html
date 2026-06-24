@@ -2317,9 +2317,12 @@ function _ganttMonths(startMk, count){
   return Array.from({length:count},(_,i)=>{ const mk=startMk+i; return {mk, label:N[mk%12]+'/'+String(Math.floor(mk/12)).slice(-2)}; });
 }
 function _blocoMonthStatus(tasks, mk, today){
-  const inM = tasks.filter(t=>t._f&&t._f.dataPrevista&&_monthKey(t._f.dataPrevista)===mk);
-  if(!inM.length) return '';
   const todMk = _monthKey(today);
+  const inM = tasks.filter(t=>t._f&&t._f.dataPrevista&&_monthKey(t._f.dataPrevista)===mk);
+  // Tarefas atrasadas de meses anteriores (vencidas e não concluídas)
+  const overdue = tasks.filter(t=>t._f&&t._f.dataPrevista&&_monthKey(t._f.dataPrevista)<mk&&t._f.status!=='done');
+  if(!inM.length && !overdue.length) return '';
+  if(overdue.length && mk<=todMk) return 'late'; // arrastar atraso para meses correntes
   if(inM.every(t=>t._f.status==='done')) return 'done';
   if(inM.some(t=>t._f.status==='late')) return 'late';
   if(mk < todMk) return 'late';
@@ -2676,7 +2679,10 @@ function renderGanttIntegracao(){
         const visBlocos=view.ganttActiveMonth
           ?allBlocosInArea.filter(bloco=>byArea[area][bloco].some(t=>{
               if(!t._f||!t._f.dataPrevista) return false;
-              return _monthKey(t._f.dataPrevista)===view.ganttActiveMonth;
+              const tMk=_monthKey(t._f.dataPrevista);
+              if(tMk===view.ganttActiveMonth) return true;
+              if(tMk<view.ganttActiveMonth&&t._f.status!=='done') return true; // atrasadas de meses anteriores
+              return false;
             }))
           :allBlocosInArea;
         if(!visBlocos.length) return;
