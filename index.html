@@ -2314,19 +2314,22 @@ function _ganttMonths(startMk, count){
 }
 function _blocoMonthStatus(tasks, mk, today){
   const todMk = _monthKey(today);
-  const inM = tasks.filter(t=>t._f&&t._f.dataPrevista&&_monthKey(t._f.dataPrevista)===mk);
-  // Tarefas atrasadas de meses anteriores (vencidas E com status late — não apenas incompletas)
-  const overdue = tasks.filter(t=>t._f&&t._f.dataPrevista&&_monthKey(t._f.dataPrevista)<mk&&t._f.status==='late');
-  if(!inM.length && !overdue.length) return '';
-  // Este mês tem tarefas próprias atrasadas → 'late' simples (problema local)
+  // Status acumulativo: considera tudo que venceu até este mês
+  const upTo = tasks.filter(t=>t._f&&t._f.dataPrevista&&_monthKey(t._f.dataPrevista)<=mk);
+  if(!upTo.length) return ''; // nada planejado até aqui
+  // Herança de meses anteriores genuinamente atrasada
+  const latePrior = upTo.filter(t=>_monthKey(t._f.dataPrevista)<mk&&t._f.status==='late');
+  if(latePrior.length) return 'late-prior';
+  // Tarefas deste mês que estão atrasadas
+  const inM = upTo.filter(t=>_monthKey(t._f.dataPrevista)===mk);
   if(inM.some(t=>t._f.status==='late')) return 'late';
-  // Apenas herança de meses anteriores → 'late-prior' (⚠️ contexto anterior)
-  if(overdue.length) return 'late-prior';
-  // Sem herança, avalia tarefas do mês
-  if(!inM.length) return '';
-  if(inM.every(t=>t._f.status==='done')) return 'done';
-  if(mk < todMk) return 'late';
-  if(inM.some(t=>t._f.status==='done'||t._f.status==='ontrack')) return 'track';
+  // Todas as tarefas até este mês concluídas → mantém Concluído (não regride)
+  if(upTo.every(t=>t._f.status==='done')) return 'done';
+  // Tarefas deste mês em progresso
+  if(inM.some(t=>t._f.status==='ontrack'||t._f.status==='done')) return 'track';
+  // Mês passado sem conclusão
+  if(mk<todMk) return 'late';
+  // Mês futuro com tarefas planejadas
   return 'plan';
 }
 function _ganttCell(st, isTod){
