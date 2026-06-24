@@ -2537,7 +2537,13 @@ function renderGanttIntegracao(){
   months.forEach(m=>{
     let n=0;
     dealsData.forEach(({byArea})=>Object.values(byArea).forEach(bMap=>Object.values(bMap).forEach(bt=>{
-      if(bt.some(t=>t._f&&t._f.dataPrevista&&_monthKey(t._f.dataPrevista)===m.mk)) n++;
+      if(bt.some(t=>{
+        if(!t._f||!t._f.dataPrevista) return false;
+        const tMk=_monthKey(t._f.dataPrevista);
+        if(tMk===m.mk) return true;
+        if(tMk<m.mk&&t._f.status!=='done') return true;
+        return false;
+      })) n++;
     })));
     chipCounts[m.mk]=n;
   });
@@ -2640,7 +2646,14 @@ function renderGanttIntegracao(){
       visAreas.forEach(area=>{
         const allBlocosInArea=Object.keys(byArea[area]).sort();
         const visBlocos=view.ganttActiveMonth
-          ?allBlocosInArea.filter(bloco=>byArea[area][bloco].some(t=>t._f&&t._f.dataPrevista&&_monthKey(t._f.dataPrevista)===view.ganttActiveMonth))
+          ?allBlocosInArea.filter(bloco=>byArea[area][bloco].some(t=>{
+              if(!t._f||!t._f.dataPrevista) return false;
+              const tMk=_monthKey(t._f.dataPrevista);
+              if(tMk===view.ganttActiveMonth) return true;
+              // também mostra blocos com tarefas atrasadas de meses anteriores
+              if(tMk<view.ganttActiveMonth&&t._f.status!=='done') return true;
+              return false;
+            }))
           :allBlocosInArea;
         if(!visBlocos.length) return;
         h+=`<tr style="background:#f1f5f9"><td colspan="${months.length+2}" style="padding:.35rem .75rem .35rem 1.5rem;font-weight:700;font-size:.72rem;color:var(--bhub-navy);position:sticky;left:0;background:#f1f5f9;border-top:1px solid var(--bhub-border)">${escapeHtml(area)}</td></tr>`;
