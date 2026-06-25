@@ -1576,8 +1576,11 @@ function renderLiderPanel(){
       .filter(t => t._f.status === 'ontrack' && t._f.dataPrevista)
       .sort((a,b) => a._f.dataPrevista - b._f.dataPrevista)[0];
     const initials  = (u.username||'?').slice(0,2).toUpperCase();
-    const lateTasks = ownerTasksAll.filter(t => t._f.status === 'late')
+    const allLateTasks = ownerTasksAll.filter(t => t._f.status === 'late')
       .sort((a,b) => (b._f.diasAtraso||0) - (a._f.diasAtraso||0)).slice(0,5);
+    // Split: com ação de mitigação associada vs sem cobertura
+    const lateWithCoverage = allLateTasks.filter(t => t.bloqueio === 'Sim' && t.raidId);
+    const lateNoCoverage   = allLateTasks.filter(t => !(t.bloqueio === 'Sim' && t.raidId));
     return `
       <div class="bhub-card" style="padding:0;overflow:hidden">
         <div style="padding:.9rem 1rem;border-bottom:1px solid var(--bhub-border);display:flex;align-items:center;gap:.75rem;background:#f8fafc">
@@ -1595,15 +1598,33 @@ function renderLiderPanel(){
           <div style="text-align:center;min-width:60px"><div style="font-size:1.4rem;font-weight:700;color:${blocked>0?'#d97706':'#6b7280'}">${blocked}</div><div style="font-size:.7rem;color:var(--bhub-muted)">Bloqueadas</div></div>
           <div style="text-align:center;min-width:80px"><div style="font-size:1rem;font-weight:700;color:var(--bhub-navy)">${upcoming ? fmtDate(upcoming._f.dataPrevista) : '—'}</div><div style="font-size:.7rem;color:var(--bhub-muted)">Próximo prazo</div></div>
         </div>
-        ${lateTasks.length ? `
+        ${allLateTasks.length ? `
         <div style="padding:.6rem 1rem">
-          <div style="font-size:.7rem;font-weight:600;color:var(--bhub-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.4rem">Atrasadas</div>
-          ${lateTasks.map(t=>`
-            <div style="display:flex;align-items:center;gap:.5rem;padding:.3rem 0;border-bottom:1px solid #f1f5f9;font-size:.78rem" class="lider-task-row" data-deal="${t._company?.id||''}" data-task="${t.id}">
-              <span style="color:#dc2626;font-weight:600;min-width:28px;text-align:right">${t._f.diasAtraso||0}d</span>
-              <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(t.task||'')}">${escapeHtml(t.task||'')}</span>
-              <span style="color:var(--bhub-muted);font-size:.7rem;flex-shrink:0">${escapeHtml(t._company?.name||'')}</span>
-            </div>`).join('')}
+          ${lateWithCoverage.length ? `
+            <div style="margin-bottom:.55rem">
+              <div style="font-size:.67rem;font-weight:700;color:#d97706;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.3rem">🛡️ Com mitigação (${lateWithCoverage.length})</div>
+              ${lateWithCoverage.map(t=>{
+                const raid=t.raidId?(state.deals[t._company?.id]?.raid||[]).find(r=>r.id===t.raidId):null;
+                return `<div style="display:flex;align-items:flex-start;gap:.5rem;padding:.3rem 0;border-bottom:1px solid #fef3c7;font-size:.78rem" class="lider-task-row" data-deal="${t._company?.id||''}" data-task="${t.id}">
+                  <span style="color:#d97706;font-weight:600;min-width:28px;text-align:right;flex-shrink:0">${t._f.diasAtraso||0}d</span>
+                  <div style="flex:1;min-width:0">
+                    <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(t.task||'')}">${escapeHtml(t.task||'')}</div>
+                    ${raid?`<div style="font-size:.67rem;color:#92400e;margin-top:.1rem">⚙️ ${escapeHtml(raid.title||'')}${raid.owner?` · <em>${escapeHtml(raid.owner)}</em>`:''}</div>`:''}
+                  </div>
+                  <span style="color:var(--bhub-muted);font-size:.7rem;flex-shrink:0">${escapeHtml(t._company?.name||'')}</span>
+                </div>`;
+              }).join('')}
+            </div>` : ''}
+          ${lateNoCoverage.length ? `
+            <div>
+              <div style="font-size:.67rem;font-weight:700;color:#dc2626;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.3rem">🚨 Sem cobertura (${lateNoCoverage.length}) — requer ação</div>
+              ${lateNoCoverage.map(t=>`
+                <div style="display:flex;align-items:center;gap:.5rem;padding:.3rem 0;border-bottom:1px solid #fee2e2;font-size:.78rem" class="lider-task-row" data-deal="${t._company?.id||''}" data-task="${t.id}">
+                  <span style="color:#dc2626;font-weight:600;min-width:28px;text-align:right">${t._f.diasAtraso||0}d</span>
+                  <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(t.task||'')}">${escapeHtml(t.task||'')}</span>
+                  <span style="color:var(--bhub-muted);font-size:.7rem;flex-shrink:0">${escapeHtml(t._company?.name||'')}</span>
+                </div>`).join('')}
+            </div>` : ''}
         </div>` : `<div style="padding:.75rem 1rem;font-size:.78rem;color:#16a34a;display:flex;align-items:center;gap:.4rem"><span>✓</span> Sem tarefas atrasadas</div>`}
       </div>`;
   }
