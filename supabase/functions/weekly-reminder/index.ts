@@ -424,6 +424,37 @@ serve(async (req) => {
   )
 })
 
+// ─── Escalation block helper ─────────────────────────────────────────────────
+//
+// Dado um conjunto de tarefas, agrupa as áreas por responsável de gatilho
+// e retorna um bloco Slack compacto: "📞 Quem acionar"
+// Retorna null se nenhuma área tiver gatilho configurado.
+
+function buildEscalationBlock(tasks: TaskEntry[]): unknown | null {
+  // Inverte o mapa: responsável → Set<área>
+  const byContact = new Map<string, Set<string>>()
+  for (const t of tasks) {
+    const contact = AREA_TRIGGERS[t.area]
+    if (!contact || !t.area) continue
+    if (!byContact.has(contact)) byContact.set(contact, new Set())
+    byContact.get(contact)!.add(t.area)
+  }
+  if (byContact.size === 0) return null
+
+  const lines: string[] = []
+  for (const [contact, areas] of byContact) {
+    lines.push(`*${contact}* — ${[...areas].join(', ')}`)
+  }
+
+  return {
+    type: 'context',
+    elements: [{
+      type: 'mrkdwn',
+      text: `📞 *Quem acionar:*  ${lines.join('  ·  ')}`,
+    }],
+  }
+}
+
 // ─── Blocos Slack — Usuário individual ───────────────────────────────────────
 //
 // Hierarquia:
@@ -482,11 +513,9 @@ function buildUserBlocks(
     })
 
     for (const t of noCoverage.slice(0, 3)) {
-      const gatilho = AREA_TRIGGERS[t.area]
       let text = `*${t.task}*`
       text += `\n> 🏢 ${t.companyName}  ·  📂 ${t.area}${t.bloco ? '  ·  ' + t.bloco : ''}`
       text += `\n> 📅 Venceu em *${t.dataPrevista ? fmtDate(t.dataPrevista) : '—'}*`
-      if (gatilho) text += `\n> 💬 Dúvidas? Fale com *${gatilho}*`
       blocks.push({ type: 'section', text: { type: 'mrkdwn', text } })
     }
 
@@ -534,11 +563,9 @@ function buildUserBlocks(
     })
 
     for (const t of upcoming.slice(0, 3)) {
-      const gatilho = AREA_TRIGGERS[t.area]
       let text = `*${t.task}*`
       text += `\n> 🏢 ${t.companyName}  ·  📂 ${t.area}${t.bloco ? '  ·  ' + t.bloco : ''}`
       text += `\n> 📅 Vence em *${t.dataPrevista ? fmtDate(t.dataPrevista) : '—'}*`
-      if (gatilho) text += `\n> 💬 Dúvidas? Fale com *${gatilho}*`
       blocks.push({ type: 'section', text: { type: 'mrkdwn', text } })
     }
 
@@ -548,6 +575,15 @@ function buildUserBlocks(
         elements: [{ type: 'mrkdwn', text: `_+ ${upcoming.length - 3} outras vencem em breve — veja no tracker_` }],
       })
     }
+  }
+
+  // ── Escalation ────────────────────────────────────────────────────────────
+  // Só mostra para tarefas que precisam de ação (sem cobertura + upcoming)
+  const escalationTasks = [...noCoverage, ...upcoming]
+  const escalationBlock = buildEscalationBlock(escalationTasks)
+  if (escalationBlock) {
+    blocks.push({ type: 'divider' })
+    blocks.push(escalationBlock)
   }
 
   // ── CTA ───────────────────────────────────────────────────────────────────
@@ -701,6 +737,17 @@ function buildLeaderBlocks(
     }
 
     blocks.push({ type: 'section', text: { type: 'mrkdwn', text: managedText } })
+  }
+
+  // ── Escalation ────────────────────────────────────────────────────────────
+  // Baseado apenas nas tarefas sem cobertura (o que o líder precisa acionar)
+  const allUncoveredTasks = membersWithUncovered.flatMap(d =>
+    d.late.filter(t => !(t.bloqueio && t.raidTitle))
+  )
+  const escalationBlock = buildEscalationBlock(allUncoveredTasks)
+  if (escalationBlock) {
+    blocks.push({ type: 'divider' })
+    blocks.push(escalationBlock)
   }
 
   // ── CTA ───────────────────────────────────────────────────────────────────
