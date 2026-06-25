@@ -366,7 +366,7 @@ serve(async (req) => {
     if (late.length === 0 && upcoming.length === 0) continue
 
     const firstName = profile.name?.split(' ')[0] ?? username
-    const blocks    = buildUserBlocks(firstName, late, upcoming)
+    const blocks    = buildUserBlocks(firstName, late, upcoming, today)
     await dispatch(
       profile.email,
       profile.name ?? username,
@@ -408,7 +408,7 @@ serve(async (req) => {
     const withIssuesCount = allMemberData.filter(d => d.late.length > 0).length
 
     const firstName = leader.name?.split(' ')[0] ?? leader.username
-    const blocks    = buildLeaderBlocks(firstName, teamData, onTimeCount, withIssuesCount)
+    const blocks    = buildLeaderBlocks(firstName, teamData, onTimeCount, withIssuesCount, today)
     await dispatch(
       leader.email!,
       leader.name ?? leader.username,
@@ -425,84 +425,138 @@ serve(async (req) => {
 })
 
 // ─── Blocos Slack — Usuário individual ───────────────────────────────────────
+//
+// Hierarquia:
+//   1. Resumo contextual: X atrasadas → Y sem cobertura / Z gerenciadas
+//   2. 🚨 Sem cobertura — requerem ação (detalhado, máx 3)
+//   3. 🛡️ Com ação de mitigação (compacto, máx 3)
+//   4. 📅 Vencem em breve (máx 3)
+//   5. CTA
 
 function buildUserBlocks(
   firstName: string,
   late: TaskEntry[],
-  upcoming: TaskEntry[]
+  upcoming: TaskEntry[],
+  weekDate: Date
 ): unknown[] {
+  const pl = (n: number, s = 's') => n !== 1 ? s : ''
+  const weekStr = fmtDateLong(weekDate)
+
+  const withMitigation = late.filter(t => t.bloqueio && t.raidTitle)
+  const noCoverage     = late.filter(t => !(t.bloqueio && t.raidTitle))
+
   const blocks: unknown[] = [
     {
       type: 'header',
       text: { type: 'plain_text', text: `👋 Boa semana, ${firstName}!`, emoji: true },
     },
     {
+      type: 'context',
+      elements: [{ type: 'mrkdwn', text: `Semana de *${weekStr}*  ·  PMI Tracker` }],
+    },
+  ]
+
+  // ── Resumo contextual ──────────────────────────────────────────────────────
+  if (late.length > 0) {
+    let summaryText = `*${late.length} tarefa${pl(late.length)} em atraso esta semana*`
+
+    if (noCoverage.length > 0 && withMitigation.length > 0) {
+      summaryText += `\n🚨 *${noCoverage.length}* sem cobertura — requer${noCoverage.length === 1 ? '' : 'em'} atenção`
+      summaryText += `\n🛡️ *${withMitigation.length}* com ação de mitigação — acompanhe o progresso`
+    } else if (noCoverage.length > 0) {
+      summaryText += `\n🚨 Todas requerem atenção — sem plano de mitigação`
+    } else {
+      summaryText += `\n🛡️ Todas têm ação de mitigação associada — acompanhe o progresso das ações`
+    }
+
+    blocks.push({ type: 'divider' })
+    blocks.push({ type: 'section', text: { type: 'mrkdwn', text: summaryText } })
+  }
+
+  // ── 🚨 Sem cobertura ──────────────────────────────────────────────────────
+  if (noCoverage.length > 0) {
+    blocks.push({ type: 'divider' })
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: `🚨 *Precisam de você agora*` },
+    })
+
+    for (const t of noCoverage.slice(0, 3)) {
+      const gatilho = AREA_TRIGGERS[t.area]
+      let text = `*${t.task}*`
+      text += `\n> 🏢 ${t.companyName}  ·  📂 ${t.area}${t.bloco ? '  ·  ' + t.bloco : ''}`
+      text += `\n> 📅 Venceu em *${t.dataPrevista ? fmtDate(t.dataPrevista) : '—'}*`
+      if (gatilho) text += `\n> 💬 Dúvidas? Fale com *${gatilho}*`
+      blocks.push({ type: 'section', text: { type: 'mrkdwn', text } })
+    }
+
+    if (noCoverage.length > 3) {
+      blocks.push({
+        type: 'context',
+        elements: [{ type: 'mrkdwn', text: `_+ ${noCoverage.length - 3} outras sem cobertura — veja no tracker_` }],
+      })
+    }
+  }
+
+  // ── 🛡️ Com mitigação ─────────────────────────────────────────────────────
+  if (withMitigation.length > 0) {
+    blocks.push({ type: 'divider' })
+    blocks.push({
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: 'Aqui estão suas pendências no *PMI Tracker* para esta semana:',
+        text: `🛡️ *Bloqueadas com plano de ação (${withMitigation.length}) — não requerem ação imediata*\n_Acompanhe o andamento das ações de mitigação:_`,
       },
-    },
-    { type: 'divider' },
-  ]
-
-  // Seção: atrasadas
-  if (late.length > 0) {
-    blocks.push({
-      type: 'section',
-      text: { type: 'mrkdwn', text: `🔴 *${late.length} tarefa${late.length > 1 ? 's' : ''} atrasada${late.length > 1 ? 's' : ''}*` },
     })
 
-    for (const t of late.slice(0, 5)) {
-      const gatilho = AREA_TRIGGERS[t.area]
-      const gatilhoTxt = gatilho ? `\n> 💬 Dúvidas? Fale com *${gatilho}*` : ''
-      blocks.push({
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: `• *${t.task}*\n> 🏢 ${t.companyName}  ·  📂 ${t.area}${t.bloco ? '  ·  ' + t.bloco : ''}\n> 📅 Venceu em *${t.dataPrevista ? fmtDate(t.dataPrevista) : '—'}*${gatilhoTxt}`,
-        },
-      })
+    for (const t of withMitigation.slice(0, 3)) {
+      let text = `• *${t.task}*`
+      if (t.raidTitle) {
+        text += `\n  📋 Ação: _${t.raidTitle}${t.raidOwner ? `  —  ${t.raidOwner}` : ''}_`
+      }
+      blocks.push({ type: 'section', text: { type: 'mrkdwn', text } })
     }
 
-    if (late.length > 5) {
+    if (withMitigation.length > 3) {
       blocks.push({
         type: 'context',
-        elements: [{ type: 'mrkdwn', text: `_+ ${late.length - 5} outras tarefas atrasadas — veja no tracker_` }],
+        elements: [{ type: 'mrkdwn', text: `_+ ${withMitigation.length - 3} outras com cobertura — veja no tracker_` }],
       })
     }
-
-    blocks.push({ type: 'divider' })
   }
 
-  // Seção: próximos 10 dias
+  // ── 📅 Vencem em breve ────────────────────────────────────────────────────
   if (upcoming.length > 0) {
+    blocks.push({ type: 'divider' })
     blocks.push({
       type: 'section',
-      text: { type: 'mrkdwn', text: `📅 *${upcoming.length} tarefa${upcoming.length > 1 ? 's' : ''} vence${upcoming.length > 1 ? 'm' : ''} nos próximos 10 dias*` },
+      text: { type: 'mrkdwn', text: `📅 *${upcoming.length} tarefa${pl(upcoming.length)} vence${pl(upcoming.length, 'm')} nos próximos 10 dias*` },
     })
 
-    for (const t of upcoming.slice(0, 5)) {
+    for (const t of upcoming.slice(0, 3)) {
       const gatilho = AREA_TRIGGERS[t.area]
-      const gatilhoTxt = gatilho ? `\n> 💬 Dúvidas? Fale com *${gatilho}*` : ''
-      blocks.push({
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: `• *${t.task}*\n> 🏢 ${t.companyName}  ·  📂 ${t.area}${t.bloco ? '  ·  ' + t.bloco : ''}\n> 📅 Vence em *${t.dataPrevista ? fmtDate(t.dataPrevista) : '—'}*${gatilhoTxt}`,
-        },
-      })
+      let text = `*${t.task}*`
+      text += `\n> 🏢 ${t.companyName}  ·  📂 ${t.area}${t.bloco ? '  ·  ' + t.bloco : ''}`
+      text += `\n> 📅 Vence em *${t.dataPrevista ? fmtDate(t.dataPrevista) : '—'}*`
+      if (gatilho) text += `\n> 💬 Dúvidas? Fale com *${gatilho}*`
+      blocks.push({ type: 'section', text: { type: 'mrkdwn', text } })
     }
 
-    blocks.push({ type: 'divider' })
+    if (upcoming.length > 3) {
+      blocks.push({
+        type: 'context',
+        elements: [{ type: 'mrkdwn', text: `_+ ${upcoming.length - 3} outras vencem em breve — veja no tracker_` }],
+      })
+    }
   }
 
-  // CTA
+  // ── CTA ───────────────────────────────────────────────────────────────────
+  blocks.push({ type: 'divider' })
   blocks.push({
     type: 'actions',
     elements: [
       {
-        type: 'button',
+        type:  'button',
         text:  { type: 'plain_text', text: '📊 Abrir PMI Tracker', emoji: true },
         url:   PMI_TRACKER_URL,
         style: 'primary',
@@ -514,67 +568,142 @@ function buildUserBlocks(
 }
 
 // ─── Blocos Slack — Líder ─────────────────────────────────────────────────────
+//
+// Hierarquia executiva:
+//   1. Header + data
+//   2. Scorecard: 🚨 Requer atenção | 🛡️ Gerenciado | ✅ Em dia
+//   3. SOMENTE detalhes de quem tem tarefas sem cobertura (o problema real)
+//   4. Seção compacta: quem já está gerenciado (só contagem)
+//   5. CTA
 
 function buildLeaderBlocks(
   firstName: string,
   teamData: { profile: Profile; late: TaskEntry[]; upcoming: TaskEntry[] }[],
   onTime: number,
-  withIssues: number
+  _withIssues: number,
+  weekDate: Date
 ): unknown[] {
+  const pl = (n: number, s = 's') => n !== 1 ? s : ''
+  const weekStr = fmtDateLong(weekDate)
 
+  // Classifica cada membro
+  const membersWithUncovered = teamData.filter(d =>
+    d.late.some(t => !(t.bloqueio && t.raidTitle))
+  )
+  const membersOnlyManaged = teamData.filter(d =>
+    d.late.length > 0 &&
+    d.late.every(t => t.bloqueio && t.raidTitle)
+  )
+
+  const totalUncovered = membersWithUncovered.reduce((sum, d) =>
+    sum + d.late.filter(t => !(t.bloqueio && t.raidTitle)).length, 0
+  )
+  const totalManaged = teamData.reduce((sum, d) =>
+    sum + d.late.filter(t => t.bloqueio && t.raidTitle).length, 0
+  )
+
+  // ── Header ────────────────────────────────────────────────────────────────
   const blocks: unknown[] = [
     {
       type: 'header',
-      text: { type: 'plain_text', text: `👥 Status do seu time, ${firstName}`, emoji: true },
+      text: { type: 'plain_text', text: `👥 Status do time, ${firstName}`, emoji: true },
     },
     {
-      type: 'section',
-      fields: [
-        { type: 'mrkdwn', text: `✅ *Em dia:*\n${onTime} liderado${onTime !== 1 ? 's' : ''}` },
-        { type: 'mrkdwn', text: `⚠️ *Com pendências:*\n${withIssues} liderado${withIssues !== 1 ? 's' : ''}` },
-      ],
+      type: 'context',
+      elements: [{ type: 'mrkdwn', text: `Semana de *${weekStr}*  ·  PMI Tracker` }],
     },
-    { type: 'divider' },
   ]
 
-  for (const { profile, late, upcoming } of teamData) {
-    const name    = profile.name?.split(' ')[0] ?? profile.username
-    const upcomStr = upcoming.length > 0 ? `📅 ${upcoming.length} vence${upcoming.length > 1 ? 'm' : ''} em breve` : ''
+  // ── Scorecard ─────────────────────────────────────────────────────────────
+  const scorecardFields: unknown[] = []
 
-    // Separa: bloqueadas com mitigação vs sem cobertura
-    const withMitigation = late.filter(t => t.bloqueio && t.raidTitle)
-    const noCoverage     = late.filter(t => !(t.bloqueio && t.raidTitle))
-
-    const lateStr = late.length > 0
-      ? `🔴 *${late.length} atrasada${late.length > 1 ? 's' : ''}*`
-      : ''
-    const statusLine = [lateStr, upcomStr].filter(Boolean).join('   ') || '✅ Em dia'
-
-    let bodyText = `*${name}*   ${statusLine}`
-
-    // Sem cobertura → destaque de urgência
-    if (noCoverage.length > 0) {
-      bodyText += `\n\n  🚨 *Sem cobertura — requer ação (${noCoverage.length}):*`
-      for (const t of noCoverage.slice(0, 2)) {
-        bodyText += `\n  › ${t.task} _(${t.companyName} · ${t.area})_`
-      }
-    }
-
-    // Com mitigação → contexto tranquilizador
-    if (withMitigation.length > 0) {
-      bodyText += `\n\n  🛡️ *Com ação de mitigação (${withMitigation.length}):*`
-      for (const t of withMitigation.slice(0, 2)) {
-        const raidInfo = t.raidTitle ? ` — _${t.raidTitle}${t.raidOwner ? `, ${t.raidOwner}` : ''}_` : ''
-        bodyText += `\n  › ${t.task}${raidInfo}`
-      }
-    }
-
-    blocks.push({
-      type: 'section',
-      text: { type: 'mrkdwn', text: bodyText },
+  if (membersWithUncovered.length > 0) {
+    scorecardFields.push({
+      type: 'mrkdwn',
+      text: `🚨 *Requer atenção*\n${membersWithUncovered.length} pessoa${pl(membersWithUncovered.length)} · ${totalUncovered} tarefa${pl(totalUncovered)}`,
     })
   }
 
+  if (totalManaged > 0) {
+    scorecardFields.push({
+      type: 'mrkdwn',
+      text: `🛡️ *Gerenciado*\n${membersOnlyManaged.length + membersWithUncovered.filter(d => d.late.some(t => t.bloqueio && t.raidTitle)).length} pessoa${pl(membersOnlyManaged.length)} · ${totalManaged} tarefa${pl(totalManaged)}`,
+    })
+  }
+
+  if (onTime > 0) {
+    scorecardFields.push({
+      type: 'mrkdwn',
+      text: `✅ *Em dia*\n${onTime} liderado${pl(onTime)}`,
+    })
+  }
+
+  if (scorecardFields.length > 0) {
+    blocks.push({ type: 'section', fields: scorecardFields.slice(0, 2) })
+    if (scorecardFields.length > 2) {
+      blocks.push({ type: 'section', fields: scorecardFields.slice(2) })
+    }
+  }
+
+  // ── 🚨 Requer atenção — com detalhe ──────────────────────────────────────
+  if (membersWithUncovered.length > 0) {
+    blocks.push({ type: 'divider' })
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: `🚨 *Requer sua atenção agora*` },
+    })
+
+    for (const { profile, late, upcoming } of membersWithUncovered) {
+      const name        = profile.name?.split(' ')[0] ?? profile.username
+      const noCoverage  = late.filter(t => !(t.bloqueio && t.raidTitle))
+      const withMit     = late.filter(t => t.bloqueio && t.raidTitle)
+
+      let text = `*${name}* — ${noCoverage.length} tarefa${pl(noCoverage.length)} sem cobertura`
+      if (withMit.length > 0) {
+        text += `  _(+${withMit.length} já gerenciada${pl(withMit.length)})_`
+      }
+      if (upcoming.length > 0) {
+        text += `  ·  📅 ${upcoming.length} vence${pl(upcoming.length, 'm')} em breve`
+      }
+
+      for (const t of noCoverage.slice(0, 3)) {
+        text += `\n  › ${t.task} _(${t.companyName} · ${t.area})_`
+      }
+      if (noCoverage.length > 3) {
+        text += `\n  › _+ ${noCoverage.length - 3} mais — veja no tracker_`
+      }
+
+      blocks.push({ type: 'section', text: { type: 'mrkdwn', text } })
+    }
+  }
+
+  // ── 🛡️ Gerenciado — compacto, sem detalhe ────────────────────────────────
+  if (membersOnlyManaged.length > 0 || membersWithUncovered.some(d => d.late.some(t => t.bloqueio && t.raidTitle))) {
+    blocks.push({ type: 'divider' })
+
+    let managedText = `🛡️ *Gerenciado — sem ação necessária do líder*`
+    managedText += `\n_Tarefas com ação de mitigação associada. Acompanhe o andamento das ações._\n`
+
+    // Membros que só têm gerenciados
+    for (const { profile, late } of membersOnlyManaged) {
+      const name    = profile.name?.split(' ')[0] ?? profile.username
+      const withMit = late.filter(t => t.bloqueio && t.raidTitle)
+      if (!withMit.length) continue
+      managedText += `\n• *${name}* — ${withMit.length} tarefa${pl(withMit.length)} com plano de ação`
+    }
+
+    // Membros que têm mix (já aparecem em 🚨, mas listar o gerenciado deles aqui)
+    for (const { profile, late } of membersWithUncovered) {
+      const withMit = late.filter(t => t.bloqueio && t.raidTitle)
+      if (!withMit.length) continue
+      const name = profile.name?.split(' ')[0] ?? profile.username
+      managedText += `\n• *${name}* — ${withMit.length} tarefa${pl(withMit.length)} com plano de ação`
+    }
+
+    blocks.push({ type: 'section', text: { type: 'mrkdwn', text: managedText } })
+  }
+
+  // ── CTA ───────────────────────────────────────────────────────────────────
   blocks.push({ type: 'divider' })
   blocks.push({
     type: 'actions',
