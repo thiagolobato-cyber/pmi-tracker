@@ -269,6 +269,14 @@ serve(async (req) => {
     normalizedProfiles = profileRows
   }
 
+  // Deduplica por username — garante que nenhum usuário receba mensagem duplicada
+  const _seenUsernames = new Set<string>()
+  normalizedProfiles = normalizedProfiles.filter((p: Profile) => {
+    if (_seenUsernames.has(p.username)) return false
+    _seenUsernames.add(p.username)
+    return true
+  })
+
   const profileMap = new Map<string, Profile>(
     normalizedProfiles.map((p: Profile) => [p.username, p])
   )
