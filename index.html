@@ -5203,7 +5203,7 @@ function renderDealTasks(company, deal, tasks){
           <div class="scroll-x">
             <table class="w-full">
               <thead><tr>
-                <th>REF</th><th class="min-w-[18rem]">TAREFA</th><th>STATUS</th><th>OWNER</th><th>PRAZO</th><th>PREVISTA</th><th>REAL</th><th>%</th><th>ATRASO</th><th>ÚLT.UPD</th><th>PRÓX.PASSO</th><th>BLOQ.</th>${canEdit()?'<th></th>':''}
+                <th>REF</th><th class="min-w-[18rem]">TAREFA</th><th>STATUS</th><th>OWNER</th><th>PRAZO</th><th>PREVISTA</th><th>REAL</th><th>%</th><th>ATRASO</th><th>PRÓX.PASSO</th><th>BLOQ.</th>${canEdit()?'<th></th>':''}
               </tr></thead>
               <tbody>
                 ${grouped[a].map(t=>{
@@ -5224,7 +5224,6 @@ function renderDealTasks(company, deal, tasks){
                   <td>${t._f.dataReal?fmtDate(t._f.dataReal):''}</td>
                   <td class="text-right">${t.completado||0}%</td>
                   <td class="text-right ${t._f.status==='late'?'text-red-700':t._f.atraso!=null?'text-green-700':'text-gray-400'}">${t._f.status==='late'?(t._f.atraso??''):(t._f.atraso!=null?'+'+t._f.atraso:'')}</td>
-                  <td>${t.ultimoUpdate?fmtDate(t.ultimoUpdate):''}</td>
                   <td>${t.proximoPasso||''}</td>
                   <td>${t.bloqueio==='Sim'?'<span class="pill status-late">Sim</span>':'<span class="pill status-empty">Não</span>'}</td>
                   ${canEdit()?`<td><button class="btn btn-secondary" data-edit="${t.id}">✎</button></td>`:''}
@@ -5680,23 +5679,22 @@ function openTaskModal(company, taskId){
             </div>
           </div>
           <div style="margin-top:.75rem">
-            <div style="font-size:.72rem;font-weight:600;color:var(--bhub-navy);margin-bottom:.3rem">
-              Sub-área
-              <span style="font-size:.68rem;font-weight:400;color:var(--bhub-muted)"> — opcional</span>
-            </div>
+            <div style="font-size:.72rem;font-weight:600;color:var(--bhub-navy);margin-bottom:.3rem">Sub-área</div>
             ${(()=>{
               const curArea = existing?.area || '';
               const hasArea = !!curArea;
               const opts = state.subAreas.filter(s => s.area === curArea);
+              const baseStyle = 'width:100%;padding:.45rem .7rem;border-radius:.625rem;border:1px solid var(--bhub-border);font-size:.875rem;outline:none;';
+              const disabledStyle = 'opacity:.45;cursor:not-allowed;background:var(--bhub-beige-soft);';
               if(canAdmin()){
                 return `<input name="bloco" id="tmBloco" list="tmBlocoList" value="${escapeHtml(existing?.bloco||'')}"
                   placeholder="${hasArea ? 'Selecione ou digite…' : 'Selecione uma área primeiro'}"
-                  autocomplete="off" ${!hasArea ? 'disabled style="opacity:.45;cursor:not-allowed"' : ''} />
+                  autocomplete="off" style="${baseStyle}${!hasArea?disabledStyle:''}" ${!hasArea ? 'disabled' : ''} />
                   <datalist id="tmBlocoList">
                     ${opts.map(s=>`<option value="${escapeHtml(s.name)}"></option>`).join('')}
                   </datalist>`;
               } else {
-                return `<select name="bloco" id="tmBloco" ${!hasArea ? 'disabled style="opacity:.45;cursor:not-allowed"' : ''}>
+                return `<select name="bloco" id="tmBloco" style="${baseStyle}${!hasArea?disabledStyle:''}" ${!hasArea ? 'disabled' : ''}>
                   <option value="">${hasArea ? '— Nenhuma —' : 'Selecione uma área primeiro'}</option>
                   ${opts.map(s=>`<option value="${escapeHtml(s.name)}"${existing?.bloco===s.name?' selected':''}>${escapeHtml(s.name)}</option>`).join('')}
                 </select>`;
@@ -5845,6 +5843,7 @@ function openTaskModal(company, taskId){
       tmBlocoEl.disabled = !sel;
       tmBlocoEl.style.opacity = sel ? '' : '.45';
       tmBlocoEl.style.cursor = sel ? '' : 'not-allowed';
+      tmBlocoEl.style.background = sel ? '' : 'var(--bhub-beige-soft)';
       if(canAdmin()){
         const dl = m.querySelector('#tmBlocoList');
         if(dl){ dl.innerHTML = filtered.map(s=>`<option value="${escapeHtml(s.name)}"></option>`).join(''); }
