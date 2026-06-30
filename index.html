@@ -1017,7 +1017,9 @@ async function reloadState(){
     return item;
   });
   state.deletionRequests = (delReqs.data||[]);
+  if(subAreasRes.error) console.warn('[reloadState] sub_areas fetch error:', subAreasRes.error);
   state.subAreas = (subAreasRes.data||[]).map(r => ({ area: r.area, name: r.name }));
+  console.log('[reloadState] subAreas loaded:', state.subAreas.length);
   state.companies = (companies.data||[]).map(companyFromDb)
     .sort((a,b)=>{
       // Mais recente primeiro; sem data vai para o final
