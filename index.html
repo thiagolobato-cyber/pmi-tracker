@@ -653,12 +653,31 @@ function defaultState(){
     deals: {},       // { [companyId]: { tasks, raid, synergies, health } }
     raid: [],        // global portfolio-level RAID items (each has dealIds:[])
     settings: { initialized:false },
-    deletionRequests: []  // pending task deletion requests
+    deletionRequests: [],  // pending task deletion requests
+    subAreas: []     // { area, name } — reference table from sub_areas
   };
 }
-// Deprecado: dados agora persistidos por entidade no Supabase. Mantido como no-op
+/// Deprecado: dados agora persistidos por entidade no Supabase. Mantido como no-op
 // para qualquer chamada residual não detectada.
 function saveState(){ /* no-op */ }
+
+/* ---------- Sub-area helper ---------- */
+// Garante que (area, name) existe na tabela sub_areas.
+// Usa on conflict do nothing — idempotente, seguro chamar múltiplas vezes.
+// Só admin chama; atualiza state.subAreas localmente para refletir imediatamente.
+async function ensureSubArea(area, name){
+  if(!area || !name) return;
+  const already = state.subAreas.some(s => s.area === area && s.name === name);
+  if(already) return;
+  const { error } = await supa.from('sub_areas').insert({ area, name }).select().maybeSingle();
+  // on conflict do nothing retorna null data sem erro — tratamos os dois casos
+  if(error && error.code !== '23505') console.warn('ensureSubArea error', error);
+  // Atualiza estado local independente do resultado (pode já existir no BD)
+  if(!state.subAreas.some(s => s.area === area && s.name === name)){
+    state.subAreas.push({ area, name });
+    state.subAreas.sort((a,b) => a.area.localeCompare(b.area,'pt') || a.name.localeCompare(b.name,'pt'));
+  }
+}
 
 /* ---------- DB Mappers (camelCase <-> snake_case) ---------- */
 function companyFromDb(c){ return { id: c.id, name: c.name, signDate: c.sign_date || '' }; }
@@ -965,7 +984,7 @@ async function fetchAll(makeBuilder){
 }
 async function reloadState(){
   if(!session){ state = defaultState(); return; }
-  const [profiles, companies, template, tasks, raid, raidLinks, syn, health, delReqs] = await Promise.all([
+  const [profiles, companies, template, tasks, raid, raidLinks, syn, health, delReqs, subAreasRes] = await Promise.all([
     supa.from('profiles').select('id,username,role,manager_username,workspace').order('username',{nullsFirst:false}),
     supa.from('companies').select('*').eq('workspace', WS).order('name'),
     fetchAll(() => supa.from('template_tasks').select('*').order('ordering').order('ref')),
@@ -977,6 +996,7 @@ async function reloadState(){
     session.role === 'admin'
       ? supa.from('deletion_requests').select('*').eq('status','pending')
       : supa.from('deletion_requests').select('*').eq('status','pending').eq('requested_by_id', session.id),
+    supa.from('sub_areas').select('area,name').order('area').order('name'),
   ]);
   const errs = [profiles, companies, template, tasks, raid, syn, health].map(r=>r.error).filter(Boolean);
   if(errs.length){ console.warn('reloadState errors', errs); }
@@ -997,6 +1017,7 @@ async function reloadState(){
     return item;
   });
   state.deletionRequests = (delReqs.data||[]);
+  state.subAreas = (subAreasRes.data||[]).map(r => ({ area: r.area, name: r.name }));
   state.companies = (companies.data||[]).map(companyFromDb)
     .sort((a,b)=>{
       // Mais recente primeiro; sem data vai para o final
@@ -5657,6 +5678,28 @@ function openTaskModal(company, taskId){
             </div>
           </div>
           <div style="margin-top:.75rem">
+            <div style="font-size:.72rem;font-weight:600;color:var(--bhub-navy);margin-bottom:.3rem">
+              Sub-área
+              <span style="font-size:.68rem;font-weight:400;color:var(--bhub-muted)"> — opcional</span>
+            </div>
+            ${(()=>{
+              const curArea = existing?.area || '';
+              const opts = state.subAreas.filter(s => !curArea || s.area === curArea);
+              if(canAdmin()){
+                return `<input name="bloco" id="tmBloco" list="tmBlocoList" value="${escapeHtml(existing?.bloco||'')}"
+                  placeholder="Selecione ou digite…" autocomplete="off" />
+                  <datalist id="tmBlocoList">
+                    ${opts.map(s=>`<option value="${escapeHtml(s.name)}"></option>`).join('')}
+                  </datalist>`;
+              } else {
+                return `<select name="bloco" id="tmBloco">
+                  <option value="">— Nenhuma —</option>
+                  ${opts.map(s=>`<option value="${escapeHtml(s.name)}"${existing?.bloco===s.name?' selected':''}>${escapeHtml(s.name)}</option>`).join('')}
+                </select>`;
+              }
+            })()}
+          </div>
+          <div style="margin-top:.75rem">
             <div style="font-size:.72rem;font-weight:600;color:var(--bhub-navy);margin-bottom:.3rem">Tarefa <span style="color:#e53e3e">*</span></div>
             <textarea name="task" rows="3" required style="resize:vertical">${escapeHtml(existing?.task||'')}</textarea>
           </div>
@@ -5785,6 +5828,24 @@ function openTaskModal(company, taskId){
     dueDateInput.addEventListener('change', ()=>{
       const v = prazoFromDue(dueDateInput.value);
       if(v >= 0) prazoInput.value = v;
+    });
+  }
+
+  // ── Área → Sub-área: atualiza opções quando área muda ────────
+  const tmAreaEl = m.querySelector('[name="area"]');
+  const tmBlocoEl = m.querySelector('#tmBloco');
+  if(tmAreaEl && tmAreaEl.tagName === 'SELECT' && tmBlocoEl){
+    tmAreaEl.addEventListener('change', ()=>{
+      const sel = tmAreaEl.value;
+      const filtered = state.subAreas.filter(s => !sel || s.area === sel);
+      if(canAdmin()){
+        const dl = m.querySelector('#tmBlocoList');
+        if(dl){ dl.innerHTML = filtered.map(s=>`<option value="${escapeHtml(s.name)}"></option>`).join(''); }
+        tmBlocoEl.value = '';
+      } else {
+        tmBlocoEl.innerHTML = `<option value="">— Nenhuma —</option>`
+          + filtered.map(s=>`<option value="${escapeHtml(s.name)}">${escapeHtml(s.name)}</option>`).join('');
+      }
     });
   }
 
@@ -5918,9 +5979,11 @@ function openTaskModal(company, taskId){
       const usedNums = (deal?.tasks||[]).map(t=>parseInt(t.ref)).filter(n=>!isNaN(n));
       autoRef = String(usedNums.length ? Math.max(...usedNums)+1 : 1);
     }
+    const blocoVal = (m.querySelector('[name="bloco"]')?.value||'').trim();
     const payload = {
       ref:              autoRef,
       area:             m.querySelector('[name="area"]').value||existing?.area||'',
+      bloco:            blocoVal,
       task:             taskVal,
       owner:            m.querySelector('[name="owner"]')?.value||existing?.owner||'',
       ferramenta:       existing?.ferramenta||'',
@@ -5937,6 +6000,8 @@ function openTaskModal(company, taskId){
       phaseId:          existing?.phaseId||'',
       pendingApproval:  isNew ? !canAdmin() : (existing?.pendingApproval||false)
     };
+    // Se admin digitou sub-área nova, persiste na tabela de referência
+    if(canAdmin() && blocoVal && payload.area) await ensureSubArea(payload.area, blocoVal);
     const saveBtn = m.querySelector('#tmSave');
     saveBtn.disabled = true; saveBtn.textContent = 'Salvando…';
     try{
@@ -6994,6 +7059,57 @@ function renderTemplate(){
         </div>
       </div>
 
+      ${canAdmin() ? `
+      <section class="bhub-card overflow-hidden">
+        <div id="subAreasPanelHeader" style="display:flex;align-items:center;justify-content:space-between;padding:.6rem 1rem;background:#f8faff;border-bottom:1px solid var(--bhub-border);cursor:pointer"
+          onclick="document.getElementById('subAreasBody').style.display=document.getElementById('subAreasBody').style.display==='none'?'block':'none';this.querySelector('.sa-chevron').style.transform=document.getElementById('subAreasBody').style.display==='none'?'rotate(0deg)':'rotate(90deg)'">
+          <span style="font-size:.78rem;font-weight:700;color:var(--bhub-navy);display:flex;align-items:center;gap:.5rem">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#5b21b6" stroke-width="2.5"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+            Sub-áreas
+            <span style="font-size:.68rem;font-weight:500;color:var(--bhub-muted)">${state.subAreas.length} registradas</span>
+          </span>
+          <svg class="sa-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2.5" style="transform:rotate(90deg);transition:transform .2s"><polyline points="9 18 15 12 9 6"/></svg>
+        </div>
+        <div id="subAreasBody" style="padding:1rem;display:block">
+          <div style="display:flex;flex-wrap:wrap;gap:.75rem;margin-bottom:.75rem" id="subAreasList">
+            ${(()=>{
+              if(!state.subAreas.length) return '<span style="font-size:.8rem;color:var(--bhub-muted)">Nenhuma sub-área cadastrada.</span>';
+              // Group by area
+              const byArea = {};
+              state.subAreas.forEach(s=>{ if(!byArea[s.area]) byArea[s.area]=[]; byArea[s.area].push(s.name); });
+              return Object.entries(byArea).map(([area, names])=>`
+                <div style="background:#f0f4ff;border:1px solid #c7d2fe;border-radius:.75rem;padding:.5rem .75rem;min-width:160px">
+                  <div style="font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#4f46e5;margin-bottom:.35rem">${escapeHtml(area)}</div>
+                  <div style="display:flex;flex-wrap:wrap;gap:.25rem" data-sa-area="${escapeHtml(area)}">
+                    ${names.map(n=>`<span class="sa-chip" data-sa-area="${escapeHtml(area)}" data-sa-name="${escapeHtml(n)}"
+                      style="display:inline-flex;align-items:center;gap:.25rem;background:#fff;border:1px solid #c7d2fe;border-radius:999px;padding:.1rem .5rem;font-size:.72rem;color:var(--bhub-navy)">
+                      ${escapeHtml(n)}
+                      <button class="sa-del" data-sa-area="${escapeHtml(area)}" data-sa-name="${escapeHtml(n)}"
+                        style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:.85rem;line-height:1;padding:0 .1rem" title="Remover">×</button>
+                    </span>`).join('')}
+                  </div>
+                </div>
+              `).join('');
+            })()}
+          </div>
+          <div style="display:flex;gap:.5rem;align-items:flex-end;flex-wrap:wrap">
+            <div>
+              <div style="font-size:.68rem;font-weight:600;color:var(--bhub-navy);margin-bottom:.25rem">Área</div>
+              <select id="saNewArea" style="font-size:.8rem;padding:.3rem .6rem">
+                <option value="">— Selecione —</option>
+                ${[...DEFAULT_AREAS.map(a=>a.name),...new Set(state.subAreas.map(s=>s.area))].filter((v,i,a)=>a.indexOf(v)===i).map(a=>`<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('')}
+              </select>
+            </div>
+            <div>
+              <div style="font-size:.68rem;font-weight:600;color:var(--bhub-navy);margin-bottom:.25rem">Nome da sub-área</div>
+              <input id="saNewName" type="text" placeholder="ex: Cobrança" style="font-size:.8rem;padding:.3rem .6rem;width:180px" />
+            </div>
+            <button id="saAddBtn" class="btn btn-primary" style="font-size:.78rem;padding:.3rem .75rem">+ Adicionar</button>
+          </div>
+        </div>
+      </section>
+      ` : ''}
+
       ${order.map(a=>`
         <section class="bhub-card overflow-hidden">
           <div class="px-4 py-2 bg-gray-50 border-b font-semibold text-sm">${a} <span class="text-xs text-gray-500 font-normal">(${grouped[a].length})</span></div>
@@ -7030,6 +7146,41 @@ function renderTemplate(){
       </div>`}
     </div>
   `);
+  // ── Sub-areas management panel (admin only) ──────────────────
+  const saAddBtn = node.querySelector('#saAddBtn');
+  if(saAddBtn){
+    saAddBtn.onclick = async ()=>{
+      const area = node.querySelector('#saNewArea').value.trim();
+      const name = node.querySelector('#saNewName').value.trim();
+      if(!area){ alert('Selecione a área.'); return; }
+      if(!name){ alert('Digite o nome da sub-área.'); return; }
+      if(state.subAreas.some(s=>s.area===area && s.name===name)){ alert('Já existe.'); return; }
+      saAddBtn.disabled=true; saAddBtn.textContent='Salvando…';
+      try{
+        await ensureSubArea(area, name);
+        node.querySelector('#saNewName').value = '';
+        // Re-render the template page to reflect new sub-area
+        render();
+      }catch(err){ alert('Erro: '+(err.message||err)); saAddBtn.disabled=false; saAddBtn.textContent='+ Adicionar'; }
+    };
+    // Delete chips
+    node.querySelectorAll('.sa-del').forEach(btn=>{
+      btn.onclick = async (e)=>{
+        e.stopPropagation();
+        const area = btn.dataset.saArea;
+        const name = btn.dataset.saName;
+        if(!confirm(`Remover sub-área "${name}" de "${area}"?\nNota: tarefas existentes com essa sub-área não são alteradas.`)) return;
+        btn.disabled=true;
+        try{
+          const { error } = await supa.from('sub_areas').delete().eq('area', area).eq('name', name);
+          if(error) throw error;
+          state.subAreas = state.subAreas.filter(s=>!(s.area===area && s.name===name));
+          render();
+        }catch(err){ alert('Erro ao remover: '+(err.message||err)); btn.disabled=false; }
+      };
+    });
+  }
+
   const add = node.querySelector('#addRow');
   if(add) add.onclick = ()=>openTemplateModal();
   const emptyAdd = node.querySelector('#emptyAddTpl');
@@ -7146,12 +7297,33 @@ function openTemplateModal(id){
         <div class="text-lg font-semibold mb-4">${isNew?'Nova tarefa no template':'Editar tarefa do template'}</div>
         <form id="tplForm" class="flex flex-col gap-3 text-sm">
 
-          <div>
-            <label class="text-xs font-semibold block mb-1" style="color:var(--bhub-navy)">Área *</label>
-            <select name="area" id="tplArea" required>
-              <option value="">Selecione a área…</option>
-              ${allAreas.map(a=>`<option value="${escapeHtml(a)}"${t.area===a?' selected':''}>${escapeHtml(a)}</option>`).join('')}
-            </select>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-xs font-semibold block mb-1" style="color:var(--bhub-navy)">Área *</label>
+              <select name="area" id="tplArea" required>
+                <option value="">Selecione a área…</option>
+                ${allAreas.map(a=>`<option value="${escapeHtml(a)}"${t.area===a?' selected':''}>${escapeHtml(a)}</option>`).join('')}
+              </select>
+            </div>
+            <div>
+              <label class="text-xs font-semibold block mb-1" style="color:var(--bhub-navy)">
+                Sub-área
+                <span style="color:var(--bhub-muted);font-weight:400">— opcional</span>
+              </label>
+              ${canAdmin() ? `
+                <input name="bloco" id="tplBloco" list="tplBlocoList" value="${escapeHtml(t.bloco||'')}"
+                  placeholder="Selecione ou digite…"
+                  autocomplete="off" />
+                <datalist id="tplBlocoList">
+                  ${state.subAreas.filter(s=>!t.area||s.area===t.area).map(s=>`<option value="${escapeHtml(s.name)}"></option>`).join('')}
+                </datalist>
+              ` : `
+                <select name="bloco" id="tplBloco">
+                  <option value="">— Nenhuma —</option>
+                  ${state.subAreas.filter(s=>!t.area||s.area===t.area).map(s=>`<option value="${escapeHtml(s.name)}"${t.bloco===s.name?' selected':''}>${escapeHtml(s.name)}</option>`).join('')}
+                </select>
+              `}
+            </div>
           </div>
 
           <div class="grid grid-cols-2 gap-3">
@@ -7223,9 +7395,23 @@ function openTemplateModal(id){
 
   document.body.appendChild(m);
 
-  // Auto-preenche REF ao mudar área
+  // Auto-preenche REF ao mudar área; atualiza opções de sub-área
   m.querySelector('#tplArea').addEventListener('change', e=>{
     m.querySelector('#tplRef').value = nextRefForArea(e.target.value);
+    const selectedArea = e.target.value;
+    const blocoEl = m.querySelector('#tplBloco');
+    if(!blocoEl) return;
+    const filtered = state.subAreas.filter(s => !selectedArea || s.area === selectedArea);
+    if(canAdmin()){
+      // datalist: rebuild options
+      const dl = m.querySelector('#tplBlocoList');
+      if(dl){ dl.innerHTML = filtered.map(s=>`<option value="${escapeHtml(s.name)}"></option>`).join(''); }
+      blocoEl.value = '';
+    } else {
+      // select: rebuild options
+      blocoEl.innerHTML = `<option value="">— Nenhuma —</option>`
+        + filtered.map(s=>`<option value="${escapeHtml(s.name)}">${escapeHtml(s.name)}</option>`).join('');
+    }
   });
 
   // Filtro de área nas dependências
@@ -7248,6 +7434,7 @@ function openTemplateModal(id){
     const upd = {
       ref: fd.get('ref').trim(),
       area: fd.get('area').trim(),
+      bloco: (fd.get('bloco')||'').trim(),
       task: fd.get('task').trim(),
       defaultOwner: fd.get('defaultOwner').trim(),
       defaultPrazo: parseInt(fd.get('defaultPrazo'))||0,
@@ -7256,6 +7443,8 @@ function openTemplateModal(id){
     };
     const needsApproval = !canAdmin();
     try{
+      // Se admin digitou uma sub-área nova, persiste na tabela de referência
+      if(canAdmin() && upd.bloco && upd.area) await ensureSubArea(upd.area, upd.bloco);
       if(isNew){
         const payload = { ...tplToDb(upd), pending_approval: needsApproval };
         const { data, error } = await supa.from('template_tasks').insert(payload).select().single();
