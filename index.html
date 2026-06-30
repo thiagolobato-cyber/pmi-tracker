@@ -5686,16 +5686,18 @@ function openTaskModal(company, taskId){
             </div>
             ${(()=>{
               const curArea = existing?.area || '';
-              const opts = state.subAreas.filter(s => !curArea || s.area === curArea);
+              const hasArea = !!curArea;
+              const opts = state.subAreas.filter(s => s.area === curArea);
               if(canAdmin()){
                 return `<input name="bloco" id="tmBloco" list="tmBlocoList" value="${escapeHtml(existing?.bloco||'')}"
-                  placeholder="Selecione ou digite…" autocomplete="off" />
+                  placeholder="${hasArea ? 'Selecione ou digite…' : 'Selecione uma área primeiro'}"
+                  autocomplete="off" ${!hasArea ? 'disabled style="opacity:.45;cursor:not-allowed"' : ''} />
                   <datalist id="tmBlocoList">
                     ${opts.map(s=>`<option value="${escapeHtml(s.name)}"></option>`).join('')}
                   </datalist>`;
               } else {
-                return `<select name="bloco" id="tmBloco">
-                  <option value="">— Nenhuma —</option>
+                return `<select name="bloco" id="tmBloco" ${!hasArea ? 'disabled style="opacity:.45;cursor:not-allowed"' : ''}>
+                  <option value="">${hasArea ? '— Nenhuma —' : 'Selecione uma área primeiro'}</option>
                   ${opts.map(s=>`<option value="${escapeHtml(s.name)}"${existing?.bloco===s.name?' selected':''}>${escapeHtml(s.name)}</option>`).join('')}
                 </select>`;
               }
@@ -5839,13 +5841,17 @@ function openTaskModal(company, taskId){
   if(tmAreaEl && tmAreaEl.tagName === 'SELECT' && tmBlocoEl){
     tmAreaEl.addEventListener('change', ()=>{
       const sel = tmAreaEl.value;
-      const filtered = state.subAreas.filter(s => !sel || s.area === sel);
+      const filtered = state.subAreas.filter(s => s.area === sel);
+      tmBlocoEl.disabled = !sel;
+      tmBlocoEl.style.opacity = sel ? '' : '.45';
+      tmBlocoEl.style.cursor = sel ? '' : 'not-allowed';
       if(canAdmin()){
         const dl = m.querySelector('#tmBlocoList');
         if(dl){ dl.innerHTML = filtered.map(s=>`<option value="${escapeHtml(s.name)}"></option>`).join(''); }
         tmBlocoEl.value = '';
+        tmBlocoEl.placeholder = sel ? 'Selecione ou digite…' : 'Selecione uma área primeiro';
       } else {
-        tmBlocoEl.innerHTML = `<option value="">— Nenhuma —</option>`
+        tmBlocoEl.innerHTML = `<option value="">${sel ? '— Nenhuma —' : 'Selecione uma área primeiro'}</option>`
           + filtered.map(s=>`<option value="${escapeHtml(s.name)}">${escapeHtml(s.name)}</option>`).join('');
       }
     });
@@ -7318,15 +7324,15 @@ function openTemplateModal(id){
               </label>
               ${canAdmin() ? `
                 <input name="bloco" id="tplBloco" list="tplBlocoList" value="${escapeHtml(t.bloco||'')}"
-                  placeholder="Selecione ou digite…"
-                  autocomplete="off" />
+                  placeholder="${t.area ? 'Selecione ou digite…' : 'Selecione uma área primeiro'}"
+                  autocomplete="off" ${!t.area ? 'disabled style="opacity:.45;cursor:not-allowed"' : ''} />
                 <datalist id="tplBlocoList">
-                  ${state.subAreas.filter(s=>!t.area||s.area===t.area).map(s=>`<option value="${escapeHtml(s.name)}"></option>`).join('')}
+                  ${state.subAreas.filter(s=>s.area===t.area).map(s=>`<option value="${escapeHtml(s.name)}"></option>`).join('')}
                 </datalist>
               ` : `
-                <select name="bloco" id="tplBloco">
-                  <option value="">— Nenhuma —</option>
-                  ${state.subAreas.filter(s=>!t.area||s.area===t.area).map(s=>`<option value="${escapeHtml(s.name)}"${t.bloco===s.name?' selected':''}>${escapeHtml(s.name)}</option>`).join('')}
+                <select name="bloco" id="tplBloco" ${!t.area ? 'disabled style="opacity:.45;cursor:not-allowed"' : ''}>
+                  <option value="">${t.area ? '— Nenhuma —' : 'Selecione uma área primeiro'}</option>
+                  ${state.subAreas.filter(s=>s.area===t.area).map(s=>`<option value="${escapeHtml(s.name)}"${t.bloco===s.name?' selected':''}>${escapeHtml(s.name)}</option>`).join('')}
                 </select>
               `}
             </div>
@@ -7401,21 +7407,23 @@ function openTemplateModal(id){
 
   document.body.appendChild(m);
 
-  // Auto-preenche REF ao mudar área; atualiza opções de sub-área
+  // Auto-preenche REF ao mudar área; habilita e atualiza opções de sub-área
   m.querySelector('#tplArea').addEventListener('change', e=>{
     m.querySelector('#tplRef').value = nextRefForArea(e.target.value);
     const selectedArea = e.target.value;
     const blocoEl = m.querySelector('#tplBloco');
     if(!blocoEl) return;
-    const filtered = state.subAreas.filter(s => !selectedArea || s.area === selectedArea);
+    const filtered = state.subAreas.filter(s => s.area === selectedArea);
+    blocoEl.disabled = !selectedArea;
+    blocoEl.style.opacity = selectedArea ? '' : '.45';
+    blocoEl.style.cursor = selectedArea ? '' : 'not-allowed';
     if(canAdmin()){
-      // datalist: rebuild options
       const dl = m.querySelector('#tplBlocoList');
       if(dl){ dl.innerHTML = filtered.map(s=>`<option value="${escapeHtml(s.name)}"></option>`).join(''); }
       blocoEl.value = '';
+      blocoEl.placeholder = selectedArea ? 'Selecione ou digite…' : 'Selecione uma área primeiro';
     } else {
-      // select: rebuild options
-      blocoEl.innerHTML = `<option value="">— Nenhuma —</option>`
+      blocoEl.innerHTML = `<option value="">${selectedArea ? '— Nenhuma —' : 'Selecione uma área primeiro'}</option>`
         + filtered.map(s=>`<option value="${escapeHtml(s.name)}">${escapeHtml(s.name)}</option>`).join('');
     }
   });
