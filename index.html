@@ -2363,11 +2363,16 @@ function _blocoMonthStatus(tasks, mk, today){
   // Status acumulativo: considera tudo que venceu até este mês
   const upTo = tasks.filter(t=>t._f&&t._f.dataPrevista&&_monthKey(t._f.dataPrevista)<=mk);
   if(!upTo.length) return ''; // nada planejado até aqui
+  const inM = upTo.filter(t=>_monthKey(t._f.dataPrevista)===mk);
+  // Para o mês atual: tarefas em andamento este mês têm prioridade sobre atrasos acumulados do passado
+  if(mk === todMk && inM.length) {
+    if(inM.every(t=>t._f.status==='done') && upTo.every(t=>t._f.status==='done')) return 'done';
+    if(inM.some(t=>t._f.status==='ontrack')) return 'track';
+  }
   // Herança de meses anteriores genuinamente atrasada
   const latePrior = upTo.filter(t=>_monthKey(t._f.dataPrevista)<mk&&t._f.status==='late');
   if(latePrior.length) return 'late-prior';
   // Tarefas deste mês que estão atrasadas
-  const inM = upTo.filter(t=>_monthKey(t._f.dataPrevista)===mk);
   if(inM.some(t=>t._f.status==='late')) return 'late';
   // Todas as tarefas até este mês concluídas → mantém Concluído (não regride)
   if(upTo.every(t=>t._f.status==='done')) return 'done';
