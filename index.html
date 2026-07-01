@@ -2205,7 +2205,7 @@ function renderCobranca(){
     byArea[t.area][t.owner].push(t);
   });
 
-  const areasSorted = Object.keys(byArea).sort((a,b)=>a.localeCompare(b));
+  const areasSorted = sortAreaNames(Object.keys(byArea));
 
   // Build "Copiar lista" text (WhatsApp / email)
   function buildCopyText(){
@@ -2492,7 +2492,7 @@ function renderDealIntegracao(company, deal, tasks){
   const naturalCount=Math.max(maxMk-sdMk+2,8);
   const shiftedCount=Math.max(maxMk-winStart+2,8);
   const months=_ganttMonths(winStart, shiftedCount);
-  const AREA_ORDER=['Financeiro','CExp','Comercial','Operações','P&C','PMI / M&A','Marketing & Comunicação','Treinamentos para colaboradores','System Integration / TI / Digital Workplace','Tech'];
+  const AREA_ORDER=['Financeiro','P&C','Marketing & Comunicação','Comercial','PMI / M&A','CExp','System Integration / TI / Digital Workplace','Operações','Tech','Treinamentos para colaboradores'];
   const byArea={};
   tw.forEach(t=>{
     const a=t.area||'Sem área', b=t.bloco;
@@ -2561,7 +2561,7 @@ function renderGanttIntegracao(){
   const today=new Date(); today.setHours(0,0,0);
   const todMk=_monthKey(today);
   const ORDER={late:0,track:1,plan:2,done:3,'':4};
-  const AREA_ORDER=['Financeiro','CExp','Comercial','Operações','P&C','PMI / M&A','Marketing & Comunicação','Treinamentos para colaboradores','System Integration / TI / Digital Workplace','Tech'];
+  const AREA_ORDER=['Financeiro','P&C','Marketing & Comunicação','Comercial','PMI / M&A','CExp','System Integration / TI / Digital Workplace','Operações','Tech','Treinamentos para colaboradores'];
 
   const allDealsData=state.companies.map(c=>{
     const deal=state.deals[c.id];

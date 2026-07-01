@@ -45,15 +45,17 @@ export const SYNERGY_STATUSES = [
 ];
 
 export const DEFAULT_AREAS = [
+  // Gatilho: Thiago Lobato / Vinicius Cavalcanti
   { name: 'Financeiro' },
-  { name: 'CExp' },
   { name: 'P&C' },
-  { name: 'System Integration / TI / Digital Workplace' },
   { name: 'Marketing & Comunicação' },
   { name: 'Comercial' },
+  { name: 'PMI / M&A' },
+  // Gatilho: Rodrigo Papa / Tatiane Steffani
+  { name: 'CExp' },
+  { name: 'System Integration / TI / Digital Workplace' },
   { name: 'Operações' },
   { name: 'Tech' },
-  { name: 'PMI / M&A' },
   { name: 'Treinamentos para colaboradores' },
 ];
 
