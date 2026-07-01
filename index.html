@@ -3179,16 +3179,6 @@ function renderRaidPortfolio(){
         ${canEdit()?`<button id="addRaidGlobal" class="btn btn-primary">+ Nova Ação de Mitigação</button>`:''}
       </div>
 
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-        ${kpiCards.map(k=>`
-          <div class="bhub-card p-3 text-center cursor-pointer hover:border-blue-400 transition-colors" data-rf="${k.id}">
-            <div class="text-2xl mb-1">${k.icon}</div>
-            <div class="text-xl font-bold" style="color:var(--bhub-navy)">${kpiCounts[k.id]}</div>
-            <div class="text-xs font-semibold text-gray-600">${k.label}</div>
-            <div class="text-[10px] text-gray-400">${k.sub}</div>
-          </div>`).join('')}
-      </div>
-
       <div class="flex items-center gap-2 flex-wrap">
         <button class="btn ${filter==='all'?'btn-primary':'btn-secondary'}" data-rf="all">Todos abertos (${open.length})</button>
         <button class="btn ${filter==='closed'?'btn-primary':'btn-secondary'}" data-rf="closed">✓ Fechados (${allItems.filter(x=>x.status==='closed').length})</button>
