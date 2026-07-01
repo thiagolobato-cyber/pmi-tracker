@@ -3373,7 +3373,7 @@ function renderDashboard(){
 
   // Listas pra popular os selects de filtro
   const allDeals = state.companies.map(c=>({id:c.id, name:c.name})).sort((a,b)=>a.name.localeCompare(b.name));
-  const allAreasD = Array.from(new Set([...state.template.map(t=>t.area), ...Object.values(state.deals).flatMap(d=>d.tasks.map(t=>t.area))].filter(Boolean))).sort();
+  const allAreasD = sortAreaNames(Array.from(new Set([...state.template.map(t=>t.area), ...Object.values(state.deals).flatMap(d=>d.tasks.map(t=>t.area))].filter(Boolean))));
   const allOwnersD = Array.from(new Set(Object.values(state.deals).flatMap(d=>d.tasks.map(t=>t.owner)).filter(Boolean))).sort();
   const f = view.dashFilters || {deals:[],areas:[],owners:[]};
 
@@ -3424,7 +3424,7 @@ function renderDashboard(){
   top.sort((a,b)=>b.dias-a.dias);
 
   // Heatmap: area x deal
-  const areas = Array.from(new Set(Object.values(state.deals).flatMap(d=>d.tasks.map(t=>t.area)).filter(Boolean)));
+  const areas = sortAreaNames(Array.from(new Set(Object.values(state.deals).flatMap(d=>d.tasks.map(t=>t.area)).filter(Boolean))));
   function cellStatus(deal, area){
     const ts = deal.tasks.filter(t=>t.area===area);
     if(!ts.length) return 'empty';
