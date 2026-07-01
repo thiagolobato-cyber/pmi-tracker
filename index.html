@@ -2710,6 +2710,9 @@ function renderGanttIntegracao(){
         const upTo=allT.filter(t=>t._f&&t._f.dataPrevista&&_monthKey(t._f.dataPrevista)<=m.mk);
         if(!upTo.length) return _ganttCell('',m.mk===todMk);
         if(m.mk<=todMk){
+          const inM=upTo.filter(t=>_monthKey(t._f.dataPrevista)===m.mk);
+          // Mês atual: tarefas em andamento este mês têm prioridade sobre atrasos acumulados do passado
+          if(m.mk===todMk && inM.some(t=>t._f.status==='ontrack')) return _ganttCell('track',true);
           // Alinha com _blocoMonthStatus: late se status==='late' OU se mês de vencimento é passado e não concluído
           const hasLate=upTo.some(t=>{const tMk=_monthKey(t._f.dataPrevista);return t._f.status==='late'||(tMk<todMk&&t._f.status!=='done');});
           if(hasLate) return _ganttCell('late',m.mk===todMk);
