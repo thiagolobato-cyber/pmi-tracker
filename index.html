@@ -2383,7 +2383,7 @@ function renderGestao(){
 
 /* ===== Reunião Semanal ===== */
 function renderReuniao(){
-  if(!view.reuniaoPanelW) view.reuniaoPanelW = 160;
+  if(!view.reuniaoPanelW) view.reuniaoPanelW = 130;
 
   const meetings = (state.weeklyMeetings||[])
     .filter(m => m.workspace === WS)
@@ -2393,7 +2393,7 @@ function renderReuniao(){
   const selected = meetings.find(m => m.id === view.reuniaoWeekId) || null;
   const items = selected ? (state.meetingItems||[]).filter(mi => mi.meeting_id === selected.id) : [];
 
-  const wrap = el('<div style="display:flex;height:600px;border:0.5px solid var(--bhub-border);border-radius:.75rem;overflow:hidden;background:#fff"></div>');
+  const wrap = el('<div style="display:flex;height:720px;border:0.5px solid var(--bhub-border);border-radius:.75rem;overflow:hidden;background:#fff"></div>');
 
   // ── LEFT PANEL ────────────────────────────────────────────────────
   const left = el(`<div style="width:${view.reuniaoPanelW}px;min-width:100px;max-width:280px;flex-shrink:0;border-right:0.5px solid var(--bhub-border);background:#fafafa;display:flex;flex-direction:column;overflow:hidden"></div>`);
@@ -2472,7 +2472,6 @@ function renderReuniao(){
 }
 
 function renderMeetingDoc(meeting, items){
-  const today = new Date(); today.setHours(0,0,0,0);
   const wd = new Date(meeting.week_date + 'T00:00:00');
   const statusLabel = {draft:'Rascunho', published:'Publicada', closed:'Encerrada'}[meeting.status] || meeting.status;
   const statusStyle = meeting.status==='draft'
@@ -2483,92 +2482,98 @@ function renderMeetingDoc(meeting, items){
   const canEdit = canAdmin() && meeting.status !== 'closed';
 
   const SECTIONS = [
-    { key:'pauta',    label:'Pauta',             icon:'📋', bg:'#eff6ff', border:'#bfdbfe' },
-    { key:'bloqueio', label:'Bloqueios',          icon:'🚧', bg:'#fee2e2', border:'#fecaca' },
-    { key:'ajuda',    label:'Pedidos de ajuda',   icon:'🙋', bg:'#ede9fe', border:'#ddd6fe' },
-    { key:'combinado',label:'Combinados',         icon:'✅', bg:'#d1fae5', border:'#a7f3d0' },
+    { key:'pauta',    label:'Pauta',           icon:'📋' },
+    { key:'bloqueio', label:'Bloqueios',        icon:'🚧' },
+    { key:'ajuda',    label:'Pedidos de ajuda', icon:'🙋' },
+    { key:'combinado',label:'Combinados',       icon:'✅' },
   ];
 
-  const doc = el('<div class="space-y-5"></div>');
+  // Document wrapper — generous padding, page feel
+  const doc = el('<div style="max-width:700px;padding:2rem 2.5rem 3rem"></div>');
 
-  // Header
-  const hdr = el(`<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:.75rem;padding-bottom:1rem;border-bottom:0.5px solid var(--bhub-border)">
+  // ── Header ────────────────────────────────────────────────────────
+  const hdr = el(`<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:.75rem;padding-bottom:1.25rem;border-bottom:1px solid var(--bhub-border);margin-bottom:2rem">
     <div>
-      <h2 style="font-size:1.1rem;font-weight:700;color:var(--bhub-navy);margin:0 0 .25rem">Reunião de Integração — ${wd.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'})}</h2>
-      <p style="font-size:.77rem;color:var(--bhub-muted);margin:0">${wd.toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</p>
+      <h2 style="font-size:1.25rem;font-weight:700;color:var(--bhub-navy);margin:0 0 .3rem;letter-spacing:-.01em">Reunião de Integração</h2>
+      <p style="font-size:.82rem;color:var(--bhub-muted);margin:0">${wd.toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</p>
     </div>
     <div style="display:flex;align-items:center;gap:.4rem;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
-      <span style="font-size:.7rem;font-weight:600;padding:.2rem .65rem;border-radius:999px;${statusStyle}">${statusLabel}</span>
-      ${canAdmin() && meeting.status==='draft' ? `<button id="rnPublishBtn" style="font-size:.7rem;padding:.2rem .65rem;border-radius:999px;border:0.5px solid #0171E4;color:#0171E4;background:#fff;cursor:pointer;font-weight:600;white-space:nowrap">Publicar</button>` : ''}
-      ${canAdmin() && meeting.status==='published' ? `<button id="rnCloseBtn" style="font-size:.7rem;padding:.2rem .65rem;border-radius:999px;border:0.5px solid #16a34a;color:#16a34a;background:#fff;cursor:pointer;font-weight:600;white-space:nowrap">Encerrar</button>` : ''}
-      ${canAdmin() ? `<button id="rnDeleteBtn" style="font-size:.7rem;padding:.2rem .65rem;border-radius:999px;border:0.5px solid #fca5a5;color:#dc2626;background:#fff;cursor:pointer;white-space:nowrap">Excluir</button>` : ''}
+      <span style="font-size:.7rem;font-weight:600;padding:.2rem .7rem;border-radius:999px;${statusStyle}">${statusLabel}</span>
+      ${canAdmin() && meeting.status==='draft' ? `<button id="rnPublishBtn" style="font-size:.7rem;padding:.2rem .7rem;border-radius:999px;border:0.5px solid #0171E4;color:#0171E4;background:#fff;cursor:pointer;font-weight:600">Publicar</button>` : ''}
+      ${canAdmin() && meeting.status==='published' ? `<button id="rnCloseBtn" style="font-size:.7rem;padding:.2rem .7rem;border-radius:999px;border:0.5px solid #16a34a;color:#16a34a;background:#fff;cursor:pointer;font-weight:600">Encerrar</button>` : ''}
+      ${canAdmin() ? `<button id="rnDeleteBtn" style="font-size:.7rem;padding:.2rem .7rem;border-radius:999px;border:0.5px solid #fca5a5;color:#dc2626;background:#fff;cursor:pointer">Excluir</button>` : ''}
     </div>
   </div>`);
   doc.appendChild(hdr);
 
-  // Sections
+  // ── Sections ──────────────────────────────────────────────────────
   SECTIONS.forEach(sec => {
-    const secItems = items.filter(i => i.section === sec.key);
-    const secEl = el('<div></div>');
+    // Aggregate all existing items for this section (legacy support: merge into one blob)
+    const secItems = items
+      .filter(i => i.section === sec.key)
+      .sort((a,b) => (a.created_at||'').localeCompare(b.created_at||''));
 
-    const secHdr = el(`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem">
-      <div style="display:flex;align-items:center;gap:.4rem">
-        <span style="font-size:.85rem">${sec.icon}</span>
-        <span style="font-size:.78rem;font-weight:700;color:var(--bhub-navy);text-transform:uppercase;letter-spacing:.04em">${sec.label}</span>
-        <span style="font-size:.65rem;padding:.1rem .4rem;border-radius:999px;background:#f1f5f9;color:var(--bhub-muted);font-weight:600">${secItems.length}</span>
-      </div>
-      ${canEdit ? `<button class="rn-add-item" data-section="${sec.key}" style="font-size:.7rem;padding:.2rem .55rem;border-radius:4px;border:0.5px dashed var(--bhub-border);background:none;cursor:pointer;color:var(--bhub-muted)">+ Adicionar</button>` : ''}
-    </div>`);
-    secEl.appendChild(secHdr);
+    // Primary item = most recently updated (the "master" blob for this section)
+    const primaryItem = [...secItems].sort((a,b) =>
+      ((b.updated_at||b.created_at||'').localeCompare(a.updated_at||a.created_at||''))
+    )[0] || null;
 
-    if(secItems.length === 0){
-      secEl.appendChild(el(`<div style="padding:.5rem .75rem;border:0.5px dashed var(--bhub-border);border-radius:.5rem;font-size:.73rem;color:var(--bhub-muted);text-align:center;background:#fafafa">Nenhum item nesta seção</div>`));
+    // Content = join all items (migration from card model) or primary item content
+    const textContent = primaryItem
+      ? secItems.map(i => i.content).join('\n')
+      : '';
+
+    const secEl = el('<div style="margin-bottom:2.25rem"></div>');
+
+    // Section label — subtle, document-style
+    secEl.appendChild(el(`<div style="display:flex;align-items:center;gap:.4rem;margin-bottom:.5rem">
+      <span style="font-size:.8rem">${sec.icon}</span>
+      <span style="font-size:.7rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--bhub-muted)">${sec.label}</span>
+    </div>`));
+
+    if(canEdit){
+      // Auto-grow textarea — seamless document feel
+      const ta = el(`<textarea data-sec="${sec.key}" style="width:100%;min-height:110px;padding:.6rem 0;border:none;border-bottom:1.5px solid var(--bhub-border);border-radius:0;font-size:.92rem;font-family:inherit;line-height:1.8;color:var(--bhub-navy);background:transparent;resize:none;overflow:hidden;display:block;outline:none;transition:border-color .15s" placeholder="Escreva aqui…">${escapeHtml(textContent)}</textarea>`);
+
+      // Auto-grow on input
+      const grow = () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; };
+      ta.addEventListener('input', grow);
+      setTimeout(grow, 0);
+
+      ta.addEventListener('focus', () => { ta.style.borderBottomColor = '#0171E4'; });
+      ta.addEventListener('blur', () => {
+        ta.style.borderBottomColor = 'var(--bhub-border)';
+        saveSection(meeting.id, sec.key, ta.value.trim(), primaryItem, secEl, secItems);
+      });
+
+      secEl.appendChild(ta);
+    } else {
+      // Read-only — same visual weight, no border
+      secEl.appendChild(el(`<div style="font-size:.92rem;line-height:1.8;color:${textContent ? 'var(--bhub-navy)' : 'var(--bhub-muted)'};white-space:pre-wrap;padding:.6rem 0;border-bottom:1px solid var(--bhub-border);min-height:40px">${textContent ? escapeHtml(textContent) : '<em>Sem conteúdo</em>'}</div>`));
     }
 
-    secItems.forEach(item => {
-      const createdAt = item.created_at ? new Date(item.created_at) : null;
-      const timeStr = createdAt ? createdAt.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
-      const dueStr  = item.due_date ? new Date(item.due_date + 'T00:00:00').toLocaleDateString('pt-BR') : '';
-      const isLate  = item.due_date && !item.resolved && new Date(item.due_date + 'T00:00:00') < today;
-      const initials = (item.author_name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
-      const dealName = item.deal_id ? ((state.companies||[]).find(c=>c.id===item.deal_id)||{}).name || null : null;
-
-      const card = el(`<div style="border:0.5px solid ${item.resolved ? '#bbf7d0' : sec.border};border-radius:.5rem;padding:.65rem .85rem;margin-bottom:.4rem;background:${item.resolved ? '#f0fdf4' : sec.bg};${item.resolved ? 'opacity:.8' : ''}">
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:.5rem;margin-bottom:.4rem">
-          <p style="font-size:.82rem;color:var(--bhub-navy);line-height:1.45;margin:0;flex:1;white-space:pre-wrap">${escapeHtml(item.content)}</p>
-          ${canEdit && !item.resolved ? `<button class="rn-del-item" data-iid="${escapeHtml(item.id)}" style="flex-shrink:0;border:none;background:none;cursor:pointer;color:#cbd5e1;font-size:.9rem;padding:.1rem;line-height:1" title="Excluir">✕</button>` : ''}
-        </div>
-        <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
-          <div style="width:18px;height:18px;border-radius:50%;background:#1a1f36;color:#fff;font-size:.58rem;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">${escapeHtml(initials)}</div>
-          <span style="font-size:.72rem;color:var(--bhub-muted)">${escapeHtml(item.author_name||'—')}</span>
-          ${item.gatilho ? `<span style="font-size:.63rem;padding:.1rem .4rem;border-radius:4px;background:#e0e7ff;color:#3730a3;font-weight:700">${escapeHtml(item.gatilho)}</span>` : ''}
-          ${dealName ? `<span style="font-size:.63rem;padding:.1rem .4rem;border-radius:4px;background:#f1f5f9;color:var(--bhub-muted);border:0.5px solid var(--bhub-border)">${escapeHtml(dealName)}</span>` : ''}
-          ${dueStr ? `<span style="font-size:.65rem;font-weight:600;color:${isLate?'#dc2626':'#059669'}">${isLate ? '⚠ Venceu ' : 'Vence '}${dueStr}</span>` : ''}
-          ${timeStr ? `<span style="font-size:.63rem;color:var(--bhub-muted);margin-left:auto">${timeStr}</span>` : ''}
-        </div>
-        ${sec.key==='combinado' && !item.resolved && canEdit ? `<div style="margin-top:.45rem"><button class="rn-resolve-item" data-iid="${escapeHtml(item.id)}" style="font-size:.68rem;padding:.2rem .55rem;border-radius:4px;border:0.5px solid #16a34a;color:#16a34a;background:#fff;cursor:pointer;font-weight:600">✓ Marcar resolvido</button></div>` : ''}
-        ${item.resolved ? `<div style="margin-top:.35rem;font-size:.65rem;color:#16a34a;font-weight:600">✓ Resolvido</div>` : ''}
-      </div>`);
-      secEl.appendChild(card);
-    });
+    // Editor chip — compact, below the line
+    const editorRow = el(`<div class="rn-erow-${sec.key}" style="display:flex;align-items:center;gap:.35rem;margin-top:.35rem;min-height:16px"></div>`);
+    if(primaryItem) editorRow.innerHTML = _editorChip(primaryItem);
+    secEl.appendChild(editorRow);
 
     doc.appendChild(secEl);
   });
 
-  // Events
+  // ── Header button events ──────────────────────────────────────────
   doc.querySelector('#rnPublishBtn')?.addEventListener('click', async ()=>{
     const {error} = await supa.from('weekly_meetings').update({status:'published'}).eq('id', meeting.id);
     if(error){alert('Erro: '+(error.message||error)); return;}
     meeting.status = 'published'; render();
   });
   doc.querySelector('#rnCloseBtn')?.addEventListener('click', async ()=>{
-    if(!confirm('Encerrar esta reunião? Nenhum item poderá ser adicionado depois.')) return;
+    if(!confirm('Encerrar esta reunião? Não será mais possível editar.')) return;
     const {error} = await supa.from('weekly_meetings').update({status:'closed'}).eq('id', meeting.id);
     if(error){alert('Erro: '+(error.message||error)); return;}
     meeting.status = 'closed'; render();
   });
   doc.querySelector('#rnDeleteBtn')?.addEventListener('click', ()=>{
-    if(!confirm('Excluir esta reunião e todos os seus itens? Esta ação é irreversível.')) return;
+    if(!confirm('Excluir esta reunião e todo o conteúdo? Esta ação é irreversível.')) return;
     (async()=>{
       await supa.from('meeting_items').delete().eq('meeting_id', meeting.id);
       const {error} = await supa.from('weekly_meetings').delete().eq('id', meeting.id);
@@ -2578,28 +2583,60 @@ function renderMeetingDoc(meeting, items){
       view.reuniaoWeekId = null; render();
     })();
   });
-  doc.querySelectorAll('.rn-add-item').forEach(btn => {
-    btn.addEventListener('click', ()=> openAddItemModal(meeting.id, btn.dataset.section));
-  });
-  doc.querySelectorAll('.rn-del-item').forEach(btn => {
-    btn.addEventListener('click', async ()=>{
-      const {error} = await supa.from('meeting_items').delete().eq('id', btn.dataset.iid);
-      if(error){alert('Erro: '+(error.message||error)); return;}
-      state.meetingItems = state.meetingItems.filter(i => i.id !== btn.dataset.iid);
-      render();
-    });
-  });
-  doc.querySelectorAll('.rn-resolve-item').forEach(btn => {
-    btn.addEventListener('click', async ()=>{
-      const {error} = await supa.from('meeting_items').update({resolved:true, resolved_at:new Date().toISOString()}).eq('id', btn.dataset.iid);
-      if(error){alert('Erro: '+(error.message||error)); return;}
-      const item = state.meetingItems.find(i => i.id === btn.dataset.iid);
-      if(item){ item.resolved = true; item.resolved_at = new Date().toISOString(); }
-      render();
-    });
-  });
 
   return doc;
+}
+
+// ── saveSection — upsert one text blob per section ────────────────
+async function saveSection(meetingId, section, content, primaryItem, secEl, secItems){
+  const erow = secEl.querySelector(`.rn-erow-${section}`);
+  if(erow) erow.innerHTML = '<span style="font-size:.65rem;color:var(--bhub-muted)">Salvando…</span>';
+
+  const now = new Date().toISOString();
+  let data, error;
+
+  if(primaryItem){
+    ({data, error} = await supa.from('meeting_items')
+      .update({ content, author_name: session.username||'—', author_email: session.email||'', updated_at: now })
+      .eq('id', primaryItem.id)
+      .select().single());
+  } else {
+    ({data, error} = await supa.from('meeting_items')
+      .insert({ meeting_id: meetingId, section, content, author_name: session.username||'—', author_email: session.email||'', resolved: false })
+      .select().single());
+  }
+
+  if(error){
+    if(erow) erow.innerHTML = '<span style="font-size:.65rem;color:#dc2626">Erro ao salvar</span>';
+    console.warn('[saveSection]', error);
+    return;
+  }
+
+  // Merge: delete any duplicate items for this section (legacy cards)
+  const dupes = (secItems||[]).filter(i => i.id !== (primaryItem?.id || data.id));
+  for(const d of dupes){
+    await supa.from('meeting_items').delete().eq('id', d.id);
+    state.meetingItems = state.meetingItems.filter(i => i.id !== d.id);
+  }
+
+  // Update local state
+  if(primaryItem){
+    const idx = state.meetingItems.findIndex(i => i.id === primaryItem.id);
+    if(idx >= 0) state.meetingItems[idx] = { ...state.meetingItems[idx], content, author_name: session.username||'—', updated_at: now };
+  } else {
+    if(!state.meetingItems) state.meetingItems = [];
+    state.meetingItems.push(data);
+  }
+
+  if(erow) erow.innerHTML = _editorChip({...( primaryItem || data ), author_name: session.username||'—', updated_at: now });
+}
+
+// ── _editorChip — compact "last edited by" line ───────────────────
+function _editorChip(item){
+  const initials = (item.author_name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+  const ts = item.updated_at || item.created_at;
+  const timeStr = ts ? new Date(ts).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
+  return `<span style="width:14px;height:14px;border-radius:50%;background:#1a1f36;color:#fff;font-size:.5rem;font-weight:700;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">${escapeHtml(initials)}</span><span style="font-size:.67rem;color:var(--bhub-muted)">${escapeHtml(item.author_name||'—')}${timeStr ? ' · '+timeStr : ''}</span>`;
 }
 
 function openNewMeetingModal(){
