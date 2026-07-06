@@ -2128,23 +2128,39 @@ function renderTechDashboard(){
   return node;
 }
 
-function renderCobranca(){
-  // Sub-tab: 'tarefas' (default) ou 'gantt' (admin only)
-  if(!view.acompSubTab) view.acompSubTab = 'tarefas';
-  if(view.acompSubTab === 'gantt' && canAdmin()) {
-    const wrap = el('<div class="space-y-4"></div>');
-    // Tab bar
-    const tabBar = el(`<div style="display:flex;gap:.25rem;border-bottom:1px solid var(--bhub-border);margin-bottom:.5rem;padding-bottom:0">
-      <button class="acomp-subtab" data-tab="tarefas" style="padding:.5rem 1rem;font-size:.8rem;border-bottom:2px solid transparent;color:var(--bhub-muted);cursor:pointer;background:none;border-left:none;border-right:none;border-top:none">Tarefas Atrasadas</button>
-      <button class="acomp-subtab" data-tab="gantt" style="padding:.5rem 1rem;font-size:.8rem;border-bottom:2px solid #4f46e5;color:#4f46e5;font-weight:600;cursor:pointer;background:none;border-left:none;border-right:none;border-top:none">
+function renderGestao(){
+  // Sub-tabs: 'hb' (Visão Executiva, admin default), 'gantt' (admin), 'tarefas' (todos)
+  if(!view.acompSubTab) view.acompSubTab = canAdmin() ? 'hb' : 'tarefas';
+  if((view.acompSubTab==='hb'||view.acompSubTab==='gantt') && !canAdmin()) view.acompSubTab='tarefas';
+
+  // Shared tab bar (admin only)
+  function _gestaoTabBar(){
+    const act = k => view.acompSubTab===k
+      ? 'border-bottom:2px solid #4f46e5;color:#4f46e5;font-weight:600'
+      : 'border-bottom:2px solid transparent;color:var(--bhub-muted)';
+    const bar = el(`<div style="display:flex;gap:.25rem;border-bottom:1px solid var(--bhub-border);margin-bottom:.5rem;padding-bottom:0">
+      <button class="acomp-subtab" data-tab="hb" style="padding:.5rem 1rem;font-size:.8rem;${act('hb')};cursor:pointer;background:none;border-left:none;border-right:none;border-top:none">Visão Executiva</button>
+      <button class="acomp-subtab" data-tab="gantt" style="padding:.5rem 1rem;font-size:.8rem;${act('gantt')};cursor:pointer;background:none;border-left:none;border-right:none;border-top:none">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:-1px;margin-right:.3rem"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
         Gantt de Integração
         <span style="background:#e0e7ff;color:#3730a3;font-size:.62rem;padding:.1rem .4rem;border-radius:999px;margin-left:.3rem;font-weight:700">Admin</span>
       </button>
+      <button class="acomp-subtab" data-tab="tarefas" style="padding:.5rem 1rem;font-size:.8rem;${act('tarefas')};cursor:pointer;background:none;border-left:none;border-right:none;border-top:none">Tarefas Atrasadas</button>
     </div>`);
-    wrap.appendChild(tabBar);
+    bar.querySelectorAll('.acomp-subtab').forEach(btn => btn.addEventListener('click', () => { view.acompSubTab = btn.dataset.tab; render(); }));
+    return bar;
+  }
+
+  if(view.acompSubTab === 'hb' && canAdmin()) {
+    const wrap = el('<div class="space-y-4"></div>');
+    wrap.appendChild(_gestaoTabBar());
+    wrap.appendChild(renderHomebroker());
+    return wrap;
+  }
+  if(view.acompSubTab === 'gantt' && canAdmin()) {
+    const wrap = el('<div class="space-y-4"></div>');
+    wrap.appendChild(_gestaoTabBar());
     wrap.appendChild(renderGanttIntegracao());
-    tabBar.querySelectorAll('.acomp-subtab').forEach(btn => btn.addEventListener('click', () => { view.acompSubTab = btn.dataset.tab; render(); }));
     return wrap;
   }
 
@@ -2234,7 +2250,7 @@ function renderCobranca(){
             <span style="display:inline-flex;align-items:center;justify-content:center;width:1.8rem;height:1.8rem;border-radius:.45rem;background:#fee2e2;color:#991b1b">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r=".5" fill="currentColor"/></svg>
             </span>
-            Acompanhamento
+            Gestão
           </h1>
           <p class="subtitle">Tarefas atrasadas por área e responsável${lideradoNames ? ` — equipe de ${escapeHtml(session.username||'')}` : ''} — ${isFiltered ? totalLate+' de '+totalAll : totalAll} tarefa${totalAll!==1?'s':''} em atraso</p>
         </div>
@@ -2244,14 +2260,6 @@ function renderCobranca(){
         </button>` : ''}
       </div>
 
-      ${isPMI && canAdmin() ? `<div style="display:flex;gap:.25rem;border-bottom:1px solid var(--bhub-border)">
-        <button class="acomp-subtab-tf" data-tab="tarefas" style="padding:.45rem 1rem;font-size:.78rem;border-bottom:2px solid #4f46e5;color:#4f46e5;font-weight:600;cursor:pointer;background:none;border-left:none;border-right:none;border-top:none">Tarefas Atrasadas</button>
-        <button class="acomp-subtab-tf" data-tab="gantt" style="padding:.45rem 1rem;font-size:.78rem;border-bottom:2px solid transparent;color:var(--bhub-muted);cursor:pointer;background:none;border-left:none;border-right:none;border-top:none">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:-1px;margin-right:.3rem"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-          Gantt de Integração
-          <span style="background:#e0e7ff;color:#3730a3;font-size:.6rem;padding:.1rem .4rem;border-radius:999px;margin-left:.3rem;font-weight:700">Admin</span>
-        </button>
-      </div>` : ''}
 
       <!-- Filtros compactos -->
       <div style="display:flex;flex-wrap:wrap;align-items:center;gap:.5rem">
@@ -2347,8 +2355,13 @@ function renderCobranca(){
   node.querySelectorAll('[data-summary]').forEach(b=>b.addEventListener('click',()=>{ view.tab='deal'; view.dealId=b.dataset.summary; render(); }));
   // Owner links
   node.querySelectorAll('.cobr-owner-link').forEach(b=>b.addEventListener('click',()=>openOwnerSummary(b.dataset.owner)));
-  // Sub-tab switcher (Gantt de Integração)
-  node.querySelectorAll('.acomp-subtab-tf').forEach(btn=>btn.addEventListener('click',()=>{ view.acompSubTab=btn.dataset.tab; render(); }));
+  // Para admin: wrap com tab bar compartilhado no topo
+  if(isPMI && canAdmin()){
+    const wrap = el('<div class="space-y-4"></div>');
+    wrap.appendChild(_gestaoTabBar());
+    wrap.appendChild(node);
+    return wrap;
+  }
   return node;
 }
 
@@ -2812,7 +2825,7 @@ function renderShell(){
 
   const content = el(`<main class="content-area"></main>`);
   // Guard: se estiver em modo Tech e tentar acessar aba exclusiva do PMI, redireciona
-  if(isTech && ['homebroker','template'].includes(view.tab)){
+  if(isTech && ['template'].includes(view.tab)){
     view.tab = 'empresas';
   }
   if(view.tab==='hoje') content.appendChild(renderHoje());
@@ -2820,8 +2833,7 @@ function renderShell(){
   else if(view.tab==='executiva') content.appendChild(renderExecutiva());
   else if(view.tab==='empresas') content.appendChild(renderEmpresas());
   else if(view.tab==='raid') content.appendChild(renderRaidPortfolio());
-  else if(view.tab==='homebroker') content.appendChild(renderHomebroker());
-  else if(view.tab==='cobranca' && canViewAcompanhamento()) content.appendChild(renderCobranca());
+  else if(view.tab==='gestao' && canViewAcompanhamento()) content.appendChild(renderGestao());
   else if(view.tab==='lider' && isLider()) content.appendChild(renderLiderPanel());
   else if(view.tab==='tech_tarefas') content.appendChild(renderTechTarefas());
   else if(view.tab==='template') content.appendChild(renderTemplate());
@@ -2843,8 +2855,7 @@ function renderShell(){
 function renderSidebar(){
   const pmoTabs = (() => {
     const tabs = [];
-    if(isPMI && canAdmin()) tabs.push(['homebroker', 'Visão Estratégica', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>']);
-    if(canViewAcompanhamento()) tabs.push(['cobranca', 'Acompanhamento', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>']);
+    if(canViewAcompanhamento()) tabs.push(['gestao', 'Gestão', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><polyline points="8 21 12 17 16 21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>']);
     if(isLider()) tabs.push(['lider', 'Painel do Líder', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/><line x1="22" y1="11" x2="22" y2="17"/><line x1="19" y1="14" x2="25" y2="14"/></svg>']);
     return tabs;
   })();
