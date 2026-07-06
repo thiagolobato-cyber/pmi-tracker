@@ -654,7 +654,9 @@ function defaultState(){
     raid: [],        // global portfolio-level RAID items (each has dealIds:[])
     settings: { initialized:false },
     deletionRequests: [],  // pending task deletion requests
-    subAreas: []     // { area, name } — reference table from sub_areas
+    subAreas: [],    // { area, name } — reference table from sub_areas
+    weeklyMeetings: [],    // Reunião Semanal — weekly_meetings table
+    meetingItems: [],      // Reunião Semanal — meeting_items table
   };
 }
 /// Deprecado: dados agora persistidos por entidade no Supabase. Mantido como no-op
@@ -984,7 +986,7 @@ async function fetchAll(makeBuilder){
 }
 async function reloadState(){
   if(!session){ state = defaultState(); return; }
-  const [profiles, companies, template, tasks, raid, raidLinks, syn, health, delReqs, subAreasRes] = await Promise.all([
+  const [profiles, companies, template, tasks, raid, raidLinks, syn, health, delReqs, subAreasRes, weekMeetings, meetItems] = await Promise.all([
     supa.from('profiles').select('id,username,role,manager_username,workspace').order('username',{nullsFirst:false}),
     supa.from('companies').select('*').eq('workspace', WS).order('name'),
     fetchAll(() => supa.from('template_tasks').select('*').order('ordering').order('ref')),
@@ -997,6 +999,8 @@ async function reloadState(){
       ? supa.from('deletion_requests').select('*').eq('status','pending')
       : supa.from('deletion_requests').select('*').eq('status','pending').eq('requested_by_id', session.id),
     supa.from('sub_areas').select('area,name').order('area').order('name'),
+    supa.from('weekly_meetings').select('*').eq('workspace', WS).order('week_date', {ascending:false}),
+    supa.from('meeting_items').select('*').order('created_at'),
   ]);
   const errs = [profiles, companies, template, tasks, raid, syn, health].map(r=>r.error).filter(Boolean);
   if(errs.length){ console.warn('reloadState errors', errs); }
@@ -1020,6 +1024,8 @@ async function reloadState(){
   if(subAreasRes.error) console.warn('[reloadState] sub_areas fetch error:', subAreasRes.error);
   state.subAreas = (subAreasRes.data||[]).map(r => ({ area: r.area, name: r.name }));
   console.log('[reloadState] subAreas loaded:', state.subAreas.length);
+  state.weeklyMeetings = (weekMeetings.data||[]);
+  state.meetingItems   = (meetItems.data||[]);
   state.companies = (companies.data||[]).map(companyFromDb)
     .sort((a,b)=>{
       // Mais recente primeiro; sem data vai para o final
@@ -2129,9 +2135,11 @@ function renderTechDashboard(){
 }
 
 function renderGestao(){
-  // Sub-tabs: 'hb' (Visão Executiva, admin default), 'gantt' (admin), 'tarefas' (todos)
+  // Sub-tabs: 'hb' (Visão Executiva, admin default), 'gantt' (admin), 'tarefas' (todos), 'reuniao' (feature-flagged)
+  const canSeeReuniao = session?.email === 'thiago.lobato@bhub.ai';
   if(!view.acompSubTab) view.acompSubTab = canAdmin() ? 'hb' : 'tarefas';
   if((view.acompSubTab==='hb'||view.acompSubTab==='gantt') && !canAdmin()) view.acompSubTab='tarefas';
+  if(view.acompSubTab==='reuniao' && !canSeeReuniao) view.acompSubTab = canAdmin() ? 'hb' : 'tarefas';
 
   // Shared tab bar (admin only)
   function _gestaoTabBar(){
@@ -2146,9 +2154,17 @@ function renderGestao(){
         <span style="background:#e0e7ff;color:#3730a3;font-size:.62rem;padding:.1rem .4rem;border-radius:999px;margin-left:.3rem;font-weight:700">Admin</span>
       </button>
       <button class="acomp-subtab" data-tab="tarefas" style="padding:.5rem 1rem;font-size:.8rem;${act('tarefas')};cursor:pointer;background:none;border-left:none;border-right:none;border-top:none">Tarefas Atrasadas</button>
+      ${canSeeReuniao ? `<button class="acomp-subtab" data-tab="reuniao" style="padding:.5rem 1rem;font-size:.8rem;${act('reuniao')};cursor:pointer;background:none;border-left:none;border-right:none;border-top:none">📋 Reunião <span style="background:#fef3c7;color:#92400e;font-size:.6rem;padding:.1rem .4rem;border-radius:999px;margin-left:.25rem;font-weight:700">Beta</span></button>` : ''}
     </div>`);
     bar.querySelectorAll('.acomp-subtab').forEach(btn => btn.addEventListener('click', () => { view.acompSubTab = btn.dataset.tab; render(); }));
     return bar;
+  }
+
+  if(view.acompSubTab === 'reuniao' && canSeeReuniao) {
+    const wrap = el('<div class="space-y-4"></div>');
+    wrap.appendChild(_gestaoTabBar());
+    wrap.appendChild(renderReuniao());
+    return wrap;
   }
 
   if(view.acompSubTab === 'hb' && canAdmin()) {
@@ -2363,6 +2379,338 @@ function renderGestao(){
     return wrap;
   }
   return node;
+}
+
+/* ===== Reunião Semanal ===== */
+function renderReuniao(){
+  if(!view.reuniaoPanelW) view.reuniaoPanelW = 160;
+
+  const meetings = (state.weeklyMeetings||[])
+    .filter(m => m.workspace === WS)
+    .sort((a,b) => b.week_date.localeCompare(a.week_date));
+
+  if(!view.reuniaoWeekId && meetings.length > 0) view.reuniaoWeekId = meetings[0].id;
+  const selected = meetings.find(m => m.id === view.reuniaoWeekId) || null;
+  const items = selected ? (state.meetingItems||[]).filter(mi => mi.meeting_id === selected.id) : [];
+
+  const wrap = el('<div style="display:flex;height:600px;border:0.5px solid var(--bhub-border);border-radius:.75rem;overflow:hidden;background:#fff"></div>');
+
+  // ── LEFT PANEL ────────────────────────────────────────────────────
+  const left = el(`<div style="width:${view.reuniaoPanelW}px;min-width:100px;max-width:280px;flex-shrink:0;border-right:0.5px solid var(--bhub-border);background:#fafafa;display:flex;flex-direction:column;overflow:hidden"></div>`);
+
+  const leftHeader = el(`<div style="padding:.6rem .75rem .5rem;border-bottom:0.5px solid var(--bhub-border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
+    <span style="font-size:.62rem;font-weight:700;color:var(--bhub-muted);text-transform:uppercase;letter-spacing:.06em">Semanas</span>
+    ${canAdmin() ? `<button id="rnNewBtn" style="width:22px;height:22px;border-radius:5px;border:0.5px solid #0171E4;background:#0171E4;color:#fff;font-size:1rem;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;font-weight:600" title="Nova reunião">+</button>` : ''}
+  </div>`);
+  left.appendChild(leftHeader);
+
+  const weekList = el('<div style="flex:1;overflow-y:auto;padding:.25rem 0"></div>');
+  if(meetings.length === 0){
+    weekList.appendChild(el('<div style="padding:1.25rem .75rem;font-size:.73rem;color:var(--bhub-muted);text-align:center;line-height:1.5">Nenhuma reunião.<br>Clique + para criar.</div>'));
+  }
+  meetings.forEach(m => {
+    const d = new Date(m.week_date + 'T00:00:00');
+    const label = d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
+    const yr    = d.getFullYear().toString().slice(-2);
+    const dot   = m.status==='closed' ? '#16a34a' : m.status==='published' ? '#d97706' : '#94a3b8';
+    const isAct = m.id === view.reuniaoWeekId;
+    const row = el(`<div style="padding:.4rem .75rem;cursor:pointer;display:flex;align-items:center;gap:.45rem;border-left:2.5px solid ${isAct?'#0171E4':'transparent'};background:${isAct?'#eff6ff':'transparent'};transition:background .1s">
+      <span style="width:7px;height:7px;border-radius:50%;background:${dot};flex-shrink:0"></span>
+      <span style="font-size:.75rem;color:${isAct?'#0171E4':'var(--bhub-navy)'};font-weight:${isAct?'600':'400'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Qua ${label}/${yr}</span>
+    </div>`);
+    row.addEventListener('click', ()=>{ view.reuniaoWeekId = m.id; render(); });
+    weekList.appendChild(row);
+  });
+  left.appendChild(weekList);
+
+  // Legend
+  left.appendChild(el(`<div style="padding:.4rem .75rem;border-top:0.5px solid var(--bhub-border);flex-shrink:0;display:flex;gap:.5rem;flex-direction:column">
+    <div style="display:flex;align-items:center;gap:.3rem"><span style="width:6px;height:6px;border-radius:50%;background:#94a3b8;display:inline-block;flex-shrink:0"></span><span style="font-size:.62rem;color:var(--bhub-muted)">Rascunho</span></div>
+    <div style="display:flex;align-items:center;gap:.3rem"><span style="width:6px;height:6px;border-radius:50%;background:#d97706;display:inline-block;flex-shrink:0"></span><span style="font-size:.62rem;color:var(--bhub-muted)">Publicada</span></div>
+    <div style="display:flex;align-items:center;gap:.3rem"><span style="width:6px;height:6px;border-radius:50%;background:#16a34a;display:inline-block;flex-shrink:0"></span><span style="font-size:.62rem;color:var(--bhub-muted)">Encerrada</span></div>
+  </div>`));
+
+  wrap.appendChild(left);
+
+  // ── DIVIDER ───────────────────────────────────────────────────────
+  const divider = el('<div style="width:6px;cursor:col-resize;flex-shrink:0;background:transparent;position:relative;z-index:1;display:flex;align-items:center;justify-content:center" title="Arrastar para redimensionar"><div style="width:2px;height:32px;border-radius:2px;background:var(--bhub-border)"></div></div>');
+  divider.addEventListener('mousedown', e => {
+    const startX = e.clientX;
+    const startW = view.reuniaoPanelW;
+    const onMove = ev => {
+      const newW = Math.max(100, Math.min(280, startW + ev.clientX - startX));
+      view.reuniaoPanelW = newW;
+      left.style.width = newW + 'px';
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    e.preventDefault();
+  });
+  wrap.appendChild(divider);
+
+  // ── RIGHT PANEL ───────────────────────────────────────────────────
+  const right = el('<div style="flex:1;overflow-y:auto;padding:1.25rem 1.5rem;min-width:0"></div>');
+  if(!selected){
+    right.innerHTML = `<div style="text-align:center;padding:5rem 2rem;color:var(--bhub-muted)">
+      <div style="font-size:3rem;margin-bottom:.75rem">📋</div>
+      <div style="font-size:1rem;font-weight:700;color:var(--bhub-navy);margin-bottom:.5rem">Nenhuma reunião selecionada</div>
+      <div style="font-size:.82rem;line-height:1.6">${canAdmin() ? 'Clique em <strong>+</strong> para criar a<br>reunião desta semana.' : 'Aguardando a criação da próxima reunião.'}</div>
+    </div>`;
+  } else {
+    right.appendChild(renderMeetingDoc(selected, items));
+  }
+  wrap.appendChild(right);
+
+  // Events on left panel
+  wrap.querySelector('#rnNewBtn')?.addEventListener('click', ()=>openNewMeetingModal());
+
+  return wrap;
+}
+
+function renderMeetingDoc(meeting, items){
+  const today = new Date(); today.setHours(0,0,0,0);
+  const wd = new Date(meeting.week_date + 'T00:00:00');
+  const statusLabel = {draft:'Rascunho', published:'Publicada', closed:'Encerrada'}[meeting.status] || meeting.status;
+  const statusStyle = meeting.status==='draft'
+    ? 'background:#f1f5f9;color:#64748b'
+    : meeting.status==='published'
+    ? 'background:#fef3c7;color:#92400e'
+    : 'background:#d1fae5;color:#065f46';
+  const canEdit = canAdmin() && meeting.status !== 'closed';
+
+  const SECTIONS = [
+    { key:'pauta',    label:'Pauta',             icon:'📋', bg:'#eff6ff', border:'#bfdbfe' },
+    { key:'bloqueio', label:'Bloqueios',          icon:'🚧', bg:'#fee2e2', border:'#fecaca' },
+    { key:'ajuda',    label:'Pedidos de ajuda',   icon:'🙋', bg:'#ede9fe', border:'#ddd6fe' },
+    { key:'combinado',label:'Combinados',         icon:'✅', bg:'#d1fae5', border:'#a7f3d0' },
+  ];
+
+  const doc = el('<div class="space-y-5"></div>');
+
+  // Header
+  const hdr = el(`<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:.75rem;padding-bottom:1rem;border-bottom:0.5px solid var(--bhub-border)">
+    <div>
+      <h2 style="font-size:1.1rem;font-weight:700;color:var(--bhub-navy);margin:0 0 .25rem">Reunião de Integração — ${wd.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'})}</h2>
+      <p style="font-size:.77rem;color:var(--bhub-muted);margin:0">${wd.toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</p>
+    </div>
+    <div style="display:flex;align-items:center;gap:.4rem;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
+      <span style="font-size:.7rem;font-weight:600;padding:.2rem .65rem;border-radius:999px;${statusStyle}">${statusLabel}</span>
+      ${canAdmin() && meeting.status==='draft' ? `<button id="rnPublishBtn" style="font-size:.7rem;padding:.2rem .65rem;border-radius:999px;border:0.5px solid #0171E4;color:#0171E4;background:#fff;cursor:pointer;font-weight:600;white-space:nowrap">Publicar</button>` : ''}
+      ${canAdmin() && meeting.status==='published' ? `<button id="rnCloseBtn" style="font-size:.7rem;padding:.2rem .65rem;border-radius:999px;border:0.5px solid #16a34a;color:#16a34a;background:#fff;cursor:pointer;font-weight:600;white-space:nowrap">Encerrar</button>` : ''}
+      ${canAdmin() ? `<button id="rnDeleteBtn" style="font-size:.7rem;padding:.2rem .65rem;border-radius:999px;border:0.5px solid #fca5a5;color:#dc2626;background:#fff;cursor:pointer;white-space:nowrap">Excluir</button>` : ''}
+    </div>
+  </div>`);
+  doc.appendChild(hdr);
+
+  // Sections
+  SECTIONS.forEach(sec => {
+    const secItems = items.filter(i => i.section === sec.key);
+    const secEl = el('<div></div>');
+
+    const secHdr = el(`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem">
+      <div style="display:flex;align-items:center;gap:.4rem">
+        <span style="font-size:.85rem">${sec.icon}</span>
+        <span style="font-size:.78rem;font-weight:700;color:var(--bhub-navy);text-transform:uppercase;letter-spacing:.04em">${sec.label}</span>
+        <span style="font-size:.65rem;padding:.1rem .4rem;border-radius:999px;background:#f1f5f9;color:var(--bhub-muted);font-weight:600">${secItems.length}</span>
+      </div>
+      ${canEdit ? `<button class="rn-add-item" data-section="${sec.key}" style="font-size:.7rem;padding:.2rem .55rem;border-radius:4px;border:0.5px dashed var(--bhub-border);background:none;cursor:pointer;color:var(--bhub-muted)">+ Adicionar</button>` : ''}
+    </div>`);
+    secEl.appendChild(secHdr);
+
+    if(secItems.length === 0){
+      secEl.appendChild(el(`<div style="padding:.5rem .75rem;border:0.5px dashed var(--bhub-border);border-radius:.5rem;font-size:.73rem;color:var(--bhub-muted);text-align:center;background:#fafafa">Nenhum item nesta seção</div>`));
+    }
+
+    secItems.forEach(item => {
+      const createdAt = item.created_at ? new Date(item.created_at) : null;
+      const timeStr = createdAt ? createdAt.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
+      const dueStr  = item.due_date ? new Date(item.due_date + 'T00:00:00').toLocaleDateString('pt-BR') : '';
+      const isLate  = item.due_date && !item.resolved && new Date(item.due_date + 'T00:00:00') < today;
+      const initials = (item.author_name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+      const dealName = item.deal_id ? ((state.companies||[]).find(c=>c.id===item.deal_id)||{}).name || null : null;
+
+      const card = el(`<div style="border:0.5px solid ${item.resolved ? '#bbf7d0' : sec.border};border-radius:.5rem;padding:.65rem .85rem;margin-bottom:.4rem;background:${item.resolved ? '#f0fdf4' : sec.bg};${item.resolved ? 'opacity:.8' : ''}">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:.5rem;margin-bottom:.4rem">
+          <p style="font-size:.82rem;color:var(--bhub-navy);line-height:1.45;margin:0;flex:1;white-space:pre-wrap">${escapeHtml(item.content)}</p>
+          ${canEdit && !item.resolved ? `<button class="rn-del-item" data-iid="${escapeHtml(item.id)}" style="flex-shrink:0;border:none;background:none;cursor:pointer;color:#cbd5e1;font-size:.9rem;padding:.1rem;line-height:1" title="Excluir">✕</button>` : ''}
+        </div>
+        <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
+          <div style="width:18px;height:18px;border-radius:50%;background:#1a1f36;color:#fff;font-size:.58rem;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">${escapeHtml(initials)}</div>
+          <span style="font-size:.72rem;color:var(--bhub-muted)">${escapeHtml(item.author_name||'—')}</span>
+          ${item.gatilho ? `<span style="font-size:.63rem;padding:.1rem .4rem;border-radius:4px;background:#e0e7ff;color:#3730a3;font-weight:700">${escapeHtml(item.gatilho)}</span>` : ''}
+          ${dealName ? `<span style="font-size:.63rem;padding:.1rem .4rem;border-radius:4px;background:#f1f5f9;color:var(--bhub-muted);border:0.5px solid var(--bhub-border)">${escapeHtml(dealName)}</span>` : ''}
+          ${dueStr ? `<span style="font-size:.65rem;font-weight:600;color:${isLate?'#dc2626':'#059669'}">${isLate ? '⚠ Venceu ' : 'Vence '}${dueStr}</span>` : ''}
+          ${timeStr ? `<span style="font-size:.63rem;color:var(--bhub-muted);margin-left:auto">${timeStr}</span>` : ''}
+        </div>
+        ${sec.key==='combinado' && !item.resolved && canEdit ? `<div style="margin-top:.45rem"><button class="rn-resolve-item" data-iid="${escapeHtml(item.id)}" style="font-size:.68rem;padding:.2rem .55rem;border-radius:4px;border:0.5px solid #16a34a;color:#16a34a;background:#fff;cursor:pointer;font-weight:600">✓ Marcar resolvido</button></div>` : ''}
+        ${item.resolved ? `<div style="margin-top:.35rem;font-size:.65rem;color:#16a34a;font-weight:600">✓ Resolvido</div>` : ''}
+      </div>`);
+      secEl.appendChild(card);
+    });
+
+    doc.appendChild(secEl);
+  });
+
+  // Events
+  doc.querySelector('#rnPublishBtn')?.addEventListener('click', async ()=>{
+    const {error} = await supa.from('weekly_meetings').update({status:'published'}).eq('id', meeting.id);
+    if(error){alert('Erro: '+(error.message||error)); return;}
+    meeting.status = 'published'; render();
+  });
+  doc.querySelector('#rnCloseBtn')?.addEventListener('click', async ()=>{
+    if(!confirm('Encerrar esta reunião? Nenhum item poderá ser adicionado depois.')) return;
+    const {error} = await supa.from('weekly_meetings').update({status:'closed'}).eq('id', meeting.id);
+    if(error){alert('Erro: '+(error.message||error)); return;}
+    meeting.status = 'closed'; render();
+  });
+  doc.querySelector('#rnDeleteBtn')?.addEventListener('click', ()=>{
+    if(!confirm('Excluir esta reunião e todos os seus itens? Esta ação é irreversível.')) return;
+    (async()=>{
+      await supa.from('meeting_items').delete().eq('meeting_id', meeting.id);
+      const {error} = await supa.from('weekly_meetings').delete().eq('id', meeting.id);
+      if(error){alert('Erro: '+(error.message||error)); return;}
+      state.weeklyMeetings = state.weeklyMeetings.filter(m => m.id !== meeting.id);
+      state.meetingItems   = state.meetingItems.filter(mi => mi.meeting_id !== meeting.id);
+      view.reuniaoWeekId = null; render();
+    })();
+  });
+  doc.querySelectorAll('.rn-add-item').forEach(btn => {
+    btn.addEventListener('click', ()=> openAddItemModal(meeting.id, btn.dataset.section));
+  });
+  doc.querySelectorAll('.rn-del-item').forEach(btn => {
+    btn.addEventListener('click', async ()=>{
+      const {error} = await supa.from('meeting_items').delete().eq('id', btn.dataset.iid);
+      if(error){alert('Erro: '+(error.message||error)); return;}
+      state.meetingItems = state.meetingItems.filter(i => i.id !== btn.dataset.iid);
+      render();
+    });
+  });
+  doc.querySelectorAll('.rn-resolve-item').forEach(btn => {
+    btn.addEventListener('click', async ()=>{
+      const {error} = await supa.from('meeting_items').update({resolved:true, resolved_at:new Date().toISOString()}).eq('id', btn.dataset.iid);
+      if(error){alert('Erro: '+(error.message||error)); return;}
+      const item = state.meetingItems.find(i => i.id === btn.dataset.iid);
+      if(item){ item.resolved = true; item.resolved_at = new Date().toISOString(); }
+      render();
+    });
+  });
+
+  return doc;
+}
+
+function openNewMeetingModal(){
+  // Default to next Wednesday (or today if today is Wednesday)
+  const today = new Date();
+  const dow = today.getDay(); // 0=Sun … 3=Wed … 6=Sat
+  const daysToWed = (3 - dow + 7) % 7;
+  const targetWed = new Date(today);
+  targetWed.setDate(today.getDate() + daysToWed);
+  const defaultDate = targetWed.toISOString().slice(0,10);
+
+  const m = el(`<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:999;display:flex;align-items:center;justify-content:center;padding:1rem">
+    <div style="background:#fff;border-radius:1rem;padding:1.5rem;width:100%;max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,.2)">
+      <h3 style="font-size:1rem;font-weight:700;color:var(--bhub-navy);margin:0 0 1rem">Nova reunião semanal</h3>
+      <form id="rnNewForm">
+        <label style="display:block;font-size:.78rem;color:var(--bhub-navy);font-weight:600;margin-bottom:.3rem">Data da reunião</label>
+        <input type="date" name="weekDate" value="${defaultDate}" style="width:100%;padding:.5rem .75rem;border:1px solid var(--bhub-border);border-radius:.5rem;font-size:.85rem;margin-bottom:1rem;box-sizing:border-box">
+        <div style="display:flex;gap:.5rem;justify-content:flex-end">
+          <button type="button" id="rnNewCancel" style="padding:.5rem 1rem;border:1px solid var(--bhub-border);border-radius:.5rem;background:none;cursor:pointer;font-size:.85rem">Cancelar</button>
+          <button type="submit" style="padding:.5rem 1rem;background:#0171E4;color:#fff;border:none;border-radius:.5rem;cursor:pointer;font-size:.85rem;font-weight:600">Criar reunião</button>
+        </div>
+      </form>
+    </div>
+  </div>`);
+  document.body.appendChild(m);
+  m.querySelector('#rnNewCancel').onclick = ()=> m.remove();
+  m.querySelector('#rnNewForm').onsubmit = async e => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const weekDate = fd.get('weekDate');
+    if(!weekDate){ alert('Selecione uma data.'); return; }
+    if((state.weeklyMeetings||[]).find(wm => wm.week_date === weekDate)){
+      alert('Já existe uma reunião para esta semana.'); return;
+    }
+    const {data, error} = await supa.from('weekly_meetings').insert({
+      week_date:   weekDate,
+      status:      'draft',
+      workspace:   WS,
+      created_by:  session.email || session.username,
+    }).select().single();
+    if(error){ alert('Erro ao criar: '+(error.message||error)); return; }
+    if(!state.weeklyMeetings) state.weeklyMeetings = [];
+    state.weeklyMeetings.push(data);
+    view.reuniaoWeekId = data.id;
+    m.remove(); render();
+  };
+}
+
+function openAddItemModal(meetingId, section){
+  const sectionLabels = {pauta:'Pauta',bloqueio:'Bloqueio',ajuda:'Pedido de ajuda',combinado:'Combinado'};
+  const showDeal = ['pauta','bloqueio','combinado'].includes(section);
+  const showDue  = section === 'combinado';
+
+  // Infer gatilho from AREA_TRIGGERS — areas where this user appears
+  const myName = (session.username || '').trim();
+  const myAreas = Object.entries(AREA_TRIGGERS||{})
+    .filter(([, v]) => v && v.toLowerCase().includes(myName.toLowerCase()) && myName.length > 2)
+    .map(([k]) => k);
+  const gatilhoDefault = myAreas.length > 0 ? myAreas[0] : '';
+
+  const m = el(`<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:999;display:flex;align-items:center;justify-content:center;padding:1rem">
+    <div style="background:#fff;border-radius:1rem;padding:1.5rem;width:100%;max-width:480px;box-shadow:0 20px 60px rgba(0,0,0,.2)">
+      <h3 style="font-size:1rem;font-weight:700;color:var(--bhub-navy);margin:0 0 1rem">Adicionar: ${escapeHtml(sectionLabels[section]||section)}</h3>
+      <form id="rnItemForm">
+        <label style="display:block;font-size:.78rem;color:var(--bhub-navy);font-weight:600;margin-bottom:.3rem">Descrição *</label>
+        <textarea name="content" rows="3" placeholder="Descreva o item…" required style="width:100%;padding:.5rem .75rem;border:1px solid var(--bhub-border);border-radius:.5rem;font-size:.85rem;resize:vertical;margin-bottom:.75rem;box-sizing:border-box"></textarea>
+        <label style="display:block;font-size:.78rem;color:var(--bhub-navy);font-weight:600;margin-bottom:.3rem">Área / Gatilho</label>
+        <select name="gatilho" style="width:100%;padding:.5rem .75rem;border:1px solid var(--bhub-border);border-radius:.5rem;font-size:.85rem;margin-bottom:.75rem;box-sizing:border-box">
+          <option value="">— Sem área —</option>
+          ${Object.keys(AREA_TRIGGERS||{}).map(a=>`<option value="${escapeHtml(a)}" ${a===gatilhoDefault?'selected':''}>${escapeHtml(a)}</option>`).join('')}
+        </select>
+        ${showDeal ? `<label style="display:block;font-size:.78rem;color:var(--bhub-navy);font-weight:600;margin-bottom:.3rem">Deal (opcional)</label>
+        <select name="dealId" style="width:100%;padding:.5rem .75rem;border:1px solid var(--bhub-border);border-radius:.5rem;font-size:.85rem;margin-bottom:.75rem;box-sizing:border-box">
+          <option value="">— Nenhum —</option>
+          ${(state.companies||[]).map(c=>`<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`).join('')}
+        </select>` : ''}
+        ${showDue ? `<label style="display:block;font-size:.78rem;color:var(--bhub-navy);font-weight:600;margin-bottom:.3rem">Prazo</label>
+        <input type="date" name="dueDate" style="width:100%;padding:.5rem .75rem;border:1px solid var(--bhub-border);border-radius:.5rem;font-size:.85rem;margin-bottom:.75rem;box-sizing:border-box">` : ''}
+        <div style="display:flex;gap:.5rem;justify-content:flex-end">
+          <button type="button" id="rnItemCancel" style="padding:.5rem 1rem;border:1px solid var(--bhub-border);border-radius:.5rem;background:none;cursor:pointer;font-size:.85rem">Cancelar</button>
+          <button type="submit" style="padding:.5rem 1rem;background:#0171E4;color:#fff;border:none;border-radius:.5rem;cursor:pointer;font-size:.85rem;font-weight:600">Adicionar</button>
+        </div>
+      </form>
+    </div>
+  </div>`);
+  document.body.appendChild(m);
+  m.querySelector('#rnItemCancel').onclick = ()=> m.remove();
+  m.querySelector('#rnItemForm').onsubmit = async e => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const content  = (fd.get('content')||'').trim();
+    const gatilho  = fd.get('gatilho') || null;
+    const dealId   = fd.get('dealId')  || null;
+    const dueDate  = fd.get('dueDate') || null;
+    if(!content) return;
+    const {data, error} = await supa.from('meeting_items').insert({
+      meeting_id:   meetingId,
+      section,
+      content,
+      author_name:  session.username || session.email || '—',
+      author_email: session.email || '',
+      gatilho:      gatilho || null,
+      deal_id:      dealId  || null,
+      due_date:     dueDate || null,
+      resolved:     false,
+    }).select().single();
+    if(error){ alert('Erro ao adicionar: '+(error.message||error)); return; }
+    if(!state.meetingItems) state.meetingItems = [];
+    state.meetingItems.push(data);
+    m.remove(); render();
+  };
 }
 
 /* ===== Integração por Blocos — helpers de Gantt ===== */
