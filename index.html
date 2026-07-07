@@ -1059,6 +1059,19 @@ async function reloadState(){
     if(!state.deals[r.company_id]) continue;
     state.deals[r.company_id].health.push(healthFromDb(r));
   }
+  // Auto-cleanup: clear bloqueio on tasks linked to closed RAID items
+  const closedRaidIds = new Set(state.raid.filter(r=>r.status==='closed').map(r=>r.id));
+  if(closedRaidIds.size > 0){
+    for(const d of Object.values(state.deals)){
+      for(const t of (d.tasks||[])){
+        if(t.bloqueio==='Sim' && t.raidId && closedRaidIds.has(t.raidId)){
+          t.bloqueio='Não'; t.bloqueioDescricao=''; t.raidId=null;
+          // Fire-and-forget DB update (don't block render)
+          supa.from('tasks').update({bloqueio:'Não',bloqueio_descricao:'',raid_id:null}).eq('id',t.id);
+        }
+      }
+    }
+  }
 }
 
 /* ---------- Deal helpers ---------- */
