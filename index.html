@@ -2530,10 +2530,9 @@ function renderMeetingDoc(meeting, items){
       ((b.updated_at||b.created_at||'').localeCompare(a.updated_at||a.created_at||''))
     )[0] || null;
 
-    // Content = join all items (migration from card model) or primary item content
-    const textContent = primaryItem
-      ? secItems.map(i => i.content).join('\n')
-      : '';
+    // Content = primary item only (most recently saved blob for this section)
+    // Old "join all items" was causing visual gaps when 2+ legacy items existed for same section
+    const textContent = primaryItem ? (primaryItem.content || '') : '';
 
     const secEl = el('<div style="margin-bottom:0.5rem"></div>');
 
