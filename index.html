@@ -3176,10 +3176,8 @@ function renderGanttIntegracao(){
           const hasLate=upTo.some(t=>{const tMk=_monthKey(t._f.dataPrevista);return t._f.status==='late'||(tMk<todMk&&t._f.status!=='done');});
           if(hasLate) return _ganttCell('late',m.mk===todMk);
           if(upTo.every(t=>t._f.status==='done')){
-            // Carry-forward (sem tarefas no mês) + tarefas futuras pendentes → "—"
-            if(!inM.length && !allDealDone) return _ganttCell('',m.mk===todMk);
-            // Com tarefas → "Concluído"; carry-forward com tudo done → "Concluído {dealLastLabel}"
-            return _ganttCell('done',m.mk===todMk,inM.length?'':dealLastLabel);
+            // Com tarefas → "Concluído"; carry-forward → "Concluído" ou "Concluído {dealLastLabel}" (só quando tudo done)
+            return _ganttCell('done',m.mk===todMk,inM.length?'':(allDealDone?dealLastLabel:''));
           }
           if(upTo.some(t=>t._f.status==='done'||t._f.status==='ontrack')) return _ganttCell('track',m.mk===todMk);
           return _ganttCell('plan',m.mk===todMk);
@@ -3188,9 +3186,7 @@ function renderGanttIntegracao(){
           if(!fwd.length) return _ganttCell('',false);
           if(fwd.every(t=>t._f.status==='done')){
             const inMFwd=fwd.filter(t=>_monthKey(t._f.dataPrevista)===m.mk);
-            // Carry-forward + tarefas futuras pendentes → "—"
-            if(!inMFwd.length && !allDealDone) return _ganttCell('',false);
-            return _ganttCell('done',false,inMFwd.length?'':dealLastLabel);
+            return _ganttCell('done',false,inMFwd.length?'':(allDealDone?dealLastLabel:''));
           }
           if(fwd.some(t=>t._f.status==='late'||(_monthKey(t._f.dataPrevista)<todMk&&t._f.status!=='done'))) return _ganttCell('late',false);
           if(fwd.some(t=>t._f.status==='done'||t._f.status==='ontrack')) return _ganttCell('track',false);
