@@ -2523,7 +2523,7 @@ function renderMeetingDoc(meeting, items){
       ? secItems.map(i => i.content).join('\n')
       : '';
 
-    const secEl = el('<div style="margin-bottom:2.25rem"></div>');
+    const secEl = el('<div style="margin-bottom:1.25rem"></div>');
 
     // Section label — subtle, document-style
     secEl.appendChild(el(`<div style="display:flex;align-items:center;gap:.4rem;margin-bottom:.5rem">
@@ -2533,14 +2533,18 @@ function renderMeetingDoc(meeting, items){
 
     if(canEdit){
       // Auto-grow textarea — seamless document feel
-      const ta = el(`<textarea data-sec="${sec.key}" style="width:100%;min-height:36px;padding:.6rem 0;border:none;border-bottom:1.5px solid var(--bhub-border);border-radius:0;font-size:.92rem;font-family:inherit;line-height:1.8;color:var(--bhub-navy);background:transparent;resize:none;overflow:hidden;display:block;outline:none;transition:border-color .15s" placeholder="Escreva aqui…">${escapeHtml(textContent)}</textarea>`);
+      const ta = el(`<textarea data-sec="${sec.key}" style="width:100%;min-height:36px;padding:.6rem 0;border:none;border-bottom:1.5px solid var(--bhub-border);border-radius:0;font-size:.92rem;font-family:inherit;line-height:1.6;color:var(--bhub-navy);background:transparent;resize:none;overflow:hidden;display:block;outline:none;transition:border-color .15s" placeholder="Escreva aqui…">${escapeHtml(textContent)}</textarea>`);
 
-      // Auto-grow: set to 1px first forces a layout flush so scrollHeight is accurate
-      const grow = () => { ta.style.height = '1px'; ta.style.height = Math.max(36, ta.scrollHeight) + 'px'; };
-      ta.addEventListener('input', grow);
-      // Retry until element is in live DOM (isConnected), then measure
-      const tryGrow = () => { if(!ta.isConnected){ requestAnimationFrame(tryGrow); return; } grow(); };
-      requestAnimationFrame(tryGrow);
+      // CSS field-sizing (Chrome 123+ / Safari 17.4+): zero-JS auto-grow
+      if(CSS.supports('field-sizing','content')){
+        ta.style.fieldSizing = 'content';
+      } else {
+        // JS fallback: 1px flush forces correct scrollHeight
+        const grow = () => { ta.style.height = '1px'; ta.style.height = Math.max(36, ta.scrollHeight) + 'px'; };
+        ta.addEventListener('input', grow);
+        const tryGrow = () => { if(!ta.isConnected){ requestAnimationFrame(tryGrow); return; } grow(); };
+        requestAnimationFrame(tryGrow);
+      }
 
       ta.addEventListener('focus', () => { ta.style.borderBottomColor = '#0171E4'; });
       ta.addEventListener('blur', () => {
