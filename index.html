@@ -2427,12 +2427,6 @@ function renderReuniao(){
   }
   left.appendChild(weekList);
 
-  // Legend
-  left.appendChild(el(`<div style="padding:.4rem .75rem;border-top:0.5px solid var(--bhub-border);flex-shrink:0;display:flex;gap:.5rem;flex-direction:column">
-    <div style="display:flex;align-items:center;gap:.3rem"><span style="width:6px;height:6px;border-radius:50%;background:#94a3b8;display:inline-block;flex-shrink:0"></span><span style="font-size:.62rem;color:var(--bhub-muted)">Rascunho</span></div>
-    <div style="display:flex;align-items:center;gap:.3rem"><span style="width:6px;height:6px;border-radius:50%;background:#d97706;display:inline-block;flex-shrink:0"></span><span style="font-size:.62rem;color:var(--bhub-muted)">Publicada</span></div>
-    <div style="display:flex;align-items:center;gap:.3rem"><span style="width:6px;height:6px;border-radius:50%;background:#16a34a;display:inline-block;flex-shrink:0"></span><span style="font-size:.62rem;color:var(--bhub-muted)">Encerrada</span></div>
-  </div>`));
 
   wrap.appendChild(left);
 
@@ -2540,7 +2534,7 @@ function renderMeetingDoc(meeting, items){
     </div>`));
 
     if(canEdit){
-      const edWrap = el('<div style="position:relative"></div>');
+      const edWrap = el('<div></div>');
 
       // ── Mini toolbar ──
       const toolbar = el(`<div style="display:none;flex-direction:row;gap:2px;padding:.2rem 0;margin-bottom:.1rem;align-items:center;flex-wrap:wrap">
@@ -2552,11 +2546,14 @@ function renderMeetingDoc(meeting, items){
         <button data-cmd="insertOrderedList"   title="Lista numerada"       style="font-size:.68rem;padding:0 .4rem;height:22px;border:0.5px solid var(--bhub-border);border-radius:4px;cursor:pointer;background:#fff;color:var(--bhub-navy)">1. lista</button>
       </div>`);
 
+      // ── Field wrapper (position:relative only here, so placeholder aligns to field) ──
+      const fieldWrap = el('<div style="position:relative"></div>');
+
       // ── Contenteditable ──
       const edDiv = el(`<div contenteditable="true" class="rn-editor" data-sec="${sec.key}" style="width:100%;min-height:36px;padding:.3rem 0;border:none;border-bottom:1.5px solid var(--bhub-border);font-size:.92rem;font-family:inherit;line-height:1.6;color:var(--bhub-navy);background:transparent;outline:none;transition:border-color .15s;word-break:break-word"></div>`);
       if(htmlContent) edDiv.innerHTML = htmlContent;
 
-      // Placeholder
+      // Placeholder — absolute within fieldWrap only
       const ph = el(`<span style="position:absolute;top:.3rem;left:0;font-size:.92rem;color:#9ca3af;pointer-events:none;line-height:1.6">Escreva aqui…</span>`);
       const updatePh = () => { ph.style.display = edDiv.textContent.trim() === '' ? '' : 'none'; };
       edDiv.addEventListener('input', updatePh);
@@ -2588,9 +2585,10 @@ function renderMeetingDoc(meeting, items){
         btn.addEventListener('mousedown', e => { e.preventDefault(); document.execCommand(btn.dataset.cmd, false, null); });
       });
 
+      fieldWrap.appendChild(ph);
+      fieldWrap.appendChild(edDiv);
       edWrap.appendChild(toolbar);
-      edWrap.appendChild(ph);
-      edWrap.appendChild(edDiv);
+      edWrap.appendChild(fieldWrap);
       secEl.appendChild(edWrap);
     } else {
       // Read-only — render HTML
