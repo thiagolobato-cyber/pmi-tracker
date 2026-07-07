@@ -1059,16 +1059,16 @@ async function reloadState(){
     if(!state.deals[r.company_id]) continue;
     state.deals[r.company_id].health.push(healthFromDb(r));
   }
-  // Auto-cleanup: clear bloqueio on tasks linked to closed RAID items
+  // Auto-cleanup: clear bloqueio on tasks that are done OR linked to closed RAID items
   const closedRaidIds = new Set(state.raid.filter(r=>r.status==='closed').map(r=>r.id));
-  if(closedRaidIds.size > 0){
-    for(const d of Object.values(state.deals)){
-      for(const t of (d.tasks||[])){
-        if(t.bloqueio==='Sim' && t.raidId && closedRaidIds.has(t.raidId)){
-          t.bloqueio='Não'; t.bloqueioDescricao=''; t.raidId=null;
-          // Fire-and-forget DB update (don't block render)
-          supa.from('tasks').update({bloqueio:'Não',bloqueio_descricao:'',raid_id:null}).eq('id',t.id);
-        }
+  for(const d of Object.values(state.deals)){
+    for(const t of (d.tasks||[])){
+      if(t.bloqueio !== 'Sim') continue;
+      const isDone = t.completado >= 100 || !!t.dataRealConclusao;
+      const linkedToClosed = t.raidId && closedRaidIds.has(t.raidId);
+      if(isDone || linkedToClosed){
+        t.bloqueio='Não'; t.bloqueioDescricao=''; t.raidId=null;
+        supa.from('tasks').update({bloqueio:'Não',bloqueio_descricao:'',raid_id:null}).eq('id',t.id);
       }
     }
   }
@@ -6447,6 +6447,9 @@ function openTaskModal(company, taskId){
       autoRef = String(usedNums.length ? Math.max(...usedNums)+1 : 1);
     }
     const blocoVal = (m.querySelector('[name="bloco"]')?.value||'').trim();
+    const compVal  = parseInt(m.querySelector('[name="completado"]')?.value)||existing?.completado||0;
+    const drVal    = m.querySelector('[name="dataRealConclusao"]').value||'';
+    const isDone   = compVal >= 100 || !!drVal;
     const payload = {
       ref:              autoRef,
       area:             m.querySelector('[name="area"]').value||existing?.area||'',
@@ -6456,14 +6459,14 @@ function openTaskModal(company, taskId){
       ferramenta:       existing?.ferramenta||'',
       prazo:            parseInt(prazoInput.value)||0,
       dataPrevista:     m.querySelector('#tmDueDate')?.value||'',
-      completado:       parseInt(m.querySelector('[name="completado"]')?.value)||existing?.completado||0,
-      bloqueio:         bloqSel.value||'Não',
-      bloqueioDescricao:m.querySelector('[name="bloqueioDescricao"]')?.value||'',
-      dataRealConclusao:m.querySelector('[name="dataRealConclusao"]').value||'',
+      completado:       compVal,
+      bloqueio:         isDone ? 'Não' : (bloqSel.value||'Não'),
+      bloqueioDescricao:isDone ? '' : (m.querySelector('[name="bloqueioDescricao"]')?.value||''),
+      dataRealConclusao:drVal,
       ultimoUpdate:     existing?.ultimoUpdate||'',
       proximoPasso:     existing?.proximoPasso||'',
       evidencia:        m.querySelector('[name="evidencia"]').value||'',
-      raidId:           raidSel?.value||null,
+      raidId:           isDone ? null : (raidSel?.value||null),
       phaseId:          existing?.phaseId||'',
       pendingApproval:  isNew ? !canAdmin() : (existing?.pendingApproval||false)
     };
