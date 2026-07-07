@@ -3159,6 +3159,8 @@ function renderGanttIntegracao(){
     // Mês em que o deal terminou suas últimas tarefas (para rótulo "Concluído Xxx/YY")
     const dealLastMk=ganttT.length?Math.max(...ganttT.map(t=>_monthKey(t._f.dataPrevista))):null;
     const dealLastLabel=dealLastMk!==null?(months.find(m=>m.mk===dealLastMk)?.label||''):'';
+    // true apenas quando TODAS as tarefas do deal estão concluídas
+    const allDealDone=ganttT.length>0&&ganttT.every(t=>t._f.status==='done');
     h+=`<tr style="background:#eef2ff;cursor:pointer" class="gn-deal-row" data-gndeal="${escapeHtml(c.id)}">
       <td style="padding:.4rem .75rem;font-weight:700;font-size:.75rem;color:#3730a3;position:sticky;left:0;background:#eef2ff;border-top:2px solid #c7d2fe">
         ${exp?'▾':'▸'} ${escapeHtml(c.name)} <span style="font-weight:400;font-size:.65rem;color:#6366f1;margin-left:.3rem">${sdLbl}</span>
@@ -3173,13 +3175,23 @@ function renderGanttIntegracao(){
           if(m.mk===todMk && inM.some(t=>t._f.status==='ontrack')) return _ganttCell('track',true);
           const hasLate=upTo.some(t=>{const tMk=_monthKey(t._f.dataPrevista);return t._f.status==='late'||(tMk<todMk&&t._f.status!=='done');});
           if(hasLate) return _ganttCell('late',m.mk===todMk);
-          if(upTo.every(t=>t._f.status==='done')) return _ganttCell('done',m.mk===todMk,dealLastLabel);
+          if(upTo.every(t=>t._f.status==='done')){
+            // Carry-forward (sem tarefas no mês) + tarefas futuras pendentes → "—"
+            if(!inM.length && !allDealDone) return _ganttCell('',m.mk===todMk);
+            // Com tarefas → "Concluído"; carry-forward com tudo done → "Concluído {dealLastLabel}"
+            return _ganttCell('done',m.mk===todMk,inM.length?'':dealLastLabel);
+          }
           if(upTo.some(t=>t._f.status==='done'||t._f.status==='ontrack')) return _ganttCell('track',m.mk===todMk);
           return _ganttCell('plan',m.mk===todMk);
         } else {
           const fwd=upTo.filter(t=>_monthKey(t._f.dataPrevista)>todMk);
           if(!fwd.length) return _ganttCell('',false);
-          if(fwd.every(t=>t._f.status==='done')) return _ganttCell('done',false,dealLastLabel);
+          if(fwd.every(t=>t._f.status==='done')){
+            const inMFwd=fwd.filter(t=>_monthKey(t._f.dataPrevista)===m.mk);
+            // Carry-forward + tarefas futuras pendentes → "—"
+            if(!inMFwd.length && !allDealDone) return _ganttCell('',false);
+            return _ganttCell('done',false,inMFwd.length?'':dealLastLabel);
+          }
           if(fwd.some(t=>t._f.status==='late'||(_monthKey(t._f.dataPrevista)<todMk&&t._f.status!=='done'))) return _ganttCell('late',false);
           if(fwd.some(t=>t._f.status==='done'||t._f.status==='ontrack')) return _ganttCell('track',false);
           return _ganttCell('plan',false);
@@ -3220,7 +3232,13 @@ function renderGanttIntegracao(){
             const t2=m.mk===todMk?'today-gantt':'';
             if(!st) return `<td class="gantt-cell gantt-empty ${t2}" data-gn="${key}">—</td>`;
             const cfg={done:{c:'gantt-done',bg:'#16a34a',lbl:'Concluído'},track:{c:'gantt-track',bg:'#ca8a04',lbl:'Em andamento'},late:{c:'gantt-late',bg:'#dc2626',lbl:'Atrasado'},'late-prior':{c:'gantt-late',bg:'#dc2626',lbl:'Atrasado ⚠️'},plan:{c:'gantt-plan',bg:'#94a3b8',lbl:'Planejado'}}[st];
-            const lbl2=(st==='done')?`Concluído ${btLastLabel}`:cfg.lbl;
+            const hasTasksThisMonth=inM.length>0;
+            // Verifica se TODAS as tarefas do bloco com data estão concluídas
+            const allBlocoDone=btWithDate.every(t=>t._f.status==='done');
+            // Carry-forward (sem tarefas no mês) mas tarefas futuras ainda em andamento → "—"
+            if(!hasTasksThisMonth && st==='done' && !allBlocoDone) return `<td class="gantt-cell gantt-empty ${t2}" data-gn="${key}">—</td>`;
+            // Mês com tarefas done → "Concluído" (sem data); carry-forward após tudo done → "Concluído {último mês}"
+            const lbl2=(st==='done')?(hasTasksThisMonth?'Concluído':`Concluído ${btLastLabel}`):cfg.lbl;
             return `<td class="gantt-cell ${cfg.c} ${t2}" data-gn="${key}" title="${lbl2}"><span class="gantt-dot" style="background:${cfg.bg}"></span><span class="gantt-lbl">${lbl2}</span></td>`;
           }).join('')}</tr>`;
         });
