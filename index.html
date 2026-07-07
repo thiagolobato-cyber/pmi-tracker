@@ -1061,6 +1061,7 @@ async function reloadState(){
   }
   // Auto-cleanup: clear bloqueio on tasks that are done OR linked to closed RAID items
   const closedRaidIds = new Set(state.raid.filter(r=>r.status==='closed').map(r=>r.id));
+  const cleanupIds = [];
   for(const d of Object.values(state.deals)){
     for(const t of (d.tasks||[])){
       if(t.bloqueio !== 'Sim') continue;
@@ -1068,9 +1069,13 @@ async function reloadState(){
       const linkedToClosed = t.raidId && closedRaidIds.has(t.raidId);
       if(isDone || linkedToClosed){
         t.bloqueio='Não'; t.bloqueioDescricao=''; t.raidId=null;
-        supa.from('tasks').update({bloqueio:'Não',bloqueio_descricao:'',raid_id:null}).eq('id',t.id);
+        cleanupIds.push(t.id);
       }
     }
+  }
+  // Single batch update so the saving indicator shows briefly and resolves cleanly
+  if(cleanupIds.length > 0){
+    await supa.from('tasks').update({bloqueio:'Não',bloqueio_descricao:'',raid_id:null}).in('id', cleanupIds);
   }
 }
 
