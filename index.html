@@ -2533,17 +2533,18 @@ function renderMeetingDoc(meeting, items){
 
     if(canEdit){
       // Auto-grow textarea — seamless document feel
-      const ta = el(`<textarea data-sec="${sec.key}" style="width:100%;min-height:110px;padding:.6rem 0;border:none;border-bottom:1.5px solid var(--bhub-border);border-radius:0;font-size:.92rem;font-family:inherit;line-height:1.8;color:var(--bhub-navy);background:transparent;resize:none;overflow:hidden;display:block;outline:none;transition:border-color .15s" placeholder="Escreva aqui…">${escapeHtml(textContent)}</textarea>`);
+      const ta = el(`<textarea data-sec="${sec.key}" style="width:100%;min-height:64px;padding:.6rem 0;border:none;border-bottom:1.5px solid var(--bhub-border);border-radius:0;font-size:.92rem;font-family:inherit;line-height:1.8;color:var(--bhub-navy);background:transparent;resize:none;overflow:hidden;display:block;outline:none;transition:border-color .15s" placeholder="Escreva aqui…">${escapeHtml(textContent)}</textarea>`);
 
       // Auto-grow on input
-      const grow = () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; };
+      const grow = () => { ta.style.height = 'auto'; ta.style.height = Math.max(64, ta.scrollHeight) + 'px'; };
       ta.addEventListener('input', grow);
       setTimeout(grow, 0);
 
       ta.addEventListener('focus', () => { ta.style.borderBottomColor = '#0171E4'; });
       ta.addEventListener('blur', () => {
         ta.style.borderBottomColor = 'var(--bhub-border)';
-        saveSection(meeting.id, sec.key, ta.value.trim(), primaryItem, secEl, secItems);
+        // Only save if there is actual content
+        if(ta.value.trim()) saveSection(meeting.id, sec.key, ta.value.trim(), primaryItem, secEl, secItems);
       });
 
       secEl.appendChild(ta);
@@ -2552,9 +2553,9 @@ function renderMeetingDoc(meeting, items){
       secEl.appendChild(el(`<div style="font-size:.92rem;line-height:1.8;color:${textContent ? 'var(--bhub-navy)' : 'var(--bhub-muted)'};white-space:pre-wrap;padding:.6rem 0;border-bottom:1px solid var(--bhub-border);min-height:40px">${textContent ? escapeHtml(textContent) : '<em>Sem conteúdo</em>'}</div>`));
     }
 
-    // Editor chip — compact, below the line
+    // Editor chip — only show if section has actual content
     const editorRow = el(`<div class="rn-erow-${sec.key}" style="display:flex;align-items:center;gap:.35rem;margin-top:.35rem;min-height:16px"></div>`);
-    if(primaryItem) editorRow.innerHTML = _editorChip(primaryItem);
+    if(primaryItem && primaryItem.content && primaryItem.content.trim()) editorRow.innerHTML = _editorChip(primaryItem);
     secEl.appendChild(editorRow);
 
     doc.appendChild(secEl);
