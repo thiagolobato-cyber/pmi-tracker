@@ -5949,6 +5949,19 @@ function openRaidModal(company, raidId){
         // Sync per-deal arrays
         for(const d of Object.values(state.deals)) d.raid = (d.raid||[]).filter(r=>r.id!==existing.id);
         for(const cid of selectedDeals){ if(state.deals[cid]) state.deals[cid].raid.push(existing); }
+        // Auto-clear bloqueio on linked tasks when RAID is closed
+        if(payload.status === 'closed'){
+          const linkedTasks = [];
+          for(const d of Object.values(state.deals)){
+            for(const t of (d.tasks||[])){
+              if(t.bloqueio === 'Sim' && t.raidId === existing.id) linkedTasks.push(t);
+            }
+          }
+          for(const t of linkedTasks){
+            await supa.from('tasks').update({ bloqueio: 'Não', bloqueio_descricao: '', raid_id: null }).eq('id', t.id);
+            t.bloqueio = 'Não'; t.bloqueioDescricao = ''; t.raidId = null;
+          }
+        }
       }else{
         const { data, error } = await supa.from('raid_items').insert(raidToDb(payload)).select().single();
         if(error) throw error;
