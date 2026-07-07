@@ -2495,13 +2495,12 @@ function renderMeetingDoc(meeting, items){
 
   const SECTIONS = [
     { key:'pauta',    label:'Pauta',           icon:'📋' },
-    { key:'bloqueio', label:'Bloqueios',        icon:'🚧' },
     { key:'ajuda',    label:'Pedidos de ajuda', icon:'🙋' },
     { key:'combinado',label:'Combinados',       icon:'✅' },
   ];
 
   // Document wrapper — generous padding, page feel
-  const doc = el('<div style="max-width:700px;padding:2rem 2.5rem 3rem"></div>');
+  const doc = el('<div style="padding:2rem 2.5rem 3rem"></div>');
 
   // ── Header ────────────────────────────────────────────────────────
   const hdr = el(`<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:.75rem;padding-bottom:.75rem;border-bottom:1px solid var(--bhub-border);margin-bottom:1rem">
