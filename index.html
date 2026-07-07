@@ -7442,13 +7442,30 @@ function confirmDeleteModal({ title='Excluir?', ref='', description='', warning=
 /* ---------- Template ---------- */
 function renderTemplate(){
   const tpl = state.template;
+  if(!view.templateSort) view.templateSort = { field:'ref', dir:'asc' };
+  const sortField = view.templateSort.field;
+  const sortDir   = view.templateSort.dir;
+  const sortIcon  = f => sortField !== f
+    ? '<span style="color:#d1d5db;font-size:.6rem;margin-left:.2rem;vertical-align:middle">↕</span>'
+    : sortDir === 'asc'
+      ? '<span style="color:#0171E4;font-size:.6rem;margin-left:.2rem;vertical-align:middle">↑</span>'
+      : '<span style="color:#0171E4;font-size:.6rem;margin-left:.2rem;vertical-align:middle">↓</span>';
+
   const grouped = {};
   tpl.forEach(t=>{
     const a = t.area || '(sem área)';
     if(!grouped[a]) grouped[a] = [];
     grouped[a].push(t);
   });
-  Object.values(grouped).forEach(g => g.sort(sortByRef));
+  Object.values(grouped).forEach(g => {
+    g.sort((a, b) => {
+      let cmp = 0;
+      if(sortField === 'ref')     cmp = sortByRef(a, b);
+      else if(sortField === 'subarea') cmp = (a.bloco||'').localeCompare(b.bloco||'');
+      else if(sortField === 'prazo')   cmp = (a.defaultPrazo||0) - (b.defaultPrazo||0);
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+  });
   const order = sortAreaNames(Object.keys(grouped));
   const node = el(`
     <div class="space-y-4">
@@ -7518,7 +7535,15 @@ function renderTemplate(){
         <section class="bhub-card overflow-hidden">
           <div class="px-4 py-2 bg-gray-50 border-b font-semibold text-sm">${a} <span class="text-xs text-gray-500 font-normal">(${grouped[a].length})</span></div>
           <div class="scroll-x">
-            <table class="w-full"><thead><tr><th>REF</th><th class="min-w-[24rem]">TAREFA</th><th>SUB-ÁREA</th><th>OWNER PADRÃO</th><th>PRAZO (d.u.)</th><th>DEPENDE DE</th>${canEdit()?'<th></th>':''}</tr></thead>
+            <table class="w-full"><thead><tr>
+              <th data-sort="ref"     style="cursor:pointer;white-space:nowrap;user-select:none">REF${sortIcon('ref')}</th>
+              <th class="min-w-[24rem]">TAREFA</th>
+              <th data-sort="subarea" style="cursor:pointer;white-space:nowrap;user-select:none">SUB-ÁREA${sortIcon('subarea')}</th>
+              <th>OWNER PADRÃO</th>
+              <th data-sort="prazo"   style="cursor:pointer;white-space:nowrap;user-select:none">PRAZO (d.u.)${sortIcon('prazo')}</th>
+              <th>DEPENDE DE</th>
+              ${canEdit()?'<th></th>':''}
+            </tr></thead>
             <tbody>
               ${grouped[a].map(t=>{
                 const pendingTplBadge = t.pendingApproval
@@ -7554,6 +7579,20 @@ function renderTemplate(){
       </div>`}
     </div>
   `);
+  // ── Column sort ─────────────────────────────────────────────
+  node.querySelectorAll('th[data-sort]').forEach(th => {
+    th.addEventListener('click', () => {
+      const f = th.dataset.sort;
+      if(view.templateSort.field === f){
+        view.templateSort.dir = view.templateSort.dir === 'asc' ? 'desc' : 'asc';
+      } else {
+        view.templateSort.field = f;
+        view.templateSort.dir = 'asc';
+      }
+      render();
+    });
+  });
+
   // ── Sub-areas management panel (admin only) ──────────────────
   const saAddBtn = node.querySelector('#saAddBtn');
   if(saAddBtn){
