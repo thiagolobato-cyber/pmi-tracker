@@ -2494,7 +2494,7 @@ function renderMeetingDoc(meeting, items){
   // ── Header ────────────────────────────────────────────────────────
   const hdr = el(`<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:.75rem;padding-bottom:.75rem;border-bottom:1px solid var(--bhub-border);margin-bottom:1rem">
     <div>
-      <h2 style="font-size:1.25rem;font-weight:700;color:var(--bhub-navy);margin:0 0 .3rem;letter-spacing:-.01em">Reunião de Integração</h2>
+      <h2 style="font-size:1.25rem;font-weight:700;color:var(--bhub-navy);margin:0 0 .3rem;letter-spacing:-.01em">Reunião Semanal</h2>
       <p style="font-size:.82rem;color:var(--bhub-muted);margin:0">${wd.toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</p>
     </div>
     <div style="display:flex;align-items:center;gap:.4rem;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
@@ -2504,63 +2504,107 @@ function renderMeetingDoc(meeting, items){
   </div>`);
   doc.appendChild(hdr);
 
+  // ── Rich-text editor styles (injected once) ──────────────────────
+  if(!document.getElementById('rn-editor-styles')){
+    const s = document.createElement('style'); s.id = 'rn-editor-styles';
+    s.textContent = `.rn-editor ul{list-style:disc;padding-left:1.4em;margin:.2em 0}.rn-editor ol{list-style:decimal;padding-left:1.4em;margin:.2em 0}.rn-editor li{margin:.05em 0}.rn-editor b,.rn-editor strong{font-weight:700}.rn-editor i,.rn-editor em{font-style:italic}.rn-editor u{text-decoration:underline}.rn-editor p{margin:.1em 0}`;
+    document.head.appendChild(s);
+  }
+
+  // Helper: detect if stored content is HTML or plain text
+  const toHtml = str => {
+    if(!str) return '';
+    if(/<[a-z][\s\S]*>/i.test(str)) return str; // already HTML
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+  };
+
   // ── Sections ──────────────────────────────────────────────────────
   SECTIONS.forEach(sec => {
-    // Aggregate all existing items for this section (legacy support: merge into one blob)
     const secItems = items
       .filter(i => i.section === sec.key)
       .sort((a,b) => (a.created_at||'').localeCompare(b.created_at||''));
 
-    // Primary item = most recently updated (the "master" blob for this section)
     const primaryItem = [...secItems].sort((a,b) =>
       ((b.updated_at||b.created_at||'').localeCompare(a.updated_at||a.created_at||''))
     )[0] || null;
 
-    // Content = primary item only (most recently saved blob for this section)
-    // Old "join all items" was causing visual gaps when 2+ legacy items existed for same section
     const textContent = primaryItem ? (primaryItem.content || '') : '';
+    const htmlContent = toHtml(textContent);
 
     const secEl = el('<div style="margin-bottom:0.5rem"></div>');
 
-    // Section label — subtle, document-style
-    secEl.appendChild(el(`<div style="display:flex;align-items:center;gap:.4rem;margin-bottom:.35rem">
+    // Section label
+    secEl.appendChild(el(`<div style="display:flex;align-items:center;gap:.4rem;margin-bottom:.25rem">
       <span style="font-size:.8rem">${sec.icon}</span>
       <span style="font-size:.7rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--bhub-muted)">${sec.label}</span>
-      ${canEdit ? '<span style="font-size:.7rem;color:#c4c9d4;margin-left:auto;line-height:1" title="Clique no campo para editar">✎</span>' : ''}
     </div>`));
 
     if(canEdit){
-      // Auto-grow textarea — seamless document feel
-      const ta = el(`<textarea data-sec="${sec.key}" style="width:100%;min-height:36px;padding:.6rem 0;border:none;border-bottom:1.5px solid var(--bhub-border);border-radius:0;font-size:.92rem;font-family:inherit;line-height:1.6;color:var(--bhub-navy);background:transparent;resize:none;overflow:hidden;display:block;outline:none;transition:border-color .15s" placeholder="Escreva aqui…">${escapeHtml(textContent)}</textarea>`);
+      const edWrap = el('<div style="position:relative"></div>');
 
-      // CSS field-sizing (Chrome 123+ / Safari 17.4+): zero-JS auto-grow
-      if(CSS.supports('field-sizing','content')){
-        ta.style.fieldSizing = 'content';
-      } else {
-        // JS fallback: 1px flush forces correct scrollHeight
-        const grow = () => { ta.style.height = '1px'; ta.style.height = Math.max(36, ta.scrollHeight) + 'px'; };
-        ta.addEventListener('input', grow);
-        const tryGrow = () => { if(!ta.isConnected){ requestAnimationFrame(tryGrow); return; } grow(); };
-        requestAnimationFrame(tryGrow);
-      }
+      // ── Mini toolbar ──
+      const toolbar = el(`<div style="display:none;flex-direction:row;gap:2px;padding:.2rem 0;margin-bottom:.1rem;align-items:center;flex-wrap:wrap">
+        <button data-cmd="bold"               title="Negrito (⌘B)"         style="font-size:.73rem;font-weight:700;width:26px;height:22px;border:0.5px solid var(--bhub-border);border-radius:4px;cursor:pointer;background:#fff;color:var(--bhub-navy)">B</button>
+        <button data-cmd="italic"             title="Itálico (⌘I)"         style="font-size:.73rem;font-style:italic;width:26px;height:22px;border:0.5px solid var(--bhub-border);border-radius:4px;cursor:pointer;background:#fff;color:var(--bhub-navy)">I</button>
+        <button data-cmd="underline"          title="Sublinhado (⌘U)"      style="font-size:.73rem;text-decoration:underline;width:26px;height:22px;border:0.5px solid var(--bhub-border);border-radius:4px;cursor:pointer;background:#fff;color:var(--bhub-navy)">U</button>
+        <span style="width:0.5px;height:14px;background:var(--bhub-border);margin:0 3px;display:inline-block;align-self:center"></span>
+        <button data-cmd="insertUnorderedList" title="Lista com marcadores" style="font-size:.68rem;padding:0 .4rem;height:22px;border:0.5px solid var(--bhub-border);border-radius:4px;cursor:pointer;background:#fff;color:var(--bhub-navy)">• lista</button>
+        <button data-cmd="insertOrderedList"   title="Lista numerada"       style="font-size:.68rem;padding:0 .4rem;height:22px;border:0.5px solid var(--bhub-border);border-radius:4px;cursor:pointer;background:#fff;color:var(--bhub-navy)">1. lista</button>
+      </div>`);
 
-      ta.addEventListener('mouseenter', () => { if(document.activeElement !== ta){ ta.style.background='rgba(1,113,228,0.04)'; ta.style.borderBottomColor='#93c5fd'; } });
-      ta.addEventListener('mouseleave', () => { if(document.activeElement !== ta){ ta.style.background='transparent'; ta.style.borderBottomColor='var(--bhub-border)'; } });
-      ta.addEventListener('focus', () => { ta.style.background='transparent'; ta.style.borderBottomColor='#0171E4'; });
-      ta.addEventListener('blur', () => {
-        ta.style.background='transparent'; ta.style.borderBottomColor='var(--bhub-border)';
-        if(ta.value.trim()) saveSection(meeting.id, sec.key, ta.value.trim(), primaryItem, secEl, secItems);
+      // ── Contenteditable ──
+      const edDiv = el(`<div contenteditable="true" class="rn-editor" data-sec="${sec.key}" style="width:100%;min-height:36px;padding:.3rem 0;border:none;border-bottom:1.5px solid var(--bhub-border);font-size:.92rem;font-family:inherit;line-height:1.6;color:var(--bhub-navy);background:transparent;outline:none;transition:border-color .15s;word-break:break-word"></div>`);
+      if(htmlContent) edDiv.innerHTML = htmlContent;
+
+      // Placeholder
+      const ph = el(`<span style="position:absolute;top:.3rem;left:0;font-size:.92rem;color:#9ca3af;pointer-events:none;line-height:1.6">Escreva aqui…</span>`);
+      const updatePh = () => { ph.style.display = edDiv.textContent.trim() === '' ? '' : 'none'; };
+      edDiv.addEventListener('input', updatePh);
+      updatePh();
+
+      // Focus / blur
+      let blurTimer;
+      edDiv.addEventListener('focus', () => {
+        clearTimeout(blurTimer);
+        toolbar.style.display = 'flex';
+        edDiv.style.borderBottomColor = '#0171E4';
+        edDiv.style.background = 'transparent';
+      });
+      edDiv.addEventListener('blur', () => {
+        blurTimer = setTimeout(() => {
+          toolbar.style.display = 'none';
+          edDiv.style.borderBottomColor = 'var(--bhub-border)';
+          updatePh();
+          if(edDiv.textContent.trim()) saveSection(meeting.id, sec.key, edDiv.innerHTML, primaryItem, secEl, secItems);
+        }, 200);
       });
 
-      secEl.appendChild(ta);
+      // Hover
+      edDiv.addEventListener('mouseenter', () => { if(document.activeElement !== edDiv){ edDiv.style.background='rgba(1,113,228,0.04)'; edDiv.style.borderBottomColor='#93c5fd'; } });
+      edDiv.addEventListener('mouseleave', () => { if(document.activeElement !== edDiv){ edDiv.style.background='transparent'; edDiv.style.borderBottomColor='var(--bhub-border)'; } });
+
+      // Toolbar clicks — mousedown prevents blur
+      toolbar.querySelectorAll('button[data-cmd]').forEach(btn => {
+        btn.addEventListener('mousedown', e => { e.preventDefault(); document.execCommand(btn.dataset.cmd, false, null); });
+      });
+
+      edWrap.appendChild(toolbar);
+      edWrap.appendChild(ph);
+      edWrap.appendChild(edDiv);
+      secEl.appendChild(edWrap);
     } else {
-      // Read-only — same visual weight, no border
-      secEl.appendChild(el(`<div style="font-size:.92rem;line-height:1.8;color:${textContent ? 'var(--bhub-navy)' : 'var(--bhub-muted)'};white-space:pre-wrap;padding:.6rem 0;border-bottom:1px solid var(--bhub-border);min-height:40px">${textContent ? escapeHtml(textContent) : '<em>Sem conteúdo</em>'}</div>`));
+      // Read-only — render HTML
+      const readDiv = el(`<div class="rn-editor" style="font-size:.92rem;line-height:1.6;color:var(--bhub-navy);padding:.3rem 0;border-bottom:1px solid var(--bhub-border);min-height:36px"></div>`);
+      readDiv.innerHTML = htmlContent || '<em style="color:#9ca3af">Sem conteúdo</em>';
+      secEl.appendChild(readDiv);
     }
 
-    // Editor chip — only show if section has actual content
+    // Editor chip — only show if section has actual text content
     const editorRow = el(`<div class="rn-erow-${sec.key}" style="display:flex;align-items:center;gap:.35rem;margin-top:.35rem;min-height:16px"></div>`);
-    if(primaryItem && primaryItem.content && primaryItem.content.trim()) editorRow.innerHTML = _editorChip(primaryItem);
+    if(primaryItem){
+      const tmp = document.createElement('div'); tmp.innerHTML = primaryItem.content || '';
+      if(tmp.textContent.trim()) editorRow.innerHTML = _editorChip(primaryItem);
+    }
     secEl.appendChild(editorRow);
 
     doc.appendChild(secEl);
