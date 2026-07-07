@@ -3169,30 +3169,20 @@ function renderGanttIntegracao(){
       ${months.map(m=>{
         const allT=Object.values(byArea).flatMap(a=>Object.values(a).flat());
         const upTo=allT.filter(t=>t._f&&t._f.dataPrevista&&_monthKey(t._f.dataPrevista)<=m.mk);
-        if(!upTo.length){
-          // Nenhuma tarefa até este mês — mas se há trabalho futuro e estamos no mês atual/futuro → Em andamento
-          if(m.mk>=todMk&&ganttT.some(t=>_monthKey(t._f.dataPrevista)>m.mk&&t._f.status!=='done')) return _ganttCell('track',m.mk===todMk);
-          return _ganttCell('',m.mk===todMk);
-        }
+        if(!upTo.length) return _ganttCell('',m.mk===todMk);
         if(m.mk<=todMk){
           const inM=upTo.filter(t=>_monthKey(t._f.dataPrevista)===m.mk);
           if(m.mk===todMk && inM.some(t=>t._f.status==='ontrack')) return _ganttCell('track',true);
           const hasLate=upTo.some(t=>{const tMk=_monthKey(t._f.dataPrevista);return t._f.status==='late'||(tMk<todMk&&t._f.status!=='done');});
           if(hasLate) return _ganttCell('late',m.mk===todMk);
           if(upTo.every(t=>t._f.status==='done')){
-            // Hoje: se ainda há tarefas futuras não concluídas → Em andamento (ex: WellsCo 99%)
-            if(m.mk===todMk&&!allDealDone) return _ganttCell('track',true);
             return _ganttCell('done',m.mk===todMk,inM.length?'':(allDealDone?dealLastLabel:''));
           }
           if(upTo.some(t=>t._f.status==='done'||t._f.status==='ontrack')) return _ganttCell('track',m.mk===todMk);
           return _ganttCell('',m.mk===todMk);
         } else {
           const fwd=upTo.filter(t=>_monthKey(t._f.dataPrevista)>todMk);
-          if(!fwd.length){
-            // Nenhuma tarefa entre hoje e este mês futuro — mas se há tarefas além → Em andamento
-            if(ganttT.some(t=>_monthKey(t._f.dataPrevista)>m.mk&&t._f.status!=='done')) return _ganttCell('track',false);
-            return _ganttCell('',false);
-          }
+          if(!fwd.length) return _ganttCell('',false);
           if(fwd.every(t=>t._f.status==='done')){
             const inMFwd=fwd.filter(t=>_monthKey(t._f.dataPrevista)===m.mk);
             return _ganttCell('done',false,inMFwd.length?'':(allDealDone?dealLastLabel:''));
@@ -3235,12 +3225,7 @@ function renderGanttIntegracao(){
             const key=`${c.id}_${bloco}_${m.mk}`;
             window._gnPop[key]={bloco,month:m.label,tasks:popTasks,isOverdue};
             const t2=m.mk===todMk?'today-gantt':'';
-            if(!st){
-              // Sem tarefas até este mês — mas se há trabalho futuro e é mês atual/futuro → Em andamento
-              if(m.mk>=todMk&&btWithDate.some(t=>_monthKey(t._f.dataPrevista)>m.mk&&t._f.status!=='done'))
-                return `<td class="gantt-cell gantt-track ${t2}" data-gn="${key}" title="Em andamento"><span class="gantt-dot" style="background:#ca8a04"></span><span class="gantt-lbl">Em andamento</span></td>`;
-              return `<td class="gantt-cell gantt-empty ${t2}" data-gn="${key}">—</td>`;
-            }
+            if(!st) return `<td class="gantt-cell gantt-empty ${t2}" data-gn="${key}">—</td>`;
             const cfg={done:{c:'gantt-done',bg:'#16a34a',lbl:'Concluído'},track:{c:'gantt-track',bg:'#ca8a04',lbl:'Em andamento'},late:{c:'gantt-late',bg:'#dc2626',lbl:'Atrasado'},'late-prior':{c:'gantt-late',bg:'#dc2626',lbl:'Atrasado ⚠️'},plan:{c:'gantt-plan',bg:'#94a3b8',lbl:'Planejado'}}[st];
             const hasTasksThisMonth=inM.length>0;
             // Todas as tarefas do bloco concluídas? (para decidir se coloca o rótulo de mês)
