@@ -2550,11 +2550,11 @@ function renderMeetingDoc(meeting, items){
       const fieldWrap = el('<div style="position:relative"></div>');
 
       // ── Contenteditable ──
-      const edDiv = el(`<div contenteditable="true" class="rn-editor" data-sec="${sec.key}" style="width:100%;min-height:36px;padding:.3rem 0;border:none;border-bottom:1.5px solid var(--bhub-border);font-size:.92rem;font-family:inherit;line-height:1.6;color:var(--bhub-navy);background:transparent;outline:none;transition:border-color .15s;word-break:break-word"></div>`);
+      const edDiv = el(`<div contenteditable="true" class="rn-editor" data-sec="${sec.key}" style="width:100%;min-height:36px;padding:.3rem 0;border:none;border-bottom:1.5px solid var(--bhub-border);font-size:.82rem;font-family:inherit;line-height:1.6;color:var(--bhub-navy);background:transparent;outline:none;transition:border-color .15s;word-break:break-word"></div>`);
       if(htmlContent) edDiv.innerHTML = htmlContent;
 
       // Placeholder — absolute within fieldWrap only
-      const ph = el(`<span style="position:absolute;top:.3rem;left:0;font-size:.92rem;color:#9ca3af;pointer-events:none;line-height:1.6">Escreva aqui…</span>`);
+      const ph = el(`<span style="position:absolute;top:.3rem;left:0;font-size:.82rem;color:#9ca3af;pointer-events:none;line-height:1.6">Escreva aqui…</span>`);
       const updatePh = () => { ph.style.display = edDiv.textContent.trim() === '' ? '' : 'none'; };
       edDiv.addEventListener('input', updatePh);
       updatePh();
@@ -2592,7 +2592,7 @@ function renderMeetingDoc(meeting, items){
       secEl.appendChild(edWrap);
     } else {
       // Read-only — render HTML
-      const readDiv = el(`<div class="rn-editor" style="font-size:.92rem;line-height:1.6;color:var(--bhub-navy);padding:.3rem 0;border-bottom:1px solid var(--bhub-border);min-height:36px"></div>`);
+      const readDiv = el(`<div class="rn-editor" style="font-size:.82rem;line-height:1.6;color:var(--bhub-navy);padding:.3rem 0;border-bottom:1px solid var(--bhub-border);min-height:36px"></div>`);
       readDiv.innerHTML = htmlContent || '<em style="color:#9ca3af">Sem conteúdo</em>';
       secEl.appendChild(readDiv);
     }
