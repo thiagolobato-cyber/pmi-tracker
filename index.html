@@ -3156,6 +3156,9 @@ function renderGanttIntegracao(){
     const ganttT=allT.filter(t=>t._f&&t._f.dataPrevista);
     const pct=ganttT.length?Math.round(ganttT.filter(t=>t._f.status==='done').length/ganttT.length*100):0;
     const pctColor=pct===100?'#15803d':pct>=50?'#a16207':'#dc2626';
+    // Mês em que o deal terminou suas últimas tarefas (para rótulo "Concluído Xxx/YY")
+    const dealLastMk=ganttT.length?Math.max(...ganttT.map(t=>_monthKey(t._f.dataPrevista))):null;
+    const dealLastLabel=dealLastMk!==null?(months.find(m=>m.mk===dealLastMk)?.label||''):'';
     h+=`<tr style="background:#eef2ff;cursor:pointer" class="gn-deal-row" data-gndeal="${escapeHtml(c.id)}">
       <td style="padding:.4rem .75rem;font-weight:700;font-size:.75rem;color:#3730a3;position:sticky;left:0;background:#eef2ff;border-top:2px solid #c7d2fe">
         ${exp?'▾':'▸'} ${escapeHtml(c.name)} <span style="font-weight:400;font-size:.65rem;color:#6366f1;margin-left:.3rem">${sdLbl}</span>
@@ -3167,19 +3170,16 @@ function renderGanttIntegracao(){
         if(!upTo.length) return _ganttCell('',m.mk===todMk);
         if(m.mk<=todMk){
           const inM=upTo.filter(t=>_monthKey(t._f.dataPrevista)===m.mk);
-          // Mês atual: tarefas em andamento este mês têm prioridade sobre atrasos acumulados do passado
           if(m.mk===todMk && inM.some(t=>t._f.status==='ontrack')) return _ganttCell('track',true);
-          // Alinha com _blocoMonthStatus: late se status==='late' OU se mês de vencimento é passado e não concluído
           const hasLate=upTo.some(t=>{const tMk=_monthKey(t._f.dataPrevista);return t._f.status==='late'||(tMk<todMk&&t._f.status!=='done');});
           if(hasLate) return _ganttCell('late',m.mk===todMk);
-          if(upTo.every(t=>t._f.status==='done')) return _ganttCell('done',m.mk===todMk,m.label);
+          if(upTo.every(t=>t._f.status==='done')) return _ganttCell('done',m.mk===todMk,dealLastLabel);
           if(upTo.some(t=>t._f.status==='done'||t._f.status==='ontrack')) return _ganttCell('track',m.mk===todMk);
           return _ganttCell('plan',m.mk===todMk);
         } else {
-          // Futuro: só olha tarefas que vencem APÓS hoje – não carrega atraso do passado
           const fwd=upTo.filter(t=>_monthKey(t._f.dataPrevista)>todMk);
           if(!fwd.length) return _ganttCell('',false);
-          if(fwd.every(t=>t._f.status==='done')) return _ganttCell('done',false,m.label);
+          if(fwd.every(t=>t._f.status==='done')) return _ganttCell('done',false,dealLastLabel);
           if(fwd.some(t=>t._f.status==='late'||(_monthKey(t._f.dataPrevista)<todMk&&t._f.status!=='done'))) return _ganttCell('late',false);
           if(fwd.some(t=>t._f.status==='done'||t._f.status==='ontrack')) return _ganttCell('track',false);
           return _ganttCell('plan',false);
@@ -3204,11 +3204,14 @@ function renderGanttIntegracao(){
         h+=`<tr style="background:#f1f5f9"><td colspan="${months.length+2}" style="padding:.35rem .75rem .35rem 1.5rem;font-weight:700;font-size:.72rem;color:var(--bhub-navy);position:sticky;left:0;background:#f1f5f9;border-top:1px solid var(--bhub-border)">${escapeHtml(area)}</td></tr>`;
         visBlocos.forEach(bloco=>{
           const bt=byArea[area][bloco];
+          // Mês em que este bloco concluiu suas últimas tarefas
+          const btWithDate=bt.filter(t=>t._f&&t._f.dataPrevista);
+          const btLastMk=btWithDate.length?Math.max(...btWithDate.map(t=>_monthKey(t._f.dataPrevista))):null;
+          const btLastLabel=btLastMk!==null?(months.find(m=>m.mk===btLastMk)?.label||''):'';
           h+=`<tr><td style="padding:.3rem .75rem .3rem 1.8rem;position:sticky;left:0;background:white;border-right:1px solid var(--bhub-border);font-size:.72rem;cursor:pointer;text-decoration-color:#c7d2fe" class="gn-bloco-lbl" data-gnid="${escapeHtml(c.id)}" data-gnbloco="${escapeHtml(bloco)}" title="Ver todas as tarefas deste bloco"><span style="color:inherit">${escapeHtml(bloco)}</span> <span style="font-size:.6rem;color:#a5b4fc">▾</span></td><td style="background:white"></td>${months.map(m=>{
             const st=_blocoMonthStatus(bt,m.mk,today);
             const inM=bt.filter(t=>t._f&&t._f.dataPrevista&&_monthKey(t._f.dataPrevista)===m.mk);
             const overdueT=bt.filter(t=>t._f&&t._f.dataPrevista&&_monthKey(t._f.dataPrevista)<m.mk&&t._f.status==='late');
-            // isOverdue: há herança de meses anteriores e este mês NÃO tem tarefas próprias atrasadas
             const isOverdue=overdueT.length>0&&!inM.some(t=>t._f&&t._f.status==='late');
             const popTasks=inM.length?inM:overdueT;
             if(!window._gnPop) window._gnPop={};
@@ -3217,7 +3220,7 @@ function renderGanttIntegracao(){
             const t2=m.mk===todMk?'today-gantt':'';
             if(!st) return `<td class="gantt-cell gantt-empty ${t2}" data-gn="${key}">—</td>`;
             const cfg={done:{c:'gantt-done',bg:'#16a34a',lbl:'Concluído'},track:{c:'gantt-track',bg:'#ca8a04',lbl:'Em andamento'},late:{c:'gantt-late',bg:'#dc2626',lbl:'Atrasado'},'late-prior':{c:'gantt-late',bg:'#dc2626',lbl:'Atrasado ⚠️'},plan:{c:'gantt-plan',bg:'#94a3b8',lbl:'Planejado'}}[st];
-            const lbl2=(st==='done')?`Concluído ${m.label}`:cfg.lbl;
+            const lbl2=(st==='done')?`Concluído ${btLastLabel}`:cfg.lbl;
             return `<td class="gantt-cell ${cfg.c} ${t2}" data-gn="${key}" title="${lbl2}"><span class="gantt-dot" style="background:${cfg.bg}"></span><span class="gantt-lbl">${lbl2}</span></td>`;
           }).join('')}</tr>`;
         });
