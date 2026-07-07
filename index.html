@@ -2135,11 +2135,10 @@ function renderTechDashboard(){
 }
 
 function renderGestao(){
-  // Sub-tabs: 'hb' (Visão Executiva, admin default), 'gantt' (admin), 'tarefas' (todos), 'reuniao' (feature-flagged)
-  const canSeeReuniao = session?.email === 'thiago.lobato@bhub.ai';
+  // Sub-tabs: 'hb' (Visão Executiva, admin default), 'gantt' (admin), 'tarefas' (todos)
   if(!view.acompSubTab) view.acompSubTab = canAdmin() ? 'hb' : 'tarefas';
   if((view.acompSubTab==='hb'||view.acompSubTab==='gantt') && !canAdmin()) view.acompSubTab='tarefas';
-  if(view.acompSubTab==='reuniao' && !canSeeReuniao) view.acompSubTab = canAdmin() ? 'hb' : 'tarefas';
+  if(view.acompSubTab==='reuniao') view.acompSubTab = canAdmin() ? 'hb' : 'tarefas';
 
   // Shared tab bar (admin only)
   function _gestaoTabBar(){
@@ -2154,18 +2153,11 @@ function renderGestao(){
         <span style="background:#e0e7ff;color:#3730a3;font-size:.62rem;padding:.1rem .4rem;border-radius:999px;margin-left:.3rem;font-weight:700">Admin</span>
       </button>
       <button class="acomp-subtab" data-tab="tarefas" style="padding:.5rem 1rem;font-size:.8rem;${act('tarefas')};cursor:pointer;background:none;border-left:none;border-right:none;border-top:none">Tarefas Atrasadas</button>
-      ${canSeeReuniao ? `<button class="acomp-subtab" data-tab="reuniao" style="padding:.5rem 1rem;font-size:.8rem;${act('reuniao')};cursor:pointer;background:none;border-left:none;border-right:none;border-top:none">📋 Reunião <span style="background:#fef3c7;color:#92400e;font-size:.6rem;padding:.1rem .4rem;border-radius:999px;margin-left:.25rem;font-weight:700">Beta</span></button>` : ''}
     </div>`);
     bar.querySelectorAll('.acomp-subtab').forEach(btn => btn.addEventListener('click', () => { view.acompSubTab = btn.dataset.tab; render(); }));
     return bar;
   }
 
-  if(view.acompSubTab === 'reuniao' && canSeeReuniao) {
-    const wrap = el('<div class="space-y-4"></div>');
-    wrap.appendChild(_gestaoTabBar());
-    wrap.appendChild(renderReuniao());
-    return wrap;
-  }
 
   if(view.acompSubTab === 'hb' && canAdmin()) {
     const wrap = el('<div class="space-y-4"></div>');
@@ -2393,7 +2385,7 @@ function renderReuniao(){
   const selected = meetings.find(m => m.id === view.reuniaoWeekId) || null;
   const items = selected ? (state.meetingItems||[]).filter(mi => mi.meeting_id === selected.id) : [];
 
-  const wrap = el('<div style="display:flex;height:720px;border:0.5px solid var(--bhub-border);border-radius:.75rem;overflow:hidden;background:#fff"></div>');
+  const wrap = el('<div style="display:flex;height:calc(100vh - 175px);min-height:500px;border:0.5px solid var(--bhub-border);border-radius:.75rem;overflow:hidden;background:#fff"></div>');
 
   // ── LEFT PANEL ────────────────────────────────────────────────────
   const left = el(`<div style="width:${view.reuniaoPanelW}px;min-width:100px;max-width:280px;flex-shrink:0;border-right:0.5px solid var(--bhub-border);background:#fafafa;display:flex;flex-direction:column;overflow:hidden"></div>`);
@@ -2485,13 +2477,10 @@ function renderReuniao(){
 
 function renderMeetingDoc(meeting, items){
   const wd = new Date(meeting.week_date + 'T00:00:00');
-  const statusLabel = {draft:'Rascunho', published:'Publicada', closed:'Encerrada'}[meeting.status] || meeting.status;
-  const statusStyle = meeting.status==='draft'
-    ? 'background:#f1f5f9;color:#64748b'
-    : meeting.status==='published'
-    ? 'background:#fef3c7;color:#92400e'
-    : 'background:#d1fae5;color:#065f46';
-  const canEdit = canAdmin() && meeting.status !== 'closed';
+  const today = new Date(); today.setHours(0,0,0,0);
+  const isPast = wd < today;
+  // Past meetings: only admin can edit. Future/today: everyone can edit.
+  const canEdit = isPast ? canAdmin() : true;
 
   const SECTIONS = [
     { key:'pauta',    label:'Pauta',           icon:'📋' },
@@ -2509,9 +2498,7 @@ function renderMeetingDoc(meeting, items){
       <p style="font-size:.82rem;color:var(--bhub-muted);margin:0">${wd.toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</p>
     </div>
     <div style="display:flex;align-items:center;gap:.4rem;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
-      <span style="font-size:.7rem;font-weight:600;padding:.2rem .7rem;border-radius:999px;${statusStyle}">${statusLabel}</span>
-      ${canAdmin() && meeting.status==='draft' ? `<button id="rnPublishBtn" style="font-size:.7rem;padding:.2rem .7rem;border-radius:999px;border:0.5px solid #0171E4;color:#0171E4;background:#fff;cursor:pointer;font-weight:600">Publicar</button>` : ''}
-      ${canAdmin() && meeting.status==='published' ? `<button id="rnCloseBtn" style="font-size:.7rem;padding:.2rem .7rem;border-radius:999px;border:0.5px solid #16a34a;color:#16a34a;background:#fff;cursor:pointer;font-weight:600">Encerrar</button>` : ''}
+      ${isPast && !canAdmin() ? `<span style="font-size:.7rem;color:var(--bhub-muted);padding:.2rem .6rem;border-radius:999px;background:#f1f5f9">🔒 Somente leitura</span>` : ''}
       ${canAdmin() ? `<button id="rnDeleteBtn" style="font-size:.7rem;padding:.2rem .7rem;border-radius:999px;border:0.5px solid #fca5a5;color:#dc2626;background:#fff;cursor:pointer">Excluir</button>` : ''}
     </div>
   </div>`);
@@ -2580,17 +2567,6 @@ function renderMeetingDoc(meeting, items){
   });
 
   // ── Header button events ──────────────────────────────────────────
-  doc.querySelector('#rnPublishBtn')?.addEventListener('click', async ()=>{
-    const {error} = await supa.from('weekly_meetings').update({status:'published'}).eq('id', meeting.id);
-    if(error){alert('Erro: '+(error.message||error)); return;}
-    meeting.status = 'published'; render();
-  });
-  doc.querySelector('#rnCloseBtn')?.addEventListener('click', async ()=>{
-    if(!confirm('Encerrar esta reunião? Não será mais possível editar.')) return;
-    const {error} = await supa.from('weekly_meetings').update({status:'closed'}).eq('id', meeting.id);
-    if(error){alert('Erro: '+(error.message||error)); return;}
-    meeting.status = 'closed'; render();
-  });
   doc.querySelector('#rnDeleteBtn')?.addEventListener('click', ()=>{
     if(!confirm('Excluir esta reunião e todo o conteúdo? Esta ação é irreversível.')) return;
     (async()=>{
@@ -3239,6 +3215,7 @@ function renderShell(){
   else if(view.tab==='raid') content.appendChild(renderRaidPortfolio());
   else if(view.tab==='gestao' && canViewAcompanhamento()) content.appendChild(renderGestao());
   else if(view.tab==='lider' && isLider()) content.appendChild(renderLiderPanel());
+  else if(view.tab==='reuniao') content.appendChild(renderReuniao());
   else if(view.tab==='tech_tarefas') content.appendChild(renderTechTarefas());
   else if(view.tab==='template') content.appendChild(renderTemplate());
   else if(view.tab==='deal') content.appendChild(renderDeal());
@@ -3261,6 +3238,7 @@ function renderSidebar(){
     const tabs = [];
     if(canViewAcompanhamento()) tabs.push(['gestao', 'Gestão', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><polyline points="8 21 12 17 16 21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>']);
     if(isLider()) tabs.push(['lider', 'Painel do Líder', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/><line x1="22" y1="11" x2="22" y2="17"/><line x1="19" y1="14" x2="25" y2="14"/></svg>']);
+    tabs.push(['reuniao', 'Reunião', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="14" x2="13" y2="14"/></svg>']);
     return tabs;
   })();
   const portfolioTabs = isTech ? [
