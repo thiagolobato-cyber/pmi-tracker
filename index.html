@@ -2385,7 +2385,7 @@ function renderReuniao(){
   const selected = meetings.find(m => m.id === view.reuniaoWeekId) || null;
   const items = selected ? (state.meetingItems||[]).filter(mi => mi.meeting_id === selected.id) : [];
 
-  const wrap = el('<div style="display:flex;height:calc(100vh - 175px);min-height:500px;border:0.5px solid var(--bhub-border);border-radius:.75rem;overflow:hidden;background:#fff"></div>');
+  const wrap = el('<div style="display:flex;height:calc(100vh - 112px);min-height:500px;border:0.5px solid var(--bhub-border);border-radius:.75rem;overflow:hidden;background:#fff"></div>');
 
   // ── LEFT PANEL ────────────────────────────────────────────────────
   const left = el(`<div style="width:${view.reuniaoPanelW}px;min-width:100px;max-width:280px;flex-shrink:0;border-right:0.5px solid var(--bhub-border);background:#fafafa;display:flex;flex-direction:column;overflow:hidden"></div>`);
