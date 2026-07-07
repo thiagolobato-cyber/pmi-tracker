@@ -1059,6 +1059,24 @@ async function reloadState(){
     if(!state.deals[r.company_id]) continue;
     state.deals[r.company_id].health.push(healthFromDb(r));
   }
+  // Auto-cleanup: clear bloqueio on tasks that are done OR linked to closed RAID items
+  const closedRaidIds = new Set(state.raid.filter(r=>r.status==='closed').map(r=>r.id));
+  const cleanupIds = [];
+  for(const d of Object.values(state.deals)){
+    for(const t of (d.tasks||[])){
+      if(t.bloqueio !== 'Sim') continue;
+      const isDone = t.completado >= 100 || !!t.dataRealConclusao;
+      const linkedToClosed = t.raidId && closedRaidIds.has(t.raidId);
+      if(isDone || linkedToClosed){
+        t.bloqueio='Não'; t.bloqueioDescricao=''; t.raidId=null;
+        cleanupIds.push(t.id);
+      }
+    }
+  }
+  // Single batch update so the saving indicator shows briefly and resolves cleanly
+  if(cleanupIds.length > 0){
+    await supa.from('tasks').update({bloqueio:'Não',bloqueio_descricao:'',raid_id:null}).in('id', cleanupIds);
+  }
 }
 
 /* ---------- Deal helpers ---------- */
@@ -2135,11 +2153,10 @@ function renderTechDashboard(){
 }
 
 function renderGestao(){
-  // Sub-tabs: 'hb' (Visão Executiva, admin default), 'gantt' (admin), 'tarefas' (todos), 'reuniao' (feature-flagged)
-  const canSeeReuniao = session?.email === 'thiago.lobato@bhub.ai';
+  // Sub-tabs: 'hb' (Visão Executiva, admin default), 'gantt' (admin), 'tarefas' (todos)
   if(!view.acompSubTab) view.acompSubTab = canAdmin() ? 'hb' : 'tarefas';
   if((view.acompSubTab==='hb'||view.acompSubTab==='gantt') && !canAdmin()) view.acompSubTab='tarefas';
-  if(view.acompSubTab==='reuniao' && !canSeeReuniao) view.acompSubTab = canAdmin() ? 'hb' : 'tarefas';
+  if(view.acompSubTab==='reuniao') view.acompSubTab = canAdmin() ? 'hb' : 'tarefas';
 
   // Shared tab bar (admin only)
   function _gestaoTabBar(){
@@ -2154,18 +2171,11 @@ function renderGestao(){
         <span style="background:#e0e7ff;color:#3730a3;font-size:.62rem;padding:.1rem .4rem;border-radius:999px;margin-left:.3rem;font-weight:700">Admin</span>
       </button>
       <button class="acomp-subtab" data-tab="tarefas" style="padding:.5rem 1rem;font-size:.8rem;${act('tarefas')};cursor:pointer;background:none;border-left:none;border-right:none;border-top:none">Tarefas Atrasadas</button>
-      ${canSeeReuniao ? `<button class="acomp-subtab" data-tab="reuniao" style="padding:.5rem 1rem;font-size:.8rem;${act('reuniao')};cursor:pointer;background:none;border-left:none;border-right:none;border-top:none">📋 Reunião <span style="background:#fef3c7;color:#92400e;font-size:.6rem;padding:.1rem .4rem;border-radius:999px;margin-left:.25rem;font-weight:700">Beta</span></button>` : ''}
     </div>`);
     bar.querySelectorAll('.acomp-subtab').forEach(btn => btn.addEventListener('click', () => { view.acompSubTab = btn.dataset.tab; render(); }));
     return bar;
   }
 
-  if(view.acompSubTab === 'reuniao' && canSeeReuniao) {
-    const wrap = el('<div class="space-y-4"></div>');
-    wrap.appendChild(_gestaoTabBar());
-    wrap.appendChild(renderReuniao());
-    return wrap;
-  }
 
   if(view.acompSubTab === 'hb' && canAdmin()) {
     const wrap = el('<div class="space-y-4"></div>');
@@ -2393,7 +2403,7 @@ function renderReuniao(){
   const selected = meetings.find(m => m.id === view.reuniaoWeekId) || null;
   const items = selected ? (state.meetingItems||[]).filter(mi => mi.meeting_id === selected.id) : [];
 
-  const wrap = el('<div style="display:flex;height:720px;border:0.5px solid var(--bhub-border);border-radius:.75rem;overflow:hidden;background:#fff"></div>');
+  const wrap = el('<div style="display:flex;height:calc(100vh - 112px);min-height:500px;border:0.5px solid var(--bhub-border);border-radius:.75rem;overflow:hidden;background:#fff"></div>');
 
   // ── LEFT PANEL ────────────────────────────────────────────────────
   const left = el(`<div style="width:${view.reuniaoPanelW}px;min-width:100px;max-width:280px;flex-shrink:0;border-right:0.5px solid var(--bhub-border);background:#fafafa;display:flex;flex-direction:column;overflow:hidden"></div>`);
@@ -2404,31 +2414,37 @@ function renderReuniao(){
   </div>`);
   left.appendChild(leftHeader);
 
-  const weekList = el('<div style="flex:1;overflow-y:auto;padding:.25rem 0"></div>');
+  const weekList = el('<div style="flex:1;overflow-y:auto;padding-top:.25rem;padding-bottom:.25rem"></div>');
   if(meetings.length === 0){
     weekList.appendChild(el('<div style="padding:1.25rem .75rem;font-size:.73rem;color:var(--bhub-muted);text-align:center;line-height:1.5">Nenhuma reunião.<br>Clique + para criar.</div>'));
+  } else {
+    let lastMonthKey = null;
+    meetings.forEach(m => {
+      const d = new Date(m.week_date + 'T00:00:00');
+      const monthKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+
+      // Month group header when month changes
+      if(monthKey !== lastMonthKey){
+        const monthLabel = d.toLocaleDateString('pt-BR',{month:'short',year:'numeric'})
+          .replace('.','').toUpperCase(); // "JUL 2026"
+        weekList.appendChild(el(`<div style="padding:.3rem .75rem .15rem;font-size:.58rem;font-weight:700;letter-spacing:.07em;color:var(--bhub-muted);text-transform:uppercase;background:#f4f1e8;${lastMonthKey ? 'border-top:0.5px solid var(--bhub-border)' : ''}">${monthLabel}</div>`));
+        lastMonthKey = monthKey;
+      }
+
+      const label = d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
+      const yr    = d.getFullYear().toString().slice(-2);
+      const dot   = m.status==='closed' ? '#16a34a' : m.status==='published' ? '#d97706' : '#94a3b8';
+      const isAct = m.id === view.reuniaoWeekId;
+      const row = el(`<div style="padding:.4rem .75rem;cursor:pointer;display:flex;align-items:center;gap:.45rem;border-left:2.5px solid ${isAct?'#0171E4':'transparent'};background:${isAct?'#eff6ff':'transparent'};transition:background .1s">
+        <span style="width:7px;height:7px;border-radius:50%;background:${dot};flex-shrink:0"></span>
+        <span style="font-size:.75rem;color:${isAct?'#0171E4':'var(--bhub-navy)'};font-weight:${isAct?'600':'400'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Qua ${label}/${yr}</span>
+      </div>`);
+      row.addEventListener('click', ()=>{ view.reuniaoWeekId = m.id; render(); });
+      weekList.appendChild(row);
+    });
   }
-  meetings.forEach(m => {
-    const d = new Date(m.week_date + 'T00:00:00');
-    const label = d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
-    const yr    = d.getFullYear().toString().slice(-2);
-    const dot   = m.status==='closed' ? '#16a34a' : m.status==='published' ? '#d97706' : '#94a3b8';
-    const isAct = m.id === view.reuniaoWeekId;
-    const row = el(`<div style="padding:.4rem .75rem;cursor:pointer;display:flex;align-items:center;gap:.45rem;border-left:2.5px solid ${isAct?'#0171E4':'transparent'};background:${isAct?'#eff6ff':'transparent'};transition:background .1s">
-      <span style="width:7px;height:7px;border-radius:50%;background:${dot};flex-shrink:0"></span>
-      <span style="font-size:.75rem;color:${isAct?'#0171E4':'var(--bhub-navy)'};font-weight:${isAct?'600':'400'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Qua ${label}/${yr}</span>
-    </div>`);
-    row.addEventListener('click', ()=>{ view.reuniaoWeekId = m.id; render(); });
-    weekList.appendChild(row);
-  });
   left.appendChild(weekList);
 
-  // Legend
-  left.appendChild(el(`<div style="padding:.4rem .75rem;border-top:0.5px solid var(--bhub-border);flex-shrink:0;display:flex;gap:.5rem;flex-direction:column">
-    <div style="display:flex;align-items:center;gap:.3rem"><span style="width:6px;height:6px;border-radius:50%;background:#94a3b8;display:inline-block;flex-shrink:0"></span><span style="font-size:.62rem;color:var(--bhub-muted)">Rascunho</span></div>
-    <div style="display:flex;align-items:center;gap:.3rem"><span style="width:6px;height:6px;border-radius:50%;background:#d97706;display:inline-block;flex-shrink:0"></span><span style="font-size:.62rem;color:var(--bhub-muted)">Publicada</span></div>
-    <div style="display:flex;align-items:center;gap:.3rem"><span style="width:6px;height:6px;border-radius:50%;background:#16a34a;display:inline-block;flex-shrink:0"></span><span style="font-size:.62rem;color:var(--bhub-muted)">Encerrada</span></div>
-  </div>`));
 
   wrap.appendChild(left);
 
@@ -2473,105 +2489,144 @@ function renderReuniao(){
 
 function renderMeetingDoc(meeting, items){
   const wd = new Date(meeting.week_date + 'T00:00:00');
-  const statusLabel = {draft:'Rascunho', published:'Publicada', closed:'Encerrada'}[meeting.status] || meeting.status;
-  const statusStyle = meeting.status==='draft'
-    ? 'background:#f1f5f9;color:#64748b'
-    : meeting.status==='published'
-    ? 'background:#fef3c7;color:#92400e'
-    : 'background:#d1fae5;color:#065f46';
-  const canEdit = canAdmin() && meeting.status !== 'closed';
+  const today = new Date(); today.setHours(0,0,0,0);
+  const isPast = wd < today;
+  // Past meetings: only admin can edit. Future/today: everyone can edit.
+  const canEdit = isPast ? canAdmin() : true;
 
   const SECTIONS = [
     { key:'pauta',    label:'Pauta',           icon:'📋' },
-    { key:'bloqueio', label:'Bloqueios',        icon:'🚧' },
     { key:'ajuda',    label:'Pedidos de ajuda', icon:'🙋' },
     { key:'combinado',label:'Combinados',       icon:'✅' },
   ];
 
   // Document wrapper — generous padding, page feel
-  const doc = el('<div style="max-width:700px;padding:2rem 2.5rem 3rem"></div>');
+  const doc = el('<div style="padding:2rem 2.5rem 3rem"></div>');
 
   // ── Header ────────────────────────────────────────────────────────
-  const hdr = el(`<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:.75rem;padding-bottom:1.25rem;border-bottom:1px solid var(--bhub-border);margin-bottom:2rem">
+  const hdr = el(`<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:.75rem;padding-bottom:.75rem;border-bottom:1px solid var(--bhub-border);margin-bottom:1rem">
     <div>
-      <h2 style="font-size:1.25rem;font-weight:700;color:var(--bhub-navy);margin:0 0 .3rem;letter-spacing:-.01em">Reunião de Integração</h2>
+      <h2 style="font-size:1.25rem;font-weight:700;color:var(--bhub-navy);margin:0 0 .3rem;letter-spacing:-.01em">Reunião Semanal</h2>
       <p style="font-size:.82rem;color:var(--bhub-muted);margin:0">${wd.toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</p>
     </div>
     <div style="display:flex;align-items:center;gap:.4rem;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
-      <span style="font-size:.7rem;font-weight:600;padding:.2rem .7rem;border-radius:999px;${statusStyle}">${statusLabel}</span>
-      ${canAdmin() && meeting.status==='draft' ? `<button id="rnPublishBtn" style="font-size:.7rem;padding:.2rem .7rem;border-radius:999px;border:0.5px solid #0171E4;color:#0171E4;background:#fff;cursor:pointer;font-weight:600">Publicar</button>` : ''}
-      ${canAdmin() && meeting.status==='published' ? `<button id="rnCloseBtn" style="font-size:.7rem;padding:.2rem .7rem;border-radius:999px;border:0.5px solid #16a34a;color:#16a34a;background:#fff;cursor:pointer;font-weight:600">Encerrar</button>` : ''}
+      ${isPast && !canAdmin() ? `<span style="font-size:.7rem;color:var(--bhub-muted);padding:.2rem .6rem;border-radius:999px;background:#f1f5f9">🔒 Somente leitura</span>` : ''}
       ${canAdmin() ? `<button id="rnDeleteBtn" style="font-size:.7rem;padding:.2rem .7rem;border-radius:999px;border:0.5px solid #fca5a5;color:#dc2626;background:#fff;cursor:pointer">Excluir</button>` : ''}
     </div>
   </div>`);
   doc.appendChild(hdr);
 
+  // ── Rich-text editor styles (injected once) ──────────────────────
+  if(!document.getElementById('rn-editor-styles')){
+    const s = document.createElement('style'); s.id = 'rn-editor-styles';
+    s.textContent = `.rn-editor ul{list-style:disc;padding-left:1.4em;margin:.2em 0}.rn-editor ol{list-style:decimal;padding-left:1.4em;margin:.2em 0}.rn-editor li{margin:.05em 0}.rn-editor b,.rn-editor strong{font-weight:700}.rn-editor i,.rn-editor em{font-style:italic}.rn-editor u{text-decoration:underline}.rn-editor p{margin:.1em 0}`;
+    document.head.appendChild(s);
+  }
+
+  // Helper: detect if stored content is HTML or plain text
+  const toHtml = str => {
+    if(!str) return '';
+    if(/<[a-z][\s\S]*>/i.test(str)) return str; // already HTML
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+  };
+
   // ── Sections ──────────────────────────────────────────────────────
   SECTIONS.forEach(sec => {
-    // Aggregate all existing items for this section (legacy support: merge into one blob)
     const secItems = items
       .filter(i => i.section === sec.key)
       .sort((a,b) => (a.created_at||'').localeCompare(b.created_at||''));
 
-    // Primary item = most recently updated (the "master" blob for this section)
     const primaryItem = [...secItems].sort((a,b) =>
       ((b.updated_at||b.created_at||'').localeCompare(a.updated_at||a.created_at||''))
     )[0] || null;
 
-    // Content = join all items (migration from card model) or primary item content
-    const textContent = primaryItem
-      ? secItems.map(i => i.content).join('\n')
-      : '';
+    const textContent = primaryItem ? (primaryItem.content || '') : '';
+    const htmlContent = toHtml(textContent);
 
-    const secEl = el('<div style="margin-bottom:2.25rem"></div>');
+    const secEl = el('<div style="margin-bottom:0.5rem"></div>');
 
-    // Section label — subtle, document-style
-    secEl.appendChild(el(`<div style="display:flex;align-items:center;gap:.4rem;margin-bottom:.5rem">
+    // Section label
+    secEl.appendChild(el(`<div style="display:flex;align-items:center;gap:.4rem;margin-bottom:.25rem">
       <span style="font-size:.8rem">${sec.icon}</span>
       <span style="font-size:.7rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--bhub-muted)">${sec.label}</span>
     </div>`));
 
     if(canEdit){
-      // Auto-grow textarea — seamless document feel
-      const ta = el(`<textarea data-sec="${sec.key}" style="width:100%;min-height:110px;padding:.6rem 0;border:none;border-bottom:1.5px solid var(--bhub-border);border-radius:0;font-size:.92rem;font-family:inherit;line-height:1.8;color:var(--bhub-navy);background:transparent;resize:none;overflow:hidden;display:block;outline:none;transition:border-color .15s" placeholder="Escreva aqui…">${escapeHtml(textContent)}</textarea>`);
+      const edWrap = el('<div></div>');
 
-      // Auto-grow on input
-      const grow = () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; };
-      ta.addEventListener('input', grow);
-      setTimeout(grow, 0);
+      // ── Mini toolbar ──
+      const toolbar = el(`<div style="display:none;flex-direction:row;gap:2px;padding:.2rem 0;margin-bottom:.1rem;align-items:center;flex-wrap:wrap">
+        <button data-cmd="bold"               title="Negrito (⌘B)"         style="font-size:.73rem;font-weight:700;width:26px;height:22px;border:0.5px solid var(--bhub-border);border-radius:4px;cursor:pointer;background:#fff;color:var(--bhub-navy)">B</button>
+        <button data-cmd="italic"             title="Itálico (⌘I)"         style="font-size:.73rem;font-style:italic;width:26px;height:22px;border:0.5px solid var(--bhub-border);border-radius:4px;cursor:pointer;background:#fff;color:var(--bhub-navy)">I</button>
+        <button data-cmd="underline"          title="Sublinhado (⌘U)"      style="font-size:.73rem;text-decoration:underline;width:26px;height:22px;border:0.5px solid var(--bhub-border);border-radius:4px;cursor:pointer;background:#fff;color:var(--bhub-navy)">U</button>
+        <span style="width:0.5px;height:14px;background:var(--bhub-border);margin:0 3px;display:inline-block;align-self:center"></span>
+        <button data-cmd="insertUnorderedList" title="Lista com marcadores" style="font-size:.68rem;padding:0 .4rem;height:22px;border:0.5px solid var(--bhub-border);border-radius:4px;cursor:pointer;background:#fff;color:var(--bhub-navy)">• lista</button>
+        <button data-cmd="insertOrderedList"   title="Lista numerada"       style="font-size:.68rem;padding:0 .4rem;height:22px;border:0.5px solid var(--bhub-border);border-radius:4px;cursor:pointer;background:#fff;color:var(--bhub-navy)">1. lista</button>
+      </div>`);
 
-      ta.addEventListener('focus', () => { ta.style.borderBottomColor = '#0171E4'; });
-      ta.addEventListener('blur', () => {
-        ta.style.borderBottomColor = 'var(--bhub-border)';
-        saveSection(meeting.id, sec.key, ta.value.trim(), primaryItem, secEl, secItems);
+      // ── Field wrapper (position:relative only here, so placeholder aligns to field) ──
+      const fieldWrap = el('<div style="position:relative"></div>');
+
+      // ── Contenteditable ──
+      const edDiv = el(`<div contenteditable="true" class="rn-editor" data-sec="${sec.key}" style="width:100%;min-height:36px;padding:.3rem 0;border:none;border-bottom:1.5px solid var(--bhub-border);font-size:.82rem;font-family:inherit;line-height:1.6;color:var(--bhub-navy);background:transparent;outline:none;transition:border-color .15s;word-break:break-word"></div>`);
+      if(htmlContent) edDiv.innerHTML = htmlContent;
+
+      // Placeholder — absolute within fieldWrap only
+      const ph = el(`<span style="position:absolute;top:.3rem;left:0;font-size:.82rem;color:#9ca3af;pointer-events:none;line-height:1.6">Escreva aqui…</span>`);
+      const updatePh = () => { ph.style.display = edDiv.textContent.trim() === '' ? '' : 'none'; };
+      edDiv.addEventListener('input', updatePh);
+      updatePh();
+
+      // Focus / blur
+      let blurTimer;
+      edDiv.addEventListener('focus', () => {
+        clearTimeout(blurTimer);
+        toolbar.style.display = 'flex';
+        edDiv.style.borderBottomColor = '#0171E4';
+        edDiv.style.background = 'transparent';
+      });
+      edDiv.addEventListener('blur', () => {
+        blurTimer = setTimeout(() => {
+          toolbar.style.display = 'none';
+          edDiv.style.borderBottomColor = 'var(--bhub-border)';
+          updatePh();
+          if(edDiv.textContent.trim()) saveSection(meeting.id, sec.key, edDiv.innerHTML, primaryItem, secEl, secItems);
+        }, 200);
       });
 
-      secEl.appendChild(ta);
+      // Hover
+      edDiv.addEventListener('mouseenter', () => { if(document.activeElement !== edDiv){ edDiv.style.background='rgba(1,113,228,0.04)'; edDiv.style.borderBottomColor='#93c5fd'; } });
+      edDiv.addEventListener('mouseleave', () => { if(document.activeElement !== edDiv){ edDiv.style.background='transparent'; edDiv.style.borderBottomColor='var(--bhub-border)'; } });
+
+      // Toolbar clicks — mousedown prevents blur
+      toolbar.querySelectorAll('button[data-cmd]').forEach(btn => {
+        btn.addEventListener('mousedown', e => { e.preventDefault(); document.execCommand(btn.dataset.cmd, false, null); });
+      });
+
+      fieldWrap.appendChild(ph);
+      fieldWrap.appendChild(edDiv);
+      edWrap.appendChild(toolbar);
+      edWrap.appendChild(fieldWrap);
+      secEl.appendChild(edWrap);
     } else {
-      // Read-only — same visual weight, no border
-      secEl.appendChild(el(`<div style="font-size:.92rem;line-height:1.8;color:${textContent ? 'var(--bhub-navy)' : 'var(--bhub-muted)'};white-space:pre-wrap;padding:.6rem 0;border-bottom:1px solid var(--bhub-border);min-height:40px">${textContent ? escapeHtml(textContent) : '<em>Sem conteúdo</em>'}</div>`));
+      // Read-only — render HTML
+      const readDiv = el(`<div class="rn-editor" style="font-size:.82rem;line-height:1.6;color:var(--bhub-navy);padding:.3rem 0;border-bottom:1px solid var(--bhub-border);min-height:36px"></div>`);
+      readDiv.innerHTML = htmlContent || '<em style="color:#9ca3af">Sem conteúdo</em>';
+      secEl.appendChild(readDiv);
     }
 
-    // Editor chip — compact, below the line
+    // Editor chip — only show if section has actual text content
     const editorRow = el(`<div class="rn-erow-${sec.key}" style="display:flex;align-items:center;gap:.35rem;margin-top:.35rem;min-height:16px"></div>`);
-    if(primaryItem) editorRow.innerHTML = _editorChip(primaryItem);
+    if(primaryItem){
+      const tmp = document.createElement('div'); tmp.innerHTML = primaryItem.content || '';
+      if(tmp.textContent.trim()) editorRow.innerHTML = _editorChip(primaryItem);
+    }
     secEl.appendChild(editorRow);
 
     doc.appendChild(secEl);
   });
 
   // ── Header button events ──────────────────────────────────────────
-  doc.querySelector('#rnPublishBtn')?.addEventListener('click', async ()=>{
-    const {error} = await supa.from('weekly_meetings').update({status:'published'}).eq('id', meeting.id);
-    if(error){alert('Erro: '+(error.message||error)); return;}
-    meeting.status = 'published'; render();
-  });
-  doc.querySelector('#rnCloseBtn')?.addEventListener('click', async ()=>{
-    if(!confirm('Encerrar esta reunião? Não será mais possível editar.')) return;
-    const {error} = await supa.from('weekly_meetings').update({status:'closed'}).eq('id', meeting.id);
-    if(error){alert('Erro: '+(error.message||error)); return;}
-    meeting.status = 'closed'; render();
-  });
   doc.querySelector('#rnDeleteBtn')?.addEventListener('click', ()=>{
     if(!confirm('Excluir esta reunião e todo o conteúdo? Esta ação é irreversível.')) return;
     (async()=>{
@@ -2995,7 +3050,8 @@ function renderGanttIntegracao(){
     const sts=allBlocos.map(bt=>_blocoMonthStatus(bt,todMk,today)).filter(Boolean);
     const worst=sts.sort((a,b)=>(ORDER[a]||4)-(ORDER[b]||4))[0]||'';
     const allT=Object.values(byArea).flatMap(a=>Object.values(a).flat());
-    const pct=allT.length?Math.round(allT.filter(t=>t._f&&t._f.status==='done').length/allT.length*100):0;
+    const ganttT=allT.filter(t=>t._f&&t._f.dataPrevista);
+    const pct=ganttT.length?Math.round(ganttT.filter(t=>t._f.status==='done').length/ganttT.length*100):0;
     return {id:c.id,worst,pct};
   });
   const total=dealMeta.length;
@@ -3096,7 +3152,8 @@ function renderGanttIntegracao(){
     const sd=parseDate(c.signDate);
     const sdLbl=sd?'Ass: '+fmtDate(sd):'';
     const allT=Object.values(byArea).flatMap(a=>Object.values(a).flat());
-    const pct=allT.length?Math.round(allT.filter(t=>t._f&&t._f.status==='done').length/allT.length*100):0;
+    const ganttT=allT.filter(t=>t._f&&t._f.dataPrevista);
+    const pct=ganttT.length?Math.round(ganttT.filter(t=>t._f.status==='done').length/ganttT.length*100):0;
     const pctColor=pct===100?'#15803d':pct>=50?'#a16207':'#dc2626';
     h+=`<tr style="background:#eef2ff;cursor:pointer" class="gn-deal-row" data-gndeal="${escapeHtml(c.id)}">
       <td style="padding:.4rem .75rem;font-weight:700;font-size:.75rem;color:#3730a3;position:sticky;left:0;background:#eef2ff;border-top:2px solid #c7d2fe">
@@ -3109,16 +3166,13 @@ function renderGanttIntegracao(){
         if(!upTo.length) return _ganttCell('',m.mk===todMk);
         if(m.mk<=todMk){
           const inM=upTo.filter(t=>_monthKey(t._f.dataPrevista)===m.mk);
-          // Mês atual: tarefas em andamento este mês têm prioridade sobre atrasos acumulados do passado
           if(m.mk===todMk && inM.some(t=>t._f.status==='ontrack')) return _ganttCell('track',true);
-          // Alinha com _blocoMonthStatus: late se status==='late' OU se mês de vencimento é passado e não concluído
           const hasLate=upTo.some(t=>{const tMk=_monthKey(t._f.dataPrevista);return t._f.status==='late'||(tMk<todMk&&t._f.status!=='done');});
           if(hasLate) return _ganttCell('late',m.mk===todMk);
           if(upTo.every(t=>t._f.status==='done')) return _ganttCell('done',m.mk===todMk);
           if(upTo.some(t=>t._f.status==='done'||t._f.status==='ontrack')) return _ganttCell('track',m.mk===todMk);
           return _ganttCell('plan',m.mk===todMk);
         } else {
-          // Futuro: só olha tarefas que vencem APÓS hoje – não carrega atraso do passado
           const fwd=upTo.filter(t=>_monthKey(t._f.dataPrevista)>todMk);
           if(!fwd.length) return _ganttCell('',false);
           if(fwd.every(t=>t._f.status==='done')) return _ganttCell('done',false);
@@ -3150,7 +3204,6 @@ function renderGanttIntegracao(){
             const st=_blocoMonthStatus(bt,m.mk,today);
             const inM=bt.filter(t=>t._f&&t._f.dataPrevista&&_monthKey(t._f.dataPrevista)===m.mk);
             const overdueT=bt.filter(t=>t._f&&t._f.dataPrevista&&_monthKey(t._f.dataPrevista)<m.mk&&t._f.status==='late');
-            // isOverdue: há herança de meses anteriores e este mês NÃO tem tarefas próprias atrasadas
             const isOverdue=overdueT.length>0&&!inM.some(t=>t._f&&t._f.status==='late');
             const popTasks=inM.length?inM:overdueT;
             if(!window._gnPop) window._gnPop={};
@@ -3220,6 +3273,7 @@ function renderShell(){
   else if(view.tab==='raid') content.appendChild(renderRaidPortfolio());
   else if(view.tab==='gestao' && canViewAcompanhamento()) content.appendChild(renderGestao());
   else if(view.tab==='lider' && isLider()) content.appendChild(renderLiderPanel());
+  else if(view.tab==='reuniao') content.appendChild(renderReuniao());
   else if(view.tab==='tech_tarefas') content.appendChild(renderTechTarefas());
   else if(view.tab==='template') content.appendChild(renderTemplate());
   else if(view.tab==='deal') content.appendChild(renderDeal());
@@ -3242,6 +3296,7 @@ function renderSidebar(){
     const tabs = [];
     if(canViewAcompanhamento()) tabs.push(['gestao', 'Gestão', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><polyline points="8 21 12 17 16 21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>']);
     if(isLider()) tabs.push(['lider', 'Painel do Líder', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/><line x1="22" y1="11" x2="22" y2="17"/><line x1="19" y1="14" x2="25" y2="14"/></svg>']);
+    tabs.push(['reuniao', 'Reunião Semanal', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="14" x2="13" y2="14"/></svg>']);
     return tabs;
   })();
   const portfolioTabs = isTech ? [
@@ -5910,6 +5965,19 @@ function openRaidModal(company, raidId){
         // Sync per-deal arrays
         for(const d of Object.values(state.deals)) d.raid = (d.raid||[]).filter(r=>r.id!==existing.id);
         for(const cid of selectedDeals){ if(state.deals[cid]) state.deals[cid].raid.push(existing); }
+        // Auto-clear bloqueio on linked tasks when RAID is closed
+        if(payload.status === 'closed'){
+          const linkedTasks = [];
+          for(const d of Object.values(state.deals)){
+            for(const t of (d.tasks||[])){
+              if(t.bloqueio === 'Sim' && t.raidId === existing.id) linkedTasks.push(t);
+            }
+          }
+          for(const t of linkedTasks){
+            await supa.from('tasks').update({ bloqueio: 'Não', bloqueio_descricao: '', raid_id: null }).eq('id', t.id);
+            t.bloqueio = 'Não'; t.bloqueioDescricao = ''; t.raidId = null;
+          }
+        }
       }else{
         const { data, error } = await supa.from('raid_items').insert(raidToDb(payload)).select().single();
         if(error) throw error;
@@ -6382,6 +6450,9 @@ function openTaskModal(company, taskId){
       autoRef = String(usedNums.length ? Math.max(...usedNums)+1 : 1);
     }
     const blocoVal = (m.querySelector('[name="bloco"]')?.value||'').trim();
+    const compVal  = parseInt(m.querySelector('[name="completado"]')?.value)||existing?.completado||0;
+    const drVal    = m.querySelector('[name="dataRealConclusao"]').value||'';
+    const isDone   = compVal >= 100 || !!drVal;
     const payload = {
       ref:              autoRef,
       area:             m.querySelector('[name="area"]').value||existing?.area||'',
@@ -6391,14 +6462,14 @@ function openTaskModal(company, taskId){
       ferramenta:       existing?.ferramenta||'',
       prazo:            parseInt(prazoInput.value)||0,
       dataPrevista:     m.querySelector('#tmDueDate')?.value||'',
-      completado:       parseInt(m.querySelector('[name="completado"]')?.value)||existing?.completado||0,
-      bloqueio:         bloqSel.value||'Não',
-      bloqueioDescricao:m.querySelector('[name="bloqueioDescricao"]')?.value||'',
-      dataRealConclusao:m.querySelector('[name="dataRealConclusao"]').value||'',
+      completado:       compVal,
+      bloqueio:         isDone ? 'Não' : (bloqSel.value||'Não'),
+      bloqueioDescricao:isDone ? '' : (m.querySelector('[name="bloqueioDescricao"]')?.value||''),
+      dataRealConclusao:drVal,
       ultimoUpdate:     existing?.ultimoUpdate||'',
       proximoPasso:     existing?.proximoPasso||'',
       evidencia:        m.querySelector('[name="evidencia"]').value||'',
-      raidId:           raidSel?.value||null,
+      raidId:           isDone ? null : (raidSel?.value||null),
       phaseId:          existing?.phaseId||'',
       pendingApproval:  isNew ? !canAdmin() : (existing?.pendingApproval||false)
     };
@@ -7440,13 +7511,30 @@ function confirmDeleteModal({ title='Excluir?', ref='', description='', warning=
 /* ---------- Template ---------- */
 function renderTemplate(){
   const tpl = state.template;
+  if(!view.templateSort) view.templateSort = { field:'ref', dir:'asc' };
+  const sortField = view.templateSort.field;
+  const sortDir   = view.templateSort.dir;
+  const sortIcon  = f => sortField !== f
+    ? '<span style="color:#d1d5db;font-size:.6rem;margin-left:.2rem;vertical-align:middle">↕</span>'
+    : sortDir === 'asc'
+      ? '<span style="color:#0171E4;font-size:.6rem;margin-left:.2rem;vertical-align:middle">↑</span>'
+      : '<span style="color:#0171E4;font-size:.6rem;margin-left:.2rem;vertical-align:middle">↓</span>';
+
   const grouped = {};
   tpl.forEach(t=>{
     const a = t.area || '(sem área)';
     if(!grouped[a]) grouped[a] = [];
     grouped[a].push(t);
   });
-  Object.values(grouped).forEach(g => g.sort(sortByRef));
+  Object.values(grouped).forEach(g => {
+    g.sort((a, b) => {
+      let cmp = 0;
+      if(sortField === 'ref')     cmp = sortByRef(a, b);
+      else if(sortField === 'subarea') cmp = (a.bloco||'').localeCompare(b.bloco||'');
+      else if(sortField === 'prazo')   cmp = (a.defaultPrazo||0) - (b.defaultPrazo||0);
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+  });
   const order = sortAreaNames(Object.keys(grouped));
   const node = el(`
     <div class="space-y-4">
@@ -7516,7 +7604,15 @@ function renderTemplate(){
         <section class="bhub-card overflow-hidden">
           <div class="px-4 py-2 bg-gray-50 border-b font-semibold text-sm">${a} <span class="text-xs text-gray-500 font-normal">(${grouped[a].length})</span></div>
           <div class="scroll-x">
-            <table class="w-full"><thead><tr><th>REF</th><th class="min-w-[24rem]">TAREFA</th><th>SUB-ÁREA</th><th>OWNER PADRÃO</th><th>PRAZO (d.u.)</th><th>DEPENDE DE</th>${canEdit()?'<th></th>':''}</tr></thead>
+            <table class="w-full"><thead><tr>
+              <th data-sort="ref"     style="cursor:pointer;white-space:nowrap;user-select:none">REF${sortIcon('ref')}</th>
+              <th class="min-w-[24rem]">TAREFA</th>
+              <th data-sort="subarea" style="cursor:pointer;white-space:nowrap;user-select:none">SUB-ÁREA${sortIcon('subarea')}</th>
+              <th>OWNER PADRÃO</th>
+              <th data-sort="prazo"   style="cursor:pointer;white-space:nowrap;user-select:none">PRAZO (d.u.)${sortIcon('prazo')}</th>
+              <th>DEPENDE DE</th>
+              ${canEdit()?'<th></th>':''}
+            </tr></thead>
             <tbody>
               ${grouped[a].map(t=>{
                 const pendingTplBadge = t.pendingApproval
@@ -7552,6 +7648,20 @@ function renderTemplate(){
       </div>`}
     </div>
   `);
+  // ── Column sort ─────────────────────────────────────────────
+  node.querySelectorAll('th[data-sort]').forEach(th => {
+    th.addEventListener('click', () => {
+      const f = th.dataset.sort;
+      if(view.templateSort.field === f){
+        view.templateSort.dir = view.templateSort.dir === 'asc' ? 'desc' : 'asc';
+      } else {
+        view.templateSort.field = f;
+        view.templateSort.dir = 'asc';
+      }
+      render();
+    });
+  });
+
   // ── Sub-areas management panel (admin only) ──────────────────
   const saAddBtn = node.querySelector('#saAddBtn');
   if(saAddBtn){
