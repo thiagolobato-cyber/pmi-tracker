@@ -3051,7 +3051,8 @@ function renderGanttIntegracao(){
     const sts=allBlocos.map(bt=>_blocoMonthStatus(bt,todMk,today)).filter(Boolean);
     const worst=sts.sort((a,b)=>(ORDER[a]||4)-(ORDER[b]||4))[0]||'';
     const allT=Object.values(byArea).flatMap(a=>Object.values(a).flat());
-    const pct=allT.length?Math.round(allT.filter(t=>t._f&&t._f.status==='done').length/allT.length*100):0;
+    const ganttT=allT.filter(t=>t._f&&t._f.dataPrevista);
+    const pct=ganttT.length?Math.round(ganttT.filter(t=>t._f.status==='done').length/ganttT.length*100):0;
     return {id:c.id,worst,pct};
   });
   const total=dealMeta.length;
@@ -3152,7 +3153,8 @@ function renderGanttIntegracao(){
     const sd=parseDate(c.signDate);
     const sdLbl=sd?'Ass: '+fmtDate(sd):'';
     const allT=Object.values(byArea).flatMap(a=>Object.values(a).flat());
-    const pct=allT.length?Math.round(allT.filter(t=>t._f&&t._f.status==='done').length/allT.length*100):0;
+    const ganttT=allT.filter(t=>t._f&&t._f.dataPrevista);
+    const pct=ganttT.length?Math.round(ganttT.filter(t=>t._f.status==='done').length/ganttT.length*100):0;
     const pctColor=pct===100?'#15803d':pct>=50?'#a16207':'#dc2626';
     h+=`<tr style="background:#eef2ff;cursor:pointer" class="gn-deal-row" data-gndeal="${escapeHtml(c.id)}">
       <td style="padding:.4rem .75rem;font-weight:700;font-size:.75rem;color:#3730a3;position:sticky;left:0;background:#eef2ff;border-top:2px solid #c7d2fe">
