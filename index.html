@@ -2836,11 +2836,12 @@ function _blocoMonthStatus(tasks, mk, today){
   // Mês futuro com tarefas planejadas → em branco (ainda não iniciado)
   return '';
 }
-function _ganttCell(st, isTod){
+function _ganttCell(st, isTod, monthLabel){
   const t2 = isTod ? 'today-gantt' : '';
   if(!st) return `<td class="gantt-cell gantt-empty ${t2}">—</td>`;
   const cfg={done:{c:'gantt-done',bg:'#16a34a',lbl:'Concluído'},track:{c:'gantt-track',bg:'#ca8a04',lbl:'Em andamento'},late:{c:'gantt-late',bg:'#dc2626',lbl:'Atrasado'},'late-prior':{c:'gantt-late',bg:'#dc2626',lbl:'Atrasado ⚠️'},plan:{c:'gantt-plan',bg:'#94a3b8',lbl:'Planejado'}}[st];
-  return `<td class="gantt-cell ${cfg.c} ${t2}" title="${cfg.lbl}"><span class="gantt-dot" style="background:${cfg.bg}"></span><span class="gantt-lbl">${cfg.lbl}</span></td>`;
+  const lbl = (st==='done'&&monthLabel) ? `Concluído ${monthLabel}` : cfg.lbl;
+  return `<td class="gantt-cell ${cfg.c} ${t2}" title="${lbl}"><span class="gantt-dot" style="background:${cfg.bg}"></span><span class="gantt-lbl">${lbl}</span></td>`;
 }
 
 /* ===== Bloco detail panel (all tasks, all months) ===== */
@@ -3169,14 +3170,14 @@ function renderGanttIntegracao(){
           // Alinha com _blocoMonthStatus: late se status==='late' OU se mês de vencimento é passado e não concluído
           const hasLate=upTo.some(t=>{const tMk=_monthKey(t._f.dataPrevista);return t._f.status==='late'||(tMk<todMk&&t._f.status!=='done');});
           if(hasLate) return _ganttCell('late',m.mk===todMk);
-          if(upTo.every(t=>t._f.status==='done')) return _ganttCell('done',m.mk===todMk);
+          if(upTo.every(t=>t._f.status==='done')) return _ganttCell('done',m.mk===todMk,m.label);
           if(upTo.some(t=>t._f.status==='done'||t._f.status==='ontrack')) return _ganttCell('track',m.mk===todMk);
           return _ganttCell('plan',m.mk===todMk);
         } else {
           // Futuro: só olha tarefas que vencem APÓS hoje – não carrega atraso do passado
           const fwd=upTo.filter(t=>_monthKey(t._f.dataPrevista)>todMk);
           if(!fwd.length) return _ganttCell('',false);
-          if(fwd.every(t=>t._f.status==='done')) return _ganttCell('done',false);
+          if(fwd.every(t=>t._f.status==='done')) return _ganttCell('done',false,m.label);
           if(fwd.some(t=>t._f.status==='late'||(_monthKey(t._f.dataPrevista)<todMk&&t._f.status!=='done'))) return _ganttCell('late',false);
           if(fwd.some(t=>t._f.status==='done'||t._f.status==='ontrack')) return _ganttCell('track',false);
           return _ganttCell('plan',false);
@@ -3214,7 +3215,8 @@ function renderGanttIntegracao(){
             const t2=m.mk===todMk?'today-gantt':'';
             if(!st) return `<td class="gantt-cell gantt-empty ${t2}" data-gn="${key}">—</td>`;
             const cfg={done:{c:'gantt-done',bg:'#16a34a',lbl:'Concluído'},track:{c:'gantt-track',bg:'#ca8a04',lbl:'Em andamento'},late:{c:'gantt-late',bg:'#dc2626',lbl:'Atrasado'},'late-prior':{c:'gantt-late',bg:'#dc2626',lbl:'Atrasado ⚠️'},plan:{c:'gantt-plan',bg:'#94a3b8',lbl:'Planejado'}}[st];
-            return `<td class="gantt-cell ${cfg.c} ${t2}" data-gn="${key}" title="${cfg.lbl}"><span class="gantt-dot" style="background:${cfg.bg}"></span><span class="gantt-lbl">${cfg.lbl}</span></td>`;
+            const lbl2=(st==='done')?`Concluído ${m.label}`:cfg.lbl;
+            return `<td class="gantt-cell ${cfg.c} ${t2}" data-gn="${key}" title="${lbl2}"><span class="gantt-dot" style="background:${cfg.bg}"></span><span class="gantt-lbl">${lbl2}</span></td>`;
           }).join('')}</tr>`;
         });
       });
