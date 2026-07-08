@@ -3216,7 +3216,7 @@ function renderGanttIntegracao(){
             const btWithDate=bt.filter(t=>t._f&&t._f.dataPrevista);
             const allBlocoDone=btWithDate.length>0&&btWithDate.every(t=>t._f.status==='done');
             const btLastMk=allBlocoDone&&btWithDate.length?Math.max(...btWithDate.map(t=>_monthKey(t._f.dataPrevista))):null;
-            const btLastLabel=btLastMk!==null?(months.find(mn=>mn.mk===btLastMk)?.label||''):'';
+            const btLastLabel=(()=>{if(!btLastMk)return '';const _mn=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];const _y=Math.floor(btLastMk/100);const _m=btLastMk%100;return `${_mn[_m-1]}/${String(_y).slice(-2)}`;})();
             const lbl=(st==='done'&&!inM.length&&allBlocoDone)?`Concluído ${btLastLabel}`:cfg.lbl;
             return `<td class="gantt-cell ${cfg.c} ${t2}" data-gn="${key}" title="${lbl}"><span class="gantt-dot" style="background:${cfg.bg}"></span><span class="gantt-lbl">${lbl}</span></td>`;
           }).join('')}</tr>`;
