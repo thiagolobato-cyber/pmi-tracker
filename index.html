@@ -3210,11 +3210,13 @@ function renderGanttIntegracao(){
             const key=`${c.id}_${bloco}_${m.mk}`;
             window._gnPop[key]={bloco,month:m.label,tasks:popTasks,isOverdue};
             const t2=m.mk===todMk?'today-gantt':'';
-            if(!st) return `<td class="gantt-cell gantt-empty ${t2}" data-gn="${key}">—</td>`;
-            const cfg={done:{c:'gantt-done',bg:'#16a34a',lbl:'Concluído'},track:{c:'gantt-track',bg:'#ca8a04',lbl:'Em andamento'},late:{c:'gantt-late',bg:'#dc2626',lbl:'Atrasado'},'late-prior':{c:'gantt-late',bg:'#dc2626',lbl:'Atrasado ⚠️'},plan:{c:'gantt-plan',bg:'#94a3b8',lbl:'Planejado'}}[st];
             // Label especial: "Concluído Mmm/AA" apenas quando carry-forward (sem tarefas no mês) e bloco 100% done
             const btWithDate=bt.filter(t=>t._f&&t._f.dataPrevista);
             const allBlocoDone=btWithDate.length>0&&btWithDate.every(t=>t._f.status==='done');
+            if(!st) return `<td class="gantt-cell gantt-empty ${t2}" data-gn="${key}">—</td>`;
+            // carry-forward 'done' mas bloco NÃO 100% concluído (tem tasks futuras pendentes) → mostrar —
+            if(st==='done'&&!inM.length&&!allBlocoDone) return `<td class="gantt-cell gantt-empty ${t2}" data-gn="${key}">—</td>`;
+            const cfg={done:{c:'gantt-done',bg:'#16a34a',lbl:'Concluído'},track:{c:'gantt-track',bg:'#ca8a04',lbl:'Em andamento'},late:{c:'gantt-late',bg:'#dc2626',lbl:'Atrasado'},'late-prior':{c:'gantt-late',bg:'#dc2626',lbl:'Atrasado ⚠️'},plan:{c:'gantt-plan',bg:'#94a3b8',lbl:'Planejado'}}[st];
             const btLastMk=allBlocoDone&&btWithDate.length?Math.max(...btWithDate.map(t=>_monthKey(t._f.dataPrevista))):null;
             const btLastLabel=(()=>{if(!btLastMk)return '';const _mn=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];const _y=Math.floor(btLastMk/12);const _m=btLastMk%12;return `${_mn[_m]}/${String(_y).slice(-2)}`;})();
             const lbl=(st==='done'&&!inM.length&&allBlocoDone)?`Concluído ${btLastLabel}`:cfg.lbl;
