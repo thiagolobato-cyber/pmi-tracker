@@ -4706,7 +4706,7 @@ function renderEmpresas(){
           <thead><tr>
             <th style="width:2rem">#</th>
             ${thSort('name', isTech ? 'PROJETO' : 'EMPRESA')}
-            ${thSort('date', isTech ? 'INÍCIO' : 'ASSINATURA')}
+            ${thSort('date', isTech ? 'INÍCIO' : 'INÍCIO - INTEGRAÇÃO')}
             ${thSort('total','TASKS')}
             ${thSort('pct','%')}
             ${thSort('done','DONE')}
@@ -4800,7 +4800,7 @@ function openCompanyModal(existing){
       <div class="text-lg font-semibold mb-4">${existing ? (isTech ? 'Editar projeto' : 'Editar empresa') : (isTech ? 'Novo projeto' : 'Nova empresa')}</div>
       <form id="coForm" class="space-y-3">
         <div><label class="text-xs font-medium">Nome *</label><input name="name" required value="${existing?.name||''}"/></div>
-        <div><label class="text-xs font-medium">${isTech ? 'Data de início' : 'Data de assinatura'}</label><input name="signDate" type="date" value="${existing?.signDate||''}"/></div>
+        <div><label class="text-xs font-medium">${isTech ? 'Data de início' : 'Data de início da integração'}</label><input name="signDate" type="date" value="${existing?.signDate||''}"/></div>
         ${!existing && isPMI ? `<label class="text-xs flex items-center gap-2 mt-2"><input type="checkbox" name="useTpl" checked> Criar tarefas a partir do Template</label>`:''}
         <div class="flex justify-end gap-2 pt-4">
           ${existing?`<button type="button" id="delCo" class="btn btn-danger mr-auto">Excluir</button>`:''}
